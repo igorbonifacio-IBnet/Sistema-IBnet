@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard Comercial</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#3b82f6;--accent2:#6366f1;
+  --green:#22c55e;--red:#ef4444;--orange:#f97316;--yellow:#eab308;--gray:#64748b;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:12px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh}
+
+#loading-overlay{
+  position:fixed;inset:0;background:rgba(15,17,23,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:9999;gap:16px
+}
+#loading-overlay.hidden{display:none}
+.spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* mini header inside iframe */
+.mini-header{
+  background:#0d1018;border-bottom:1px solid var(--border);
+  padding:10px 24px;display:flex;align-items:center;justify-content:space-between;
+}
+.mini-header span{font-size:12px;color:var(--muted)}
+.btn-refresh{
+  background:var(--accent);border:none;color:#fff;
+  padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;font-family:inherit
+}
+.btn-refresh:hover{opacity:.85}
+
+main{padding:20px 24px;max-width:1440px;margin:0 auto}
+
+/* FILTERS */
+.filters{
+  display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px
+}
+.filters label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.filters select,.filters input{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:6px 10px;border-radius:8px;font-size:13px;min-width:130px;cursor:pointer
+}
+.filters select:focus,.filters input:focus{outline:none;border-color:var(--accent)}
+.filter-reset{
+  align-self:flex-end;background:transparent;border:1px solid var(--border);
+  color:var(--muted);padding:6px 12px;border-radius:8px;font-size:13px;cursor:pointer
+}
+.filter-reset:hover{border-color:var(--accent);color:var(--text)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+.kpi-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 16px;position:relative;overflow:hidden;transition:transform .15s,border-color .15s
+}
+.kpi-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
+.kpi-icon{font-size:20px;margin-bottom:8px}
+.kpi-value{font-size:24px;font-weight:700;color:var(--kpi-color,var(--text));line-height:1;margin-bottom:4px}
+.kpi-label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+
+/* CHARTS */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.chart-card h3{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:16px}
+.chart-card canvas{max-height:220px}
+
+/* TABLE */
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.table-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.table-header h3{font-size:14px;font-weight:600}
+.table-header input{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:6px 12px;border-radius:8px;font-size:13px;width:220px
+}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer}
+th:hover{color:var(--text)}
+td{padding:10px 14px;border-bottom:1px solid rgba(42,45,62,.5);vertical-align:middle}
+tr:hover td{background:rgba(59,130,246,.04)}
+.badge{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-pago{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-pendente{background:rgba(234,179,8,.15);color:#eab308}
+.badge-atraso{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-isento{background:rgba(59,130,246,.15);color:#3b82f6}
+.badge-cancelado{background:rgba(100,116,139,.15);color:#64748b}
+
+.table-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border)}
+.table-footer span{font-size:12px;color:var(--muted)}
+.pagination{display:flex;gap:4px}
+.page-btn{
+  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer
+}
+.page-btn:hover{border-color:var(--accent);color:var(--text)}
+.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.page-btn:disabled{opacity:.4;cursor:default}
+
+@media(max-width:768px){.charts-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p style="font-size:14px;color:var(--muted)">Carregando dados comerciais…</p>
+</div>
+
+<div class="mini-header">
+  <span id="last-update">—</span>
+  <button class="btn-refresh" id="refresh-btn">↻ Atualizar</button>
+</div>
+
+<main>
+  <!-- Filters -->
+  <div class="filters">
+    <label>Mês<select id="f-mes"><option value="">Todos</option></select></label>
+    <label>Status<select id="f-status"><option value="">Todos</option></select></label>
+    <label>POP<select id="f-pop"><option value="">Todos</option></select></label>
+    <label>Plano<select id="f-plano"><option value="">Todos</option></select></label>
+    <label>Bairro<select id="f-bairro"><option value="">Todos</option></select></label>
+    <button class="filter-reset" onclick="resetFilters()">✕ Limpar</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-icon">👥</div><div class="kpi-value" id="k-total">—</div><div class="kpi-label">Total Clientes</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">💰</div><div class="kpi-value" id="k-mrr">—</div><div class="kpi-label">MRR Total</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--accent2)"><div class="kpi-icon">🎯</div><div class="kpi-value" id="k-ticket">—</div><div class="kpi-label">Ticket Médio</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">✅</div><div class="kpi-value" id="k-pagos">—</div><div class="kpi-label">Pagos</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-icon">⏳</div><div class="kpi-value" id="k-pendentes">—</div><div class="kpi-label">Pendentes</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">⚠️</div><div class="kpi-value" id="k-atraso">—</div><div class="kpi-label">Em Atraso</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">📊</div><div class="kpi-value" id="k-taxa-pag">—</div><div class="kpi-label">Taxa Pagamento</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">📉</div><div class="kpi-value" id="k-inadimp">—</div><div class="kpi-label">Inadimplência</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--orange)"><div class="kpi-icon">🔄</div><div class="kpi-value" id="k-churn">—</div><div class="kpi-label">Taxa Churn</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">💵</div><div class="kpi-value" id="k-rec-real">—</div><div class="kpi-label">Receita Realizada</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">🚨</div><div class="kpi-value" id="k-rec-risco">—</div><div class="kpi-label">Receita em Risco</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--gray)"><div class="kpi-icon">❌</div><div class="kpi-value" id="k-cancelados">—</div><div class="kpi-label">Cancelados</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card"><h3>📡 Vendas por POP</h3><canvas id="chart-pop"></canvas></div>
+    <div class="chart-card"><h3>🔵 Status de Pagamento</h3><canvas id="chart-status"></canvas></div>
+    <div class="chart-card"><h3>📦 Vendas por Plano</h3><canvas id="chart-plano"></canvas></div>
+    <div class="chart-card"><h3>📅 MRR por Mês</h3><canvas id="chart-mes"></canvas></div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-header">
+      <h3>📋 Clientes</h3>
+      <input type="text" id="search-input" placeholder="🔍 Buscar cliente…" oninput="renderTable()"/>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortBy('mes')">Mês ↕</th>
+          <th onclick="sortBy('id')">ID ↕</th>
+          <th onclick="sortBy('nome')">Nome ↕</th>
+          <th onclick="sortBy('pop')">POP ↕</th>
+          <th onclick="sortBy('bairro')">Bairro ↕</th>
+          <th onclick="sortBy('plano')">Plano ↕</th>
+          <th onclick="sortBy('valor')">Valor ↕</th>
+          <th onclick="sortBy('status')">Status ↕</th>
+          <th onclick="sortBy('venc')">Vencimento ↕</th>
+          <th onclick="sortBy('dias')">Dias Atraso ↕</th>
+        </tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="row-count">—</span>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Guard
+if (window.self === window.top) { window.location.href = '../'; }
+
+const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
+const SHEETS = [
+  { name: 'JAN2026', label: 'jan./2026' },
+  { name: 'FEV2026', label: 'fev./2026' },
+  { name: 'MAR2026', label: 'mar./2026' },
+];
+const ROWS_PER_PAGE = 20;
+
+let allData = [], filteredData = [], currentPage = 1;
+let sortKey = 'mes', sortDir = 1;
+let charts = {};
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    const cols = []; let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    cols.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (cols[i] || '').replace(/^"|"$/g, '').trim());
+    return obj;
+  }).filter(r => r['Nome do Cliente'] && r['Nome do Cliente'] !== '');
+}
+
+function parseValor(str) {
+  if (!str) return 0;
+  return parseFloat(str.replace(/R\$\s?/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+}
+function fmtBRL(n) { return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pct(n) { return (n * 100).toFixed(1) + '%'; }
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+function statusBadge(s) {
+  const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
+  return `<span class="badge badge-${map[s]||'pendente'}">${s||'—'}</span>`;
+}
+
+async function fetchSheet(name, label) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
+  const res = await fetch(url, {cache:'no-store'});
+  const rows = parseCSV(await res.text());
+  return rows.filter(r => r['ID Venda']).map(r => ({...r, 'Mes': r['Mes'] || label}));
+}
+
+async function loadData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = '⟳ Atualizando…'; btn.style.opacity = '.6'; btn.style.pointerEvents = 'none';
+  document.getElementById('loading-overlay').classList.remove('hidden');
+  try {
+    const results = await Promise.all(SHEETS.map(s => fetchSheet(s.name, s.label)));
+    allData = results.flat();
+    populateFilters();
+    applyFilters();
+    document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
+  } catch(e) { console.error(e); }
+  document.getElementById('loading-overlay').classList.add('hidden');
+  btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+}
+
+const mesOrder = SHEETS.map(s => s.label);
+function populateFilters() {
+  const fields = {'f-mes':'Mes','f-status':'Status do Pagamento','f-pop':'POP','f-plano':'Plano Contratado','f-bairro':'Região/Bairro'};
+  Object.entries(fields).forEach(([id, col]) => {
+    const sel = document.getElementById(id);
+    let vals = [...new Set(allData.map(r => r[col]).filter(Boolean))];
+    if (col === 'Mes') vals.sort((a,b)=>{const ai=mesOrder.indexOf(a),bi=mesOrder.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
+    else vals.sort();
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Todos</option>' + vals.map(v => `<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('');
+  });
+}
+
+function applyFilters() {
+  const mes=document.getElementById('f-mes').value, status=document.getElementById('f-status').value,
+        pop=document.getElementById('f-pop').value, plano=document.getElementById('f-plano').value,
+        bairro=document.getElementById('f-bairro').value;
+  filteredData = allData.filter(r =>
+    (!mes||r['Mes']===mes)&&(!status||r['Status do Pagamento']===status)&&
+    (!pop||r['POP']===pop)&&(!plano||r['Plano Contratado']===plano)&&
+    (!bairro||(r['Região/Bairro']||r['Regiao/Bairro'])===bairro)
+  );
+  currentPage = 1;
+  updateKPIs(); updateCharts(); renderTable();
+}
+
+function resetFilters() {
+  ['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+}
+
+function count(col, val) { return filteredData.filter(r => r[col] === val).length; }
+function getVal(r) { return parseValor(r['Valor mensal num'] || r['Valor Mensal (R$)'] || ''); }
+
+function updateKPIs() {
+  const d = filteredData, total = d.length;
+  const pagos=count('Status do Pagamento','Pago'), pendentes=count('Status do Pagamento','Pendente'),
+        atraso=count('Status do Pagamento','Em atraso'), cancelados=count('Status do Pagamento','Cancelado'),
+        ativos=total-cancelados;
+  const mrr=d.filter(r=>r['Status do Pagamento']!=='Cancelado').reduce((s,r)=>s+getVal(r),0);
+  const recReal=d.filter(r=>r['Status do Pagamento']==='Pago').reduce((s,r)=>s+getVal(r),0);
+  const recRisco=d.filter(r=>r['Status do Pagamento']==='Em atraso').reduce((s,r)=>s+getVal(r),0);
+  setText('k-total',total); setText('k-mrr',fmtBRL(mrr)); setText('k-ticket',fmtBRL(ativos?mrr/ativos:0));
+  setText('k-pagos',pagos); setText('k-pendentes',pendentes); setText('k-atraso',atraso);
+  setText('k-cancelados',cancelados); setText('k-rec-real',fmtBRL(recReal)); setText('k-rec-risco',fmtBRL(recRisco));
+  setText('k-taxa-pag', total ? pct(pagos/total) : '0%');
+  setText('k-inadimp',  total ? pct((atraso+pendentes)/total) : '0%');
+  setText('k-churn',    total ? pct(cancelados/total) : '0%');
+}
+
+const COLORS = ['#3b82f6','#6366f1','#22c55e','#f97316','#eab308','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
+Chart.defaults.color = '#94a3b8'; Chart.defaults.font.family = 'Segoe UI, Arial, sans-serif';
+
+function mkChart(id, type, data, options) {
+  if (charts[id]) { charts[id].data = data; charts[id].update(); return; }
+  charts[id] = new Chart(document.getElementById(id), {type, data, options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#94a3b8',boxWidth:12}},tooltip:{backgroundColor:'#1a1d27',borderColor:'#2a2d3e',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8'}},
+    ...options
+  }});
+}
+
+function updateCharts() {
+  const grp = (col) => {
+    const m = {}; filteredData.forEach(r => { const k=r[col]||'?'; m[k]=(m[k]||0)+1; }); return m;
+  };
+  const sorted = (obj) => Object.entries(obj).sort((a,b)=>b[1]-a[1]);
+
+  // POP
+  const popData = sorted(grp('POP'));
+  mkChart('chart-pop','bar',{labels:popData.map(x=>x[0]),datasets:[{data:popData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:5}]},
+    {plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#94a3b8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8'}}}});
+
+  // Status
+  const statusData = sorted(grp('Status do Pagamento'));
+  const statusColors = {Pago:'#22c55e',Pendente:'#eab308','Em atraso':'#ef4444',Isento:'#3b82f6',Cancelado:'#64748b'};
+  mkChart('chart-status','doughnut',{labels:statusData.map(x=>x[0]),datasets:[{data:statusData.map(x=>x[1]),backgroundColor:statusData.map(x=>statusColors[x[0]]||'#6366f1'),borderColor:'#0f1117',borderWidth:3}]},
+    {plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',boxWidth:12,padding:12}}},cutout:'62%'});
+
+  // Plano
+  const planoData = sorted(grp('Plano Contratado'));
+  mkChart('chart-plano','bar',{labels:planoData.map(x=>x[0]),datasets:[{data:planoData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:5}]},
+    {plugins:{legend:{display:false}},indexAxis:'y',scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8'}},y:{grid:{display:false},ticks:{color:'#94a3b8'}}}});
+
+  // MRR por Mês
+  const mrrByMes = {};
+  filteredData.filter(r=>r['Status do Pagamento']!=='Cancelado').forEach(r=>{
+    const m=r['Mes']||'?'; mrrByMes[m]=(mrrByMes[m]||0)+getVal(r);
+  });
+  const mesLabels = mesOrder.filter(m => mrrByMes[m] !== undefined);
+  mkChart('chart-mes','bar',{labels:mesLabels,datasets:[{data:mesLabels.map(m=>mrrByMes[m]||0),backgroundColor:'rgba(59,130,246,.75)',borderRadius:5,label:'MRR'}]},
+    {plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#94a3b8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8',callback:v=>'R$'+(v/1000).toFixed(0)+'k'}}}});
+}
+
+function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; } renderTable(); }
+
+function renderTable() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso'};
+  let rows = [...filteredData];
+  if (search) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(search));
+  rows.sort((a,b)=>{
+    const col = colMap[sortKey]||sortKey;
+    let av=a[col]||'', bv=b[col]||'';
+    if (sortKey==='valor'){av=getVal(a);bv=getVal(b);return(av-bv)*sortDir;}
+    if (sortKey==='id'){return(parseInt(av)||0-(parseInt(bv)||0))*sortDir;}
+    if (sortKey==='dias'){return((parseFloat(av)||0)-(parseFloat(bv)||0))*sortDir;}
+    return av.toString().localeCompare(bv.toString(),'pt')*sortDir;
+  });
+  const total = rows.length, pages = Math.max(1, Math.ceil(total/ROWS_PER_PAGE));
+  currentPage = Math.min(currentPage, pages);
+  const slice = rows.slice((currentPage-1)*ROWS_PER_PAGE, currentPage*ROWS_PER_PAGE);
+  document.getElementById('row-count').textContent = `${total} clientes`;
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = slice.map(r => `<tr>
+    <td>${r['Mes']||'—'}</td>
+    <td>${r['ID Venda']||'—'}</td>
+    <td>${r['Nome do Cliente']||'—'}</td>
+    <td>${r['POP']||'—'}</td>
+    <td>${r['Região/Bairro']||r['Regiao/Bairro']||'—'}</td>
+    <td>${r['Plano Contratado']||'—'}</td>
+    <td>${r['Valor mensal num']||r['Valor Mensal (R$)']||'—'}</td>
+    <td>${statusBadge(r['Status do Pagamento'])}</td>
+    <td>${r['Data de Vencimento']||'—'}</td>
+    <td>${r['Dias em atraso']||'0'}</td>
+  </tr>`).join('');
+  // pagination
+  const pg = document.getElementById('pagination');
+  pg.innerHTML = '';
+  const addBtn = (label, page, disabled, active) => {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn' + (active?' active':'');
+    btn.textContent = label; btn.disabled = disabled;
+    if (!disabled) btn.onclick = () => { currentPage = page; renderTable(); };
+    pg.appendChild(btn);
+  };
+  addBtn('«',1,currentPage===1,false);
+  addBtn('‹',currentPage-1,currentPage===1,false);
+  for (let p=Math.max(1,currentPage-2);p<=Math.min(pages,currentPage+2);p++) addBtn(p,p,false,p===currentPage);
+  addBtn('›',currentPage+1,currentPage===pages,false);
+  addBtn('»',pages,currentPage===pages,false);
+}
+
+document.getElementById('refresh-btn').addEventListener('click', loadData);
+loadData();
+</script>
+</body>
+</html>

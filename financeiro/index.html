@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBNET TELECOM | Painel Financeiro</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --card2: #20243a;
+      --border: #2a2d3e;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --font: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+    }
+
+    /* ── LOADING OVERLAY ─────────────────────────────── */
+    #loading-overlay {
+      position: fixed; inset: 0;
+      background: rgba(15,17,23,0.92);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999;
+      gap: 16px;
+    }
+    #loading-overlay.hidden { display: none; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-overlay p { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── HEADER ───────────────────────────────────────── */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .header-brand { display: flex; align-items: center; gap: 14px; }
+    .header-logo {
+      width: 42px; height: 42px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.1rem; color: #fff;
+      letter-spacing: 1px;
+    }
+    .header-titles h1 {
+      font-size: 1.15rem; font-weight: 700;
+      letter-spacing: 0.04em; color: var(--text);
+    }
+    .header-titles p {
+      font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    #last-update { font-size: 0.78rem; color: var(--text-muted); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; border: none;
+      font-family: var(--font); font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; transition: background 0.18s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--card2); color: var(--text); }
+
+    /* ── MAIN CONTENT ──────────────────────────────────── */
+    main { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
+
+    /* ── FILTERS ───────────────────────────────────────── */
+    .filter-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+      margin-bottom: 24px;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; min-width: 150px; }
+    .filter-group label { font-size: 0.73rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .filter-group select,
+    .filter-group input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-family: var(--font);
+      font-size: 0.84rem;
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    .filter-group select:focus,
+    .filter-group input:focus { border-color: var(--accent); }
+    .filter-group select option { background: var(--card); }
+
+    /* ── KPI GRID ──────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi-card.accent::before { background: var(--accent); }
+    .kpi-card.green::before  { background: var(--green); }
+    .kpi-card.red::before    { background: var(--red); }
+    .kpi-card.yellow::before { background: var(--yellow); }
+
+    .kpi-label {
+      font-size: 0.73rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 1.5rem; font-weight: 700; line-height: 1.2;
+    }
+    .kpi-value.positive { color: var(--green); }
+    .kpi-value.negative { color: var(--red); }
+    .kpi-value.neutral  { color: var(--text); }
+    .kpi-sub {
+      font-size: 0.78rem; color: var(--text-muted);
+      margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── CHART GRID ────────────────────────────────────── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .chart-card h3 {
+      font-size: 0.88rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 16px;
+    }
+    .chart-wrapper { position: relative; height: 260px; }
+    .chart-wrapper.doughnut { height: 280px; }
+
+    /* ── TABLE SECTION ─────────────────────────────────── */
+    .table-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .table-toolbar {
+      display: flex; flex-wrap: wrap; justify-content: space-between;
+      align-items: center; gap: 12px; margin-bottom: 16px;
+    }
+    .table-toolbar h3 {
+      font-size: 0.88rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .table-toolbar-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    #search-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 7px 12px;
+      font-family: var(--font);
+      font-size: 0.83rem;
+      outline: none;
+      width: 220px;
+    }
+    #search-input:focus { border-color: var(--accent); }
+
+    .table-scroll { overflow-x: auto; }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    thead th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    thead th:hover { color: var(--text); }
+    thead th .sort-icon { margin-left: 4px; opacity: 0.5; }
+    thead th.active .sort-icon { opacity: 1; color: var(--accent); }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--card2); }
+    tbody td { padding: 10px 14px; vertical-align: middle; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .badge-receita { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge-despesa { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge-capex   { background: rgba(59,130,246,0.15); color: var(--accent); }
+    .badge-opex    { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+    .valor-receita { color: var(--green); font-weight: 600; }
+    .valor-despesa { color: var(--red);   font-weight: 600; }
+
+    /* ── PAGINATION ─────────────────────────────────────── */
+    .pagination {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .pagination-info { font-size: 0.78rem; color: var(--text-muted); }
+    .pagination-controls { display: flex; gap: 6px; }
+    .page-btn {
+      min-width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .page-btn:hover { background: var(--card2); color: var(--text); }
+    .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .page-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
+    /* ── ERROR BANNER ────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--red);
+      font-size: 0.84rem;
+      margin-bottom: 16px;
+    }
+  /* ── LOGIN SCREEN ───────────────────────────────────── */
+  #login-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99999;
+  }
+  #login-screen.hidden { display: none; }
+  .login-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%; max-width: 380px;
+    display: flex; flex-direction: column; gap: 20px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  }
+  .login-logo {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 4px;
+  }
+  .login-logo-dot {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 800; color: #fff;
+  }
+  .login-logo-text h2 { font-size: 17px; font-weight: 700; }
+  .login-logo-text p  { font-size: 12px; color: var(--text-muted); }
+  .login-box h3 { font-size: 20px; font-weight: 600; }
+  .login-field { display: flex; flex-direction: column; gap: 6px; }
+  .login-field label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .login-field input {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 14px; border-radius: 8px;
+    font-size: 14px; font-family: var(--font);
+    transition: border-color 0.2s;
+  }
+  .login-field input:focus { outline: none; border-color: var(--accent); }
+  .login-error {
+    font-size: 13px; color: var(--red);
+    background: rgba(239,68,68,0.1); border-radius: 8px;
+    padding: 10px 14px; display: none;
+  }
+  .login-error.visible { display: block; }
+  .btn-login {
+    background: var(--accent); border: none; color: #fff;
+    padding: 11px; border-radius: 8px; font-size: 14px;
+    font-weight: 600; cursor: pointer; transition: background 0.2s;
+    font-family: var(--font);
+  }
+  .btn-login:hover { background: #2563eb; }
+  .btn-logout {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); padding: 7px 14px; border-radius: 8px;
+    font-size: 13px; cursor: pointer; transition: all 0.2s;
+    font-family: var(--font);
+  }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
+  #dashboard-wrap { display: none; }
+  #dashboard-wrap.visible { display: block; }
+  </style>
+</head>
+<body>
+
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p>Carregando dados financeiros…</p>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="header-brand">
+    <div class="header-logo">IB</div>
+    <div class="header-titles">
+      <h1>IBNET TELECOM &nbsp;|&nbsp; PAINEL FINANCEIRO</h1>
+      <p>Fluxo de Caixa &nbsp;·&nbsp; CAPEX &nbsp;·&nbsp; OPEX</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="last-update">—</span>
+    <button class="btn btn-primary" id="btn-refresh">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      Atualizar
+    </button>
+  </div>
+</header>
+
+<main>
+  <div id="error-banner"></div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Mês</label>
+      <select id="f-mes">
+        <option value="">Todos</option>
+        <option value="jan./2026">Janeiro 2026</option>
+        <option value="fev./2026">Fevereiro 2026</option>
+        <option value="mar./2026">Março 2026</option>
+        <option value="abr./2026">Abril 2026</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Natureza</label>
+      <select id="f-natureza">
+        <option value="">Todas</option>
+        <option value="RECEITA">Receita</option>
+        <option value="DESPESA">Despesa</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Categoria</label>
+      <select id="f-categoria">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>CAPEX / OPEX</label>
+      <select id="f-capexopex">
+        <option value="">Todos</option>
+        <option value="CAPEX">CAPEX</option>
+        <option value="OPEX">OPEX</option>
+        <option value="RECEITA">RECEITA</option>
+      </select>
+    </div>
+    <button class="btn btn-ghost" id="btn-limpar">Limpar</button>
+  </div>
+
+  <!-- KPI Row 1 -->
+  <div class="kpi-grid" id="kpi-row1">
+    <div class="kpi-card green">
+      <div class="kpi-label">Receita Total</div>
+      <div class="kpi-value neutral" id="kpi-receita">—</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Despesa Total</div>
+      <div class="kpi-value neutral" id="kpi-despesa">—</div>
+    </div>
+    <div class="kpi-card accent">
+      <div class="kpi-label">Saldo</div>
+      <div class="kpi-value neutral" id="kpi-saldo">—</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Margem (%)</div>
+      <div class="kpi-value neutral" id="kpi-margem">—</div>
+    </div>
+  </div>
+
+  <!-- KPI Row 2 -->
+  <div class="kpi-grid" id="kpi-row2" style="margin-top:-8px;">
+    <div class="kpi-card accent">
+      <div class="kpi-label">Total CAPEX</div>
+      <div class="kpi-value neutral" id="kpi-capex">—</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Total OPEX</div>
+      <div class="kpi-value neutral" id="kpi-opex">—</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Maior Despesa</div>
+      <div class="kpi-value neutral" id="kpi-maior-valor">—</div>
+      <div class="kpi-sub" id="kpi-maior-nome">—</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">% OPEX s/ Receita</div>
+      <div class="kpi-value neutral" id="kpi-opex-pct">—</div>
+    </div>
+  </div>
+
+  <!-- Charts 2×2 -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>Receitas × Despesas por Mês</h3>
+      <div class="chart-wrapper">
+        <canvas id="chart-bar"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>CAPEX × OPEX</h3>
+      <div class="chart-wrapper doughnut">
+        <canvas id="chart-doughnut"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Despesas por Categoria</h3>
+      <div class="chart-wrapper">
+        <canvas id="chart-hbar"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Fluxo de Caixa</h3>
+      <div class="chart-wrapper">
+        <canvas id="chart-line"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-toolbar">
+      <h3>Transações</h3>
+      <div class="table-toolbar-right">
+        <input type="text" id="search-input" placeholder="Buscar…" />
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="data-table">
+        <thead>
+          <tr>
+            <th data-col="mes">Mês <span class="sort-icon">↕</span></th>
+            <th data-col="data">Data <span class="sort-icon">↕</span></th>
+            <th data-col="descricao">Descrição <span class="sort-icon">↕</span></th>
+            <th data-col="categoria">Categoria <span class="sort-icon">↕</span></th>
+            <th data-col="capexopex">CAPEX/OPEX <span class="sort-icon">↕</span></th>
+            <th data-col="natureza">Natureza <span class="sort-icon">↕</span></th>
+            <th data-col="valor" style="text-align:right">Valor <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <div class="pagination-info" id="pagination-info">—</div>
+      <div class="pagination-controls" id="pagination-controls"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ════════════════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════════════════ */
+const SHEET_ID = '17XPd0qIdxXSDwKVayNh_ClH0qkyiliXN6msHkcpv1jU';
+
+const SHEETS = [
+  { name: 'Janeiro - 2026',   label: 'jan./2026' },
+  { name: 'Fevereiro - 2026', label: 'fev./2026' },
+  { name: 'Março - 2026',     label: 'mar./2026' },
+  { name: 'Abril - 2026',     label: 'abr./2026' },
+];
+
+const PAGE_SIZE = 20;
+
+/* ════════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════════ */
+let allData     = [];   // raw parsed rows
+let filtered    = [];   // after filters
+let sortCol     = 'data';
+let sortDir     = 1;    // 1 = asc, -1 = desc
+let currentPage = 1;
+let chartBar, chartDoughnut, chartHBar, chartLine;
+
+/* ════════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════════ */
+function parseValor(str) {
+  if (!str) return 0;
+  const s = str.trim();
+  const neg = s.startsWith('-');
+  const clean = s.replace(/[^0-9,]/g, '').replace(',', '.');
+  const val = parseFloat(clean) || 0;
+  return neg ? -val : val;
+}
+
+function fmtBRL(value) {
+  const abs = Math.abs(value);
+  return 'R$ ' + abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtPct(value) {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+
+function parseDate(str) {
+  // dd/mm/yyyy or dd/mm/yy
+  if (!str) return null;
+  const parts = str.trim().split('/');
+  if (parts.length < 3) return null;
+  const d = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  let y = parseInt(parts[2], 10);
+  if (y < 100) y += 2000;
+  const dt = new Date(y, m, d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+
+function hideError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+
+/* ════════════════════════════════════════════════════════
+   FETCH & PARSE
+════════════════════════════════════════════════════════ */
+function buildUrl(sheetName) {
+  const encoded = encodeURIComponent(sheetName);
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encoded}&t=${Date.now()}`;
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const rows = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    // Simple CSV parse: handle quoted fields
+    const cols = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (c === ',' && !inQ) {
+        cols.push(cur); cur = '';
+      } else {
+        cur += c;
+      }
+    }
+    cols.push(cur);
+    rows.push(cols);
+  }
+  return rows;
+}
+
+async function fetchSheet(sheetName, label) {
+  const url = buildUrl(sheetName);
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheetName}"`);
+  const text = await res.text();
+  const rows = parseCSV(text);
+  const result = [];
+
+  for (let i = 1; i < rows.length; i++) {   // skip header row
+    const cols = rows[i];
+    if (!cols || cols.length < 6) continue;
+
+    const descricao = (cols[1] || '').trim();
+    const dataStr   = (cols[2] || '').trim();
+    const valorStr  = (cols[3] || '').trim();
+    const natureza  = (cols[5] || '').trim().toUpperCase();
+    const categoria = (cols[6] || '').trim();
+    const capexopex = (cols[7] || '').trim().toUpperCase();
+
+    // Skip rules
+    if (!descricao) continue;
+    if (descricao.toLowerCase().includes('saldo anterior')) continue;
+    if (!natureza) continue;
+    if (valorStr === 'R$ 0,00' || valorStr === '0' || valorStr === '') continue;
+
+    const valor = parseValor(valorStr);
+    if (valor === 0) continue;
+
+    result.push({
+      mes: label,
+      data: dataStr,
+      dateParsed: parseDate(dataStr),
+      descricao,
+      valor,
+      natureza,
+      categoria: categoria || '',
+      capexopex: capexopex || '',
+    });
+  }
+  return result;
+}
+
+async function loadAllData() {
+  document.getElementById('loading-overlay').classList.remove('hidden');
+  hideError();
+  try {
+    const results = await Promise.allSettled(
+      SHEETS.map(s => fetchSheet(s.name, s.label))
+    );
+    allData = [];
+    const errors = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        allData = allData.concat(r.value);
+      } else {
+        errors.push(SHEETS[i].name + ': ' + r.reason?.message);
+      }
+    });
+    if (errors.length) showError('Erro ao carregar: ' + errors.join(' | '));
+    document.getElementById('last-update').textContent =
+      'Atualizado: ' + new Date().toLocaleString('pt-BR');
+    populateCategoriaFilter();
+    applyFilters();
+  } catch (e) {
+    showError('Erro inesperado: ' + e.message);
+  } finally {
+    document.getElementById('loading-overlay').classList.add('hidden');
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   FILTERS
+════════════════════════════════════════════════════════ */
+function populateCategoriaFilter() {
+  const cats = [...new Set(allData.map(r => r.categoria).filter(Boolean))].sort();
+  const sel = document.getElementById('f-categoria');
+  // keep first "Todas" option
+  while (sel.options.length > 1) sel.remove(1);
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function getFilters() {
+  return {
+    mes:       document.getElementById('f-mes').value,
+    natureza:  document.getElementById('f-natureza').value,
+    categoria: document.getElementById('f-categoria').value,
+    capexopex: document.getElementById('f-capexopex').value,
+    search:    document.getElementById('search-input').value.trim().toLowerCase(),
+  };
+}
+
+function applyFilters() {
+  const f = getFilters();
+  filtered = allData.filter(r => {
+    if (f.mes       && r.mes       !== f.mes)       return false;
+    if (f.natureza  && r.natureza  !== f.natureza)  return false;
+    if (f.categoria && r.categoria !== f.categoria) return false;
+    if (f.capexopex && r.capexopex !== f.capexopex) return false;
+    if (f.search) {
+      const hay = [r.mes, r.data, r.descricao, r.categoria, r.capexopex, r.natureza].join(' ').toLowerCase();
+      if (!hay.includes(f.search)) return false;
+    }
+    return true;
+  });
+  currentPage = 1;
+  sortTable();
+  updateKPIs();
+  updateCharts();
+  renderTable();
+}
+
+/* ════════════════════════════════════════════════════════
+   SORT
+════════════════════════════════════════════════════════ */
+function sortTable() {
+  filtered.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (sortCol === 'data') {
+      va = a.dateParsed?.getTime() ?? 0;
+      vb = b.dateParsed?.getTime() ?? 0;
+      return (va - vb) * sortDir;
+    }
+    if (sortCol === 'valor') return (a.valor - b.valor) * sortDir;
+    va = (va || '').toLowerCase();
+    vb = (vb || '').toLowerCase();
+    return va < vb ? -sortDir : va > vb ? sortDir : 0;
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   KPIs
+════════════════════════════════════════════════════════ */
+function updateKPIs() {
+  const data = filtered;
+
+  const receita = data
+    .filter(r => r.natureza === 'RECEITA')
+    .reduce((s, r) => s + Math.abs(r.valor), 0);
+
+  const despesa = data
+    .filter(r => r.natureza === 'DESPESA')
+    .reduce((s, r) => s + Math.abs(r.valor), 0);
+
+  const saldo   = receita - despesa;
+  const margem  = receita ? (saldo / receita) * 100 : 0;
+
+  const capex = data
+    .filter(r => r.capexopex === 'CAPEX')
+    .reduce((s, r) => s + Math.abs(r.valor), 0);
+
+  const opex = data
+    .filter(r => r.capexopex === 'OPEX')
+    .reduce((s, r) => s + Math.abs(r.valor), 0);
+
+  const opexPct = receita ? (opex / receita) * 100 : 0;
+
+  const despesas = data.filter(r => r.natureza === 'DESPESA');
+  let maiorDespesa = null;
+  despesas.forEach(r => {
+    if (!maiorDespesa || Math.abs(r.valor) > Math.abs(maiorDespesa.valor)) maiorDespesa = r;
+  });
+
+  // Set values
+  setKPI('kpi-receita',   fmtBRL(receita),  'neutral');
+  setKPI('kpi-despesa',   fmtBRL(despesa),  'neutral');
+  setKPI('kpi-saldo',     fmtBRL(saldo),    saldo >= 0 ? 'positive' : 'negative');
+  setKPI('kpi-margem',    fmtPct(margem),   margem >= 0 ? 'positive' : 'negative');
+  setKPI('kpi-capex',     fmtBRL(capex),    'neutral');
+  setKPI('kpi-opex',      fmtBRL(opex),     'neutral');
+  setKPI('kpi-opex-pct',  fmtPct(opexPct),  'neutral');
+
+  if (maiorDespesa) {
+    setKPI('kpi-maior-valor', fmtBRL(maiorDespesa.valor), 'negative');
+    document.getElementById('kpi-maior-nome').textContent = maiorDespesa.descricao;
+  } else {
+    setKPI('kpi-maior-valor', '—', 'neutral');
+    document.getElementById('kpi-maior-nome').textContent = '—';
+  }
+}
+
+function setKPI(id, value, cls) {
+  const el = document.getElementById(id);
+  el.textContent = value;
+  el.className = 'kpi-value ' + cls;
+}
+
+/* ════════════════════════════════════════════════════════
+   CHARTS
+════════════════════════════════════════════════════════ */
+const CHART_DEFAULTS = {
+  color: '#94a3b8',
+  font: { family: 'Segoe UI, system-ui, sans-serif', size: 11 },
+};
+
+Chart.defaults.color = CHART_DEFAULTS.color;
+Chart.defaults.font.family = CHART_DEFAULTS.font.family;
+Chart.defaults.font.size = CHART_DEFAULTS.font.size;
+
+function chartOptions(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#94a3b8', boxWidth: 12, padding: 14 } },
+      tooltip: {
+        backgroundColor: '#1a1d27',
+        borderColor: '#2a2d3e',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      },
+    },
+    ...extra,
+  };
+}
+
+function updateCharts() {
+  updateBarChart();
+  updateDoughnutChart();
+  updateHBarChart();
+  updateLineChart();
+}
+
+/* ── 1. Grouped Bar ─────────────────────────────────── */
+function updateBarChart() {
+  const labels = SHEETS.map(s => s.label);
+  const receitaData = labels.map(l => {
+    return filtered
+      .filter(r => r.mes === l && r.natureza === 'RECEITA')
+      .reduce((s, r) => s + Math.abs(r.valor), 0);
+  });
+  const despesaData = labels.map(l => {
+    return filtered
+      .filter(r => r.mes === l && r.natureza === 'DESPESA')
+      .reduce((s, r) => s + Math.abs(r.valor), 0);
+  });
+
+  const data = {
+    labels,
+    datasets: [
+      { label: 'Receita', data: receitaData, backgroundColor: 'rgba(34,197,94,0.75)', borderRadius: 5 },
+      { label: 'Despesa', data: despesaData, backgroundColor: 'rgba(239,68,68,0.75)',  borderRadius: 5 },
+    ],
+  };
+
+  if (chartBar) { chartBar.data = data; chartBar.update(); return; }
+  chartBar = new Chart(document.getElementById('chart-bar'), {
+    type: 'bar',
+    data,
+    options: chartOptions({
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            color: '#94a3b8',
+            callback: v => 'R$' + (v / 1000).toFixed(0) + 'k',
+          },
+        },
+      },
+    }),
+  });
+}
+
+/* ── 2. Doughnut CAPEX × OPEX ───────────────────────── */
+function updateDoughnutChart() {
+  const capex = filtered.filter(r => r.capexopex === 'CAPEX').reduce((s, r) => s + Math.abs(r.valor), 0);
+  const opex  = filtered.filter(r => r.capexopex === 'OPEX').reduce((s, r) => s + Math.abs(r.valor), 0);
+  const rec   = filtered.filter(r => r.capexopex === 'RECEITA').reduce((s, r) => s + Math.abs(r.valor), 0);
+
+  const data = {
+    labels: ['CAPEX', 'OPEX', 'RECEITA'],
+    datasets: [{
+      data: [capex, opex, rec],
+      backgroundColor: ['rgba(59,130,246,0.8)', 'rgba(245,158,11,0.8)', 'rgba(34,197,94,0.8)'],
+      borderColor: '#0f1117',
+      borderWidth: 3,
+      hoverOffset: 8,
+    }],
+  };
+
+  const opts = chartOptions({
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 16 } },
+      tooltip: {
+        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        callbacks: {
+          label: ctx => ' ' + ctx.label + ': ' + fmtBRL(ctx.raw),
+        },
+      },
+    },
+    cutout: '62%',
+  });
+
+  if (chartDoughnut) { chartDoughnut.data = data; chartDoughnut.update(); return; }
+  chartDoughnut = new Chart(document.getElementById('chart-doughnut'), {
+    type: 'doughnut', data, options: opts,
+  });
+}
+
+/* ── 3. Horizontal Bar – Despesas por Categoria ─────── */
+function updateHBarChart() {
+  const map = {};
+  filtered.filter(r => r.natureza === 'DESPESA').forEach(r => {
+    const cat = r.categoria || '(Sem categoria)';
+    map[cat] = (map[cat] || 0) + Math.abs(r.valor);
+  });
+
+  const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const labels = sorted.map(x => x[0]);
+  const values = sorted.map(x => x[1]);
+
+  const data = {
+    labels,
+    datasets: [{
+      label: 'Despesa',
+      data: values,
+      backgroundColor: 'rgba(239,68,68,0.7)',
+      borderRadius: 4,
+    }],
+  };
+
+  const opts = chartOptions({
+    indexAxis: 'y',
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.05)' },
+        ticks: { color: '#94a3b8', callback: v => 'R$' + (v / 1000).toFixed(0) + 'k' },
+      },
+      y: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
+      },
+    },
+  });
+
+  if (chartHBar) { chartHBar.data = data; chartHBar.options = opts; chartHBar.update(); return; }
+  chartHBar = new Chart(document.getElementById('chart-hbar'), {
+    type: 'bar', data, options: opts,
+  });
+}
+
+/* ── 4. Line – Fluxo de Caixa ───────────────────────── */
+function updateLineChart() {
+  // Use running balance from last entry per day
+  const byDate = {};
+  const usable = [...filtered].filter(r => r.dateParsed);
+  usable.sort((a, b) => a.dateParsed - b.dateParsed);
+
+  // Build cumulative balance day by day from the filtered set
+  let running = 0;
+  usable.forEach(r => {
+    running += r.valor;
+    const key = r.data || r.dateParsed.toLocaleDateString('pt-BR');
+    byDate[key] = running;
+  });
+
+  const labels = Object.keys(byDate);
+  const values = Object.values(byDate);
+
+  const data = {
+    labels,
+    datasets: [{
+      label: 'Saldo Acumulado',
+      data: values,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      borderWidth: 2,
+      pointRadius: labels.length > 40 ? 0 : 3,
+      pointBackgroundColor: '#3b82f6',
+      fill: true,
+      tension: 0.3,
+    }],
+  };
+
+  const opts = chartOptions({
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45 } },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.05)' },
+        ticks: {
+          color: '#94a3b8',
+          callback: v => 'R$' + (v / 1000).toFixed(0) + 'k',
+        },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
+      },
+    },
+  });
+
+  if (chartLine) { chartLine.data = data; chartLine.options = opts; chartLine.update(); return; }
+  chartLine = new Chart(document.getElementById('chart-line'), {
+    type: 'line', data, options: opts,
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   TABLE
+════════════════════════════════════════════════════════ */
+function renderTable() {
+  const search = document.getElementById('search-input').value.trim().toLowerCase();
+  const total  = filtered.length;
+  const pages  = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  currentPage  = Math.min(currentPage, pages);
+
+  const start  = (currentPage - 1) * PAGE_SIZE;
+  const slice  = filtered.slice(start, start + PAGE_SIZE);
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+
+  if (slice.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">Nenhum registro encontrado.</td>`;
+    tbody.appendChild(tr);
+  } else {
+    slice.forEach(r => {
+      const tr = document.createElement('tr');
+      const valorClass = r.natureza === 'RECEITA' ? 'valor-receita' : 'valor-despesa';
+      const naturezaBadge = r.natureza === 'RECEITA'
+        ? '<span class="badge badge-receita">RECEITA</span>'
+        : '<span class="badge badge-despesa">DESPESA</span>';
+      let coBadge = '';
+      if (r.capexopex === 'CAPEX')    coBadge = '<span class="badge badge-capex">CAPEX</span>';
+      else if (r.capexopex === 'OPEX') coBadge = '<span class="badge badge-opex">OPEX</span>';
+      else if (r.capexopex)            coBadge = `<span class="badge">${r.capexopex}</span>`;
+
+      tr.innerHTML = `
+        <td>${r.mes}</td>
+        <td>${r.data}</td>
+        <td>${escHtml(r.descricao)}</td>
+        <td>${escHtml(r.categoria)}</td>
+        <td>${coBadge}</td>
+        <td>${naturezaBadge}</td>
+        <td style="text-align:right" class="${valorClass}">${fmtBRL(r.valor)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Pagination info
+  document.getElementById('pagination-info').textContent =
+    `Exibindo ${start + 1}–${Math.min(start + PAGE_SIZE, total)} de ${total} registros`;
+
+  // Pagination controls
+  renderPagination(pages);
+
+  // Sort icons
+  document.querySelectorAll('thead th').forEach(th => {
+    th.classList.toggle('active', th.dataset.col === sortCol);
+    const icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = th.dataset.col === sortCol ? (sortDir === 1 ? '↑' : '↓') : '↕';
+  });
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderPagination(pages) {
+  const ctrl = document.getElementById('pagination-controls');
+  ctrl.innerHTML = '';
+
+  const add = (label, page, disabled, active) => {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn' + (active ? ' active' : '');
+    btn.textContent = label;
+    btn.disabled = disabled;
+    if (!disabled) btn.addEventListener('click', () => { currentPage = page; renderTable(); });
+    ctrl.appendChild(btn);
+  };
+
+  add('«', 1, currentPage === 1, false);
+  add('‹', currentPage - 1, currentPage === 1, false);
+
+  const window_ = 2;
+  for (let p = Math.max(1, currentPage - window_); p <= Math.min(pages, currentPage + window_); p++) {
+    add(p, p, false, p === currentPage);
+  }
+
+  add('›', currentPage + 1, currentPage === pages, false);
+  add('»', pages, currentPage === pages, false);
+}
+
+/* ════════════════════════════════════════════════════════
+   EVENT LISTENERS
+════════════════════════════════════════════════════════ */
+['f-mes','f-natureza','f-categoria','f-capexopex'].forEach(id => {
+  document.getElementById(id).addEventListener('change', applyFilters);
+});
+
+document.getElementById('search-input').addEventListener('input', () => {
+  currentPage = 1;
+  applyFilters();
+});
+
+document.getElementById('btn-limpar').addEventListener('click', () => {
+  ['f-mes','f-natureza','f-categoria','f-capexopex'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('search-input').value = '';
+  applyFilters();
+});
+
+document.getElementById('btn-refresh').addEventListener('click', loadAllData);
+
+document.querySelectorAll('thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortDir *= -1;
+    else { sortCol = col; sortDir = 1; }
+    currentPage = 1;
+    sortTable();
+    renderTable();
+  });
+});
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+
+</script>
+</body>
+</html>

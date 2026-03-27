@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IBNET TELECOM — Plataforma Interna</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#3b82f6;--accent2:#6366f1;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;
+  --text:#e2e8f0;--muted:#94a3b8;
+  --sidebar-w:220px;--font:'Segoe UI',system-ui,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
+
+/* ── LOGIN ─────────────────────────────────────────────────────────────── */
+#login-screen{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;z-index:9999
+}
+#login-screen.hidden{display:none}
+.login-box{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:40px 36px;width:100%;max-width:380px;
+  display:flex;flex-direction:column;gap:20px;
+  box-shadow:0 24px 64px rgba(0,0,0,.5)
+}
+.login-logo{display:flex;align-items:center;gap:12px}
+.login-logo-dot{
+  width:46px;height:46px;border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:800;color:#fff
+}
+.login-logo-text h2{font-size:17px;font-weight:700}
+.login-logo-text p{font-size:12px;color:var(--muted)}
+.login-box h3{font-size:20px;font-weight:600}
+.lf{display:flex;flex-direction:column;gap:6px}
+.lf label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.lf input{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:10px 14px;border-radius:8px;font-size:14px;font-family:var(--font);
+  transition:border-color .2s
+}
+.lf input:focus{outline:none;border-color:var(--accent)}
+.login-err{
+  font-size:13px;color:var(--red);background:rgba(239,68,68,.1);
+  border-radius:8px;padding:10px 14px;display:none
+}
+.login-err.show{display:block}
+.btn-login{
+  background:var(--accent);border:none;color:#fff;
+  padding:12px;border-radius:8px;font-size:14px;font-weight:600;
+  cursor:pointer;font-family:var(--font);transition:background .2s
+}
+.btn-login:hover{background:#2563eb}
+
+/* ── PLATFORM SHELL ────────────────────────────────────────────────────── */
+#platform{display:none;height:100vh;overflow:hidden}
+#platform.show{display:flex}
+
+/* ── SIDEBAR ───────────────────────────────────────────────────────────── */
+#sidebar{
+  width:var(--sidebar-w);min-width:var(--sidebar-w);
+  background:#0d1018;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;height:100vh;overflow-y:auto
+}
+.sb-brand{
+  padding:20px 18px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px
+}
+.sb-brand-dot{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;color:#fff
+}
+.sb-brand-text{line-height:1.3}
+.sb-brand-text strong{font-size:13px;font-weight:700;display:block}
+.sb-brand-text span{font-size:10px;color:var(--muted)}
+.sb-section{padding:12px 10px 4px;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+.sb-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 14px;border-radius:8px;margin:2px 8px;
+  cursor:pointer;font-size:13px;font-weight:500;
+  color:var(--muted);transition:all .15s;text-decoration:none;
+  border:none;background:none;width:calc(100% - 16px);text-align:left
+}
+.sb-item:hover{background:rgba(59,130,246,.08);color:var(--text)}
+.sb-item.active{background:rgba(59,130,246,.15);color:var(--accent);font-weight:600}
+.sb-item svg{flex-shrink:0;opacity:.7}
+.sb-item.active svg{opacity:1}
+.sb-lock{margin-left:auto;font-size:10px;opacity:.5}
+.sb-footer{margin-top:auto;padding:16px;border-top:1px solid var(--border)}
+.sb-user{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sb-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#fff;flex-shrink:0
+}
+.sb-user-info strong{font-size:12px;display:block}
+.sb-user-info span{font-size:10px;color:var(--muted)}
+.btn-logout{
+  width:100%;background:transparent;border:1px solid var(--border);
+  color:var(--muted);padding:8px;border-radius:8px;font-size:12px;
+  cursor:pointer;font-family:var(--font);transition:all .2s
+}
+.btn-logout:hover{border-color:var(--red);color:var(--red)}
+
+/* ── CONTENT AREA ──────────────────────────────────────────────────────── */
+#content-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.tab-panel{display:none;width:100%;height:100%}
+.tab-panel.active{display:flex;flex-direction:column}
+.tab-panel iframe{border:none;flex:1;width:100%}
+
+/* ── TOPBAR ────────────────────────────────────────────────────────────── */
+#topbar{
+  height:52px;min-height:52px;
+  background:#0d1018;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;gap:12px
+}
+#topbar h2{font-size:14px;font-weight:600;color:var(--text)}
+#topbar span{font-size:12px;color:var(--muted)}
+.topbar-badge{
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
+  background:rgba(59,130,246,.15);color:var(--accent)
+}
+#topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+#topbar-user{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-dot">IB</div>
+      <div class="login-logo-text">
+        <h2>IBNET TELECOM</h2>
+        <p>Plataforma Interna</p>
+      </div>
+    </div>
+    <h3>Bem-vindo</h3>
+    <div class="lf">
+      <label>Usuário</label>
+      <input type="text" id="li-user" placeholder="seu usuário" autocomplete="username"/>
+    </div>
+    <div class="lf">
+      <label>Senha</label>
+      <input type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <div class="login-err" id="li-err">Usuário ou senha incorretos.</div>
+    <button class="btn-login" id="btn-login">Entrar</button>
+  </div>
+</div>
+
+<!-- PLATFORM -->
+<div id="platform">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sb-brand">
+      <div class="sb-brand-dot">IB</div>
+      <div class="sb-brand-text">
+        <strong>IBNET TELECOM</strong>
+        <span>Plataforma Interna</span>
+      </div>
+    </div>
+
+    <div class="sb-section">Dashboards</div>
+
+    <button class="sb-item active" data-tab="comercial">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
+      Comercial
+    </button>
+
+    <button class="sb-item" data-tab="financeiro" id="sb-financeiro">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Financeiro
+      <span class="sb-lock" id="fin-lock">🔒</span>
+    </button>
+
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-avatar" id="sb-avatar">?</div>
+        <div class="sb-user-info">
+          <strong id="sb-username">—</strong>
+          <span id="sb-role-label">—</span>
+        </div>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sair da plataforma</button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div id="content-area">
+    <div id="topbar">
+      <h2 id="topbar-title">Dashboard Comercial</h2>
+      <span class="topbar-badge" id="topbar-badge">COMERCIAL</span>
+      <div id="topbar-right">
+        <span id="topbar-user"></span>
+      </div>
+    </div>
+
+    <div class="tab-panel active" id="tab-comercial">
+      <iframe src="comercial/index.html" id="iframe-comercial" title="Dashboard Comercial"></iframe>
+    </div>
+
+    <div class="tab-panel" id="tab-financeiro">
+      <iframe src="financeiro/index.html" id="iframe-financeiro" title="Painel Financeiro"></iframe>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── USERS & ROLES ─────────────────────────────────────────────────────────
+const USERS = {
+  'igor':        { senha: 'ibnet2026',  role: 'admin',      nome: 'Igor' },
+  'comercial':   { senha: 'ibnet@com',  role: 'comercial',  nome: 'Comercial' },
+  'financeiro':  { senha: 'ibnet@fin',  role: 'financeiro', nome: 'Financeiro' },
+};
+
+const ROLE_ACCESS = {
+  admin:      ['comercial', 'financeiro'],
+  financeiro: ['comercial', 'financeiro'],
+  comercial:  ['comercial'],
+};
+
+const ROLE_LABELS = {
+  admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial'
+};
+
+const TAB_META = {
+  comercial:  { title: 'Dashboard Comercial',  badge: 'COMERCIAL' },
+  financeiro: { title: 'Painel Financeiro',    badge: 'FINANCEIRO' },
+};
+
+// ── AUTH ──────────────────────────────────────────────────────────────────
+function getSession() {
+  try { return JSON.parse(sessionStorage.getItem('ibnet_session') || 'null'); } catch { return null; }
+}
+function setSession(u) { sessionStorage.setItem('ibnet_session', JSON.stringify(u)); }
+function clearSession() { sessionStorage.removeItem('ibnet_session'); }
+
+function canAccess(role, tab) {
+  return (ROLE_ACCESS[role] || []).includes(tab);
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────
+function doLogin() {
+  const u = document.getElementById('li-user').value.trim().toLowerCase();
+  const p = document.getElementById('li-pass').value;
+  const err = document.getElementById('li-err');
+  const user = USERS[u];
+  if (user && user.senha === p) {
+    setSession({ username: u, role: user.role, nome: user.nome });
+    err.classList.remove('show');
+    bootPlatform({ username: u, role: user.role, nome: user.nome });
+  } else {
+    err.classList.add('show');
+    document.getElementById('li-pass').value = '';
+  }
+}
+
+document.getElementById('btn-login').addEventListener('click', doLogin);
+document.getElementById('li-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('li-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('li-pass').focus(); });
+
+// ── PLATFORM BOOT ─────────────────────────────────────────────────────────
+let currentTab = 'comercial';
+
+function bootPlatform(session) {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('platform').classList.add('show');
+
+  // User info in sidebar
+  document.getElementById('sb-username').textContent = session.nome;
+  document.getElementById('sb-role-label').textContent = ROLE_LABELS[session.role] || session.role;
+  document.getElementById('sb-avatar').textContent = session.nome[0].toUpperCase();
+  document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
+
+  // Show/hide financeiro based on role
+  const hasFin = canAccess(session.role, 'financeiro');
+  const sbFin = document.getElementById('sb-financeiro');
+  const finLock = document.getElementById('fin-lock');
+  if (hasFin) {
+    finLock.style.display = 'none';
+    sbFin.style.opacity = '1';
+    sbFin.style.pointerEvents = 'auto';
+  } else {
+    sbFin.style.opacity = '.4';
+    sbFin.style.pointerEvents = 'none';
+  }
+
+  switchTab('comercial');
+}
+
+function switchTab(tab) {
+  const session = getSession();
+  if (!session || !canAccess(session.role, tab)) return;
+
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
+
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelector(`.sb-item[data-tab="${tab}"]`).classList.add('active');
+
+  const meta = TAB_META[tab];
+  document.getElementById('topbar-title').textContent = meta.title;
+  document.getElementById('topbar-badge').textContent = meta.badge;
+  currentTab = tab;
+}
+
+document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  clearSession();
+  location.reload();
+});
+
+// ── AUTO LOGIN (session exists) ───────────────────────────────────────────
+const existing = getSession();
+if (existing && USERS[existing.username]) {
+  bootPlatform(existing);
+}
+</script>
+</body>
+</html>
