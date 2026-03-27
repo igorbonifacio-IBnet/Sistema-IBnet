@@ -412,6 +412,9 @@ function renderTable() {
 }
 
 document.getElementById('refresh-btn').addEventListener('click', loadData);
+['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
+  document.getElementById(id).addEventListener('change', applyFilters);
+});
 loadData();
 </script>
 </body>
