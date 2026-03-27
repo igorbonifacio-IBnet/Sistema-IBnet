@@ -1164,7 +1164,8 @@ document.querySelectorAll('thead th[data-col]').forEach(th => {
 /* ════════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════════ */
-
+if (window.self === window.top) { window.location.href = '../'; }
+loadAllData();
 </script>
 </body>
 </html>
