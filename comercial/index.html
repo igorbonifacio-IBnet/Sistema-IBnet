@@ -236,21 +236,10 @@ function statusBadge(s) {
 }
 
 async function fetchSheet(name, label) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(name)}?key=${API_KEY}&t=${Date.now()}`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
   const res = await fetch(url, {cache:'no-store'});
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
-  const [headers, ...dataRows] = json.values || [];
-  if (!headers) return [];
-  return dataRows
-    .filter(r => r && r[0])
-    .map(r => {
-      const obj = {};
-      headers.forEach((h, i) => obj[h.trim()] = (r[i] || '').trim());
-      obj['Mes'] = obj['Mes'] || label;
-      return obj;
-    })
-    .filter(r => r['Nome do Cliente']);
+  const rows = parseCSV(await res.text());
+  return rows.filter(r => r['ID Venda']).map(r => ({...r, 'Mes': r['Mes'] || label}));
 }
 
 async function loadData() {
