@@ -598,8 +598,7 @@ function hideError() {
    FETCH & PARSE
 ════════════════════════════════════════════════════════ */
 function buildUrl(sheetName) {
-  const encoded = encodeURIComponent(sheetName);
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encoded}&t=${Date.now()}`;
+  return `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName)}?key=${API_KEY}&t=${Date.now()}`;
 }
 
 function parseCSV(text) {
@@ -632,13 +631,13 @@ async function fetchSheet(sheetName, label) {
   const url = buildUrl(sheetName);
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheetName}"`);
-  const text = await res.text();
-  const rows = parseCSV(text);
+  const json = await res.json();
+  const allRows = json.values || [];
   const result = [];
 
-  for (let i = 1; i < rows.length; i++) {   // skip header row
-    const cols = rows[i];
-    if (!cols || cols.length < 6) continue;
+  for (let i = 1; i < allRows.length; i++) {   // skip header row
+    const cols = allRows[i];
+    if (!cols || cols.length < 3) continue;
 
     const descricao = (cols[1] || '').trim();
     const dataStr   = (cols[2] || '').trim();
