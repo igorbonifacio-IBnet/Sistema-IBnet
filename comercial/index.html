@@ -192,6 +192,7 @@ tr:hover td{background:rgba(59,130,246,.04)}
 if (window.self === window.top) { window.location.href = '../'; }
 
 const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
+const API_KEY  = 'AIzaSyAfCACaYIOsdc1cWWGr9YbGL3R-IxG9sx8';
 const SHEETS = [
   { name: 'JAN2026', label: 'jan./2026' },
   { name: 'FEV2026', label: 'fev./2026' },
@@ -235,10 +236,21 @@ function statusBadge(s) {
 }
 
 async function fetchSheet(name, label) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(name)}?key=${API_KEY}&t=${Date.now()}`;
   const res = await fetch(url, {cache:'no-store'});
-  const rows = parseCSV(await res.text());
-  return rows.filter(r => r['ID Venda']).map(r => ({...r, 'Mes': r['Mes'] || label}));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  const [headers, ...dataRows] = json.values || [];
+  if (!headers) return [];
+  return dataRows
+    .filter(r => r && r[0])
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h.trim()] = (r[i] || '').trim());
+      obj['Mes'] = obj['Mes'] || label;
+      return obj;
+    })
+    .filter(r => r['Nome do Cliente']);
 }
 
 async function loadData() {
