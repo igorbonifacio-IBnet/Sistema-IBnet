@@ -75,6 +75,16 @@
       font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;
     }
     .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .btn-ghost {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); padding: 7px 10px; border-radius: 8px;
+    cursor: pointer; display: flex; align-items: center;
+    transition: all 0.2s; font-family: var(--font);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-ghost.hidden-mode { border-color: var(--yellow); color: var(--yellow); }
+  .kpi-value.blurred { filter: blur(6px); user-select: none; transition: filter 0.3s; }
+  .kpi-value { transition: filter 0.3s; }
     #last-update { font-size: 0.78rem; color: var(--text-muted); }
     .btn {
       display: inline-flex; align-items: center; gap: 6px;
@@ -376,6 +386,11 @@
   </div>
   <div class="header-right">
     <span id="last-update">—</span>
+    <button class="btn btn-ghost" id="btn-toggle-values" title="Mostrar/ocultar valores">
+      <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
     <button class="btn btn-primary" id="btn-refresh">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       Atualizar
@@ -1159,6 +1174,34 @@ document.querySelectorAll('thead th[data-col]').forEach(th => {
     sortTable();
     renderTable();
   });
+});
+
+/* ════════════════════════════════════════════════════════
+   TOGGLE VALORES (olhinho)
+════════════════════════════════════════════════════════ */
+let valuesHidden = false;
+const KPI_IDS = [
+  'kpi-receita','kpi-despesa','kpi-saldo','kpi-margem',
+  'kpi-capex','kpi-opex','kpi-maior-valor','kpi-opex-pct'
+];
+
+function applyBlur() {
+  KPI_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('blurred', valuesHidden);
+  });
+  const btn = document.getElementById('btn-toggle-values');
+  btn.classList.toggle('hidden-mode', valuesHidden);
+  btn.title = valuesHidden ? 'Mostrar valores' : 'Ocultar valores';
+  const icon = document.getElementById('eye-icon');
+  icon.innerHTML = valuesHidden
+    ? `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`
+    : `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+}
+
+document.getElementById('btn-toggle-values').addEventListener('click', () => {
+  valuesHidden = !valuesHidden;
+  applyBlur();
 });
 
 /* ════════════════════════════════════════════════════════
