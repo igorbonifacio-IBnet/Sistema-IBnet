@@ -138,6 +138,88 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 }
 .btn-logout:hover{border-color:var(--red);color:var(--red)}
 
+/* ── LIGHT THEME ────────────────────────────────────────────────────────── */
+body.light{--bg:#f0f4f8;--card:#ffffff;--border:#dde3ed;--text:#1e293b;--muted:#64748b}
+body.light #sidebar{background:#f8fafc}
+body.light #topbar{background:#ffffff}
+body.light #login-screen{background:var(--bg)}
+body.light .login-box{background:#ffffff}
+body.light .lf input{background:var(--bg)}
+body.light .sb-brand{border-bottom-color:var(--border)}
+body.light .sb-footer{border-top-color:var(--border)}
+body.light .sb-item:hover{background:rgba(232,57,14,.07);color:var(--text)}
+body.light .sb-item.active{background:rgba(232,57,14,.12);color:var(--accent)}
+
+/* ── TOPBAR BUTTONS ─────────────────────────────────────────────────────── */
+.tb-btn{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:5px 12px;border-radius:8px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;
+  transition:all .15s;white-space:nowrap
+}
+.tb-btn:hover{border-color:var(--accent);color:var(--text)}
+.tb-btn-danger:hover{border-color:var(--red)!important;color:var(--red)!important}
+
+/* ── SUGGESTIONS MODAL ──────────────────────────────────────────────────── */
+.sug-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.72);
+  display:flex;align-items:center;justify-content:center;z-index:10000;
+  opacity:0;pointer-events:none;transition:opacity .2s
+}
+.sug-overlay.show{opacity:1;pointer-events:auto}
+.sug-box{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  width:100%;max-width:520px;max-height:82vh;
+  display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.6);overflow:hidden
+}
+.sug-head{padding:20px 24px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column}
+.sug-head-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sug-head h3{font-size:16px;font-weight:700}
+.sug-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0 6px;border-radius:6px;font-family:var(--font);line-height:1}
+.sug-close:hover{background:rgba(239,68,68,.1);color:var(--red)}
+.sug-tabs{display:flex}
+.sug-tab{
+  padding:8px 18px 12px;font-size:13px;font-weight:500;cursor:pointer;
+  color:var(--muted);border-bottom:2px solid transparent;
+  background:none;border-top:none;border-left:none;border-right:none;
+  font-family:var(--font);transition:all .15s
+}
+.sug-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.sug-body{padding:20px 24px;overflow-y:auto;flex:1}
+.sug-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.sug-field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.sug-field input,.sug-field textarea,.sug-field select{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:10px 14px;border-radius:8px;font-size:13px;font-family:var(--font);
+  transition:border-color .2s;resize:vertical
+}
+.sug-field input:focus,.sug-field textarea:focus,.sug-field select:focus{outline:none;border-color:var(--accent)}
+.sug-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0}
+.btn-sug-cancel{background:transparent;border:1px solid var(--border);color:var(--muted);padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font)}
+.btn-sug-cancel:hover{border-color:var(--red);color:var(--red)}
+.btn-sug-send{background:var(--accent);border:none;color:#fff;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.btn-sug-send:hover{opacity:.85}
+.btn-sug-send:disabled{opacity:.5;cursor:default}
+.sug-msg{font-size:13px;padding:10px 14px;border-radius:8px;display:none;margin-bottom:12px}
+.sug-msg.ok{display:block;background:rgba(34,197,94,.1);color:var(--green)}
+.sug-msg.err{display:block;background:rgba(239,68,68,.1);color:var(--red)}
+.sug-list{display:flex;flex-direction:column;gap:10px}
+.sug-item{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.sug-item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.sug-item-title{font-size:13px;font-weight:600;flex:1}
+.sug-item-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px}
+.sug-item-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sug-badge{padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600}
+.sug-badge-sug{background:rgba(99,102,241,.15);color:#818cf8}
+.sug-badge-bug{background:rgba(239,68,68,.15);color:#ef4444}
+.sug-badge-pend{background:rgba(234,179,8,.15);color:#eab308}
+.sug-badge-exec{background:rgba(59,130,246,.15);color:#3b82f6}
+.sug-badge-done{background:rgba(34,197,94,.15);color:#22c55e}
+.sug-status-sel{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.sug-empty{text-align:center;color:var(--muted);font-size:13px;padding:28px}
+.sug-count{font-size:11px;background:rgba(232,57,14,.15);color:var(--accent);border-radius:10px;padding:1px 7px;font-weight:700;margin-left:2px}
+
 /* ── CONTENT AREA ──────────────────────────────────────────────────────── */
 #content-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .tab-panel{display:none;width:100%;height:100%}
@@ -200,6 +282,49 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   </div>
 </div>
 
+<!-- MODAL SUGESTÕES -->
+<div class="sug-overlay" id="sug-overlay">
+  <div class="sug-box">
+    <div class="sug-head">
+      <div class="sug-head-row">
+        <h3>💡 Sugestões &amp; Bugs</h3>
+        <button class="sug-close" onclick="closeSugestoes()">×</button>
+      </div>
+      <div class="sug-tabs">
+        <button class="sug-tab active" data-tab="nova" onclick="switchSugTab('nova')">Nova</button>
+        <button class="sug-tab" data-tab="lista" onclick="switchSugTab('lista')">Ver Todas</button>
+      </div>
+    </div>
+    <div class="sug-body">
+      <div id="sug-pane-nova">
+        <div class="sug-msg" id="sug-msg"></div>
+        <div class="sug-field">
+          <label>Tipo</label>
+          <select id="sug-tipo">
+            <option value="sugestao">💡 Sugestão de Melhoria</option>
+            <option value="bug">🐛 Reportar Erro</option>
+          </select>
+        </div>
+        <div class="sug-field">
+          <label>Título</label>
+          <input type="text" id="sug-titulo" placeholder="Descreva brevemente…"/>
+        </div>
+        <div class="sug-field">
+          <label>Detalhes (opcional)</label>
+          <textarea id="sug-desc" rows="4" placeholder="Explique com mais detalhes…"></textarea>
+        </div>
+      </div>
+      <div id="sug-pane-lista" style="display:none">
+        <div class="sug-list" id="sug-lista-items"></div>
+      </div>
+    </div>
+    <div class="sug-foot">
+      <button class="btn-sug-cancel" onclick="closeSugestoes()">Fechar</button>
+      <button class="btn-sug-send" id="btn-sug-send" onclick="submitSugestao()">Registrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- PLATFORM -->
 <div id="platform">
   <!-- Sidebar -->
@@ -240,6 +365,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
       <span class="topbar-badge" id="topbar-badge">COMERCIAL</span>
       <div id="topbar-right">
         <span id="topbar-user"></span>
+        <button class="tb-btn" id="btn-theme" onclick="toggleTheme()">☀️ Claro</button>
+        <button class="tb-btn" id="btn-sugestoes" onclick="openSugestoes()">💡 Sugestões</button>
+        <button class="tb-btn tb-btn-danger" onclick="doLogout()">⏏ Sair</button>
       </div>
     </div>
 
@@ -360,11 +488,142 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   location.reload();
 });
 
+// ── LOGOUT ────────────────────────────────────────────────────────────────
+function doLogout() { clearSession(); location.reload(); }
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+let currentTheme = localStorage.getItem('ibnet_theme') || 'dark';
+
+function applyTheme(t) {
+  currentTheme = t;
+  document.body.classList.toggle('light', t === 'light');
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
+  localStorage.setItem('ibnet_theme', t);
+  ['iframe-comercial','iframe-financeiro'].forEach(id => {
+    try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
+  });
+}
+
+function toggleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); }
+
+document.getElementById('iframe-comercial').addEventListener('load', () => applyTheme(currentTheme));
+document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
+
+// ── SUGGESTIONS ───────────────────────────────────────────────────────────
+const SUG_KEY = 'ibnet_sugestoes';
+function getSugestoes() { try { return JSON.parse(localStorage.getItem(SUG_KEY)||'[]'); } catch { return []; } }
+function saveSugestoes(arr) { localStorage.setItem(SUG_KEY, JSON.stringify(arr)); }
+
+function updateSugCount() {
+  const session = getSession();
+  const pending = getSugestoes().filter(s => s.status === 'pendente').length;
+  const btn = document.getElementById('btn-sugestoes');
+  if (!btn) return;
+  btn.innerHTML = pending > 0 && session?.role === 'admin'
+    ? `💡 Sugestões <span class="sug-count">${pending}</span>`
+    : '💡 Sugestões';
+}
+
+function openSugestoes() {
+  const msgEl = document.getElementById('sug-msg');
+  msgEl.className = 'sug-msg'; msgEl.textContent = '';
+  document.getElementById('sug-titulo').value = '';
+  document.getElementById('sug-desc').value = '';
+  const btn = document.getElementById('btn-sug-send');
+  btn.disabled = false; btn.textContent = 'Registrar';
+  switchSugTab('nova');
+  document.getElementById('sug-overlay').classList.add('show');
+}
+
+function closeSugestoes() { document.getElementById('sug-overlay').classList.remove('show'); }
+
+function switchSugTab(tab) {
+  document.querySelectorAll('.sug-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('sug-pane-nova').style.display = tab === 'nova' ? '' : 'none';
+  document.getElementById('sug-pane-lista').style.display = tab === 'lista' ? '' : 'none';
+  document.getElementById('btn-sug-send').style.display = tab === 'nova' ? '' : 'none';
+  if (tab === 'lista') renderSugList();
+}
+
+async function submitSugestao() {
+  const session = getSession();
+  const tipo   = document.getElementById('sug-tipo').value;
+  const titulo = document.getElementById('sug-titulo').value.trim();
+  const desc   = document.getElementById('sug-desc').value.trim();
+  const msgEl  = document.getElementById('sug-msg');
+  const btn    = document.getElementById('btn-sug-send');
+  if (!titulo) { msgEl.className='sug-msg err'; msgEl.textContent='Informe um título.'; return; }
+
+  const nova = {
+    id: Date.now().toString(), tipo, titulo, descricao: desc,
+    usuario: session?.nome || '—', status: 'pendente',
+    data: new Date().toLocaleDateString('pt-BR')
+  };
+  const arr = getSugestoes(); arr.unshift(nova); saveSugestoes(arr);
+  updateSugCount();
+
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY !== 'SEU_PUBLIC_KEY') {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: 'igorbonifacio23@gmail.com', to_name: 'Igor',
+        username: session?.nome || '—',
+        assunto: `[${tipo === 'bug' ? 'Bug' : 'Sugestão'}] ${titulo}`,
+        descricao: desc || '(sem descrição)',
+      });
+    }
+  } catch(e) {}
+
+  msgEl.className = 'sug-msg ok';
+  msgEl.textContent = 'Registrado! Igor será notificado por e-mail.';
+  btn.textContent = 'Enviado ✓';
+}
+
+function renderSugList() {
+  const session = getSession();
+  const arr = getSugestoes();
+  const container = document.getElementById('sug-lista-items');
+  if (!arr.length) { container.innerHTML = '<div class="sug-empty">Nenhuma sugestão registrada ainda.</div>'; return; }
+  const stMap   = {pendente:'pend', em_execucao:'exec', corrigido:'done'};
+  const stLabel = {pendente:'Pendente', em_execucao:'Em Execução', corrigido:'Corrigido'};
+  container.innerHTML = arr.map(s => {
+    const tipoBadge = s.tipo === 'bug'
+      ? '<span class="sug-badge sug-badge-bug">Bug</span>'
+      : '<span class="sug-badge sug-badge-sug">Sugestão</span>';
+    const stControle = session?.role === 'admin'
+      ? `<select class="sug-status-sel" onchange="changeSugStatus('${s.id}',this.value)">
+           <option value="pendente"${s.status==='pendente'?' selected':''}>Pendente</option>
+           <option value="em_execucao"${s.status==='em_execucao'?' selected':''}>Em Execução</option>
+           <option value="corrigido"${s.status==='corrigido'?' selected':''}>Corrigido</option>
+         </select>`
+      : `<span class="sug-badge sug-badge-${stMap[s.status]||'pend'}">${stLabel[s.status]||s.status}</span>`;
+    return `<div class="sug-item">
+      <div class="sug-item-top"><div class="sug-item-title">${s.titulo}</div>${tipoBadge}</div>
+      ${s.descricao ? `<div class="sug-item-desc">${s.descricao}</div>` : ''}
+      <div class="sug-item-meta"><span style="opacity:.6;font-size:11px">${s.usuario} · ${s.data}</span>${stControle}</div>
+    </div>`;
+  }).join('');
+}
+
+function changeSugStatus(id, newStatus) {
+  const arr = getSugestoes();
+  const item = arr.find(s => s.id === id);
+  if (item) { item.status = newStatus; saveSugestoes(arr); updateSugCount(); renderSugList(); }
+}
+
+document.getElementById('sug-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSugestoes();
+});
+
 // ── AUTO LOGIN (session exists) ───────────────────────────────────────────
 const existing = getSession();
 if (existing && USERS[existing.username]) {
   bootPlatform(existing);
 }
+
+applyTheme(currentTheme);
+updateSugCount();
 
 // ── EMAILJS CONFIG ────────────────────────────────────────────────────────
 const EMAILJS_PUBLIC_KEY  = 'SEU_PUBLIC_KEY';   // ← preencher após criar conta

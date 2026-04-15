@@ -113,6 +113,30 @@ tr:hover td{background:rgba(59,130,246,.04)}
 .page-btn:disabled{opacity:.4;cursor:default}
 
 @media(max-width:768px){.charts-grid{grid-template-columns:1fr}}
+
+/* ── LIGHT THEME ────────────────────────────────────────────────────────── */
+body.light{--bg:#f0f4f8;--card:#ffffff;--border:#dde3ed;--text:#1e293b;--muted:#64748b;--green:#16a34a;--red:#dc2626;--yellow:#ca8a04;--orange:#c2410c;--gray:#475569}
+body.light .mini-header{background:#ffffff;border-bottom-color:var(--border)}
+body.light #loading-overlay{background:rgba(240,244,248,.95)}
+body.light .page-btn{background:#ffffff}
+body.light td{border-bottom-color:rgba(200,210,225,.5)}
+body.light tr:hover td{background:rgba(232,57,14,.03)}
+
+/* ── QUICK STATUS FILTERS ───────────────────────────────────────────────── */
+.qf-bar{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)}
+.qf-btn{
+  padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);background:transparent;color:var(--muted);
+  font-family:inherit;transition:all .15s
+}
+.qf-btn:hover,.qf-btn.active{color:#fff;border-color:transparent}
+.qf-btn.active[data-status=""]{background:var(--accent)}
+.qf-btn.active[data-status="Pago"]{background:#22c55e}
+.qf-btn.active[data-status="Pendente"]{background:#eab308}
+.qf-btn.active[data-status="Em atraso"]{background:#ef4444}
+.qf-btn.active[data-status="Cancelado"]{background:#64748b}
+.qf-btn.active[data-status="Isento"]{background:#3b82f6}
+.qf-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
 </style>
 </head>
 <body>
@@ -167,6 +191,14 @@ tr:hover td{background:rgba(59,130,246,.04)}
     <div class="table-header">
       <h3>📋 Clientes</h3>
       <input type="text" id="search-input" placeholder="🔍 Buscar cliente…" oninput="renderTable()"/>
+    </div>
+    <div class="qf-bar" id="qf-status">
+      <button class="qf-btn active" data-status=""        onclick="qfFilter('')">Todos</button>
+      <button class="qf-btn"        data-status="Pago"    onclick="qfFilter('Pago')">✅ Pago</button>
+      <button class="qf-btn"        data-status="Pendente" onclick="qfFilter('Pendente')">⏳ Pendente</button>
+      <button class="qf-btn"        data-status="Em atraso" onclick="qfFilter('Em atraso')">⚠️ Em Atraso</button>
+      <button class="qf-btn"        data-status="Cancelado" onclick="qfFilter('Cancelado')">❌ Cancelado</button>
+      <button class="qf-btn"        data-status="Isento"  onclick="qfFilter('Isento')">🔵 Isento</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -436,9 +468,36 @@ function renderTable() {
 
 document.getElementById('refresh-btn').addEventListener('click', loadData);
 ['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
-  document.getElementById(id).addEventListener('change', applyFilters);
+  document.getElementById(id).addEventListener('change', () => { applyFilters(); syncQfBar(); });
 });
 loadData();
+
+// ── QUICK FILTER PILLS ────────────────────────────────────────────────────
+function qfFilter(status) {
+  document.getElementById('f-status').value = status;
+  syncQfBar();
+  applyFilters();
+}
+
+function syncQfBar() {
+  const val = document.getElementById('f-status').value;
+  document.querySelectorAll('#qf-status .qf-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.status === val)
+  );
+}
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'theme') {
+    document.body.classList.toggle('light', e.data.value === 'light');
+    localStorage.setItem('ibnet_theme', e.data.value);
+  }
+});
+
+(function() {
+  const t = localStorage.getItem('ibnet_theme') || 'dark';
+  document.body.classList.toggle('light', t === 'light');
+})();
 </script>
 </body>
 </html>
