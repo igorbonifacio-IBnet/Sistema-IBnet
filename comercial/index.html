@@ -95,6 +95,11 @@ tr:hover td{background:rgba(59,130,246,.04)}
 .badge-atraso{background:rgba(239,68,68,.15);color:#ef4444}
 .badge-isento{background:rgba(59,130,246,.15);color:#3b82f6}
 .badge-cancelado{background:rgba(100,116,139,.15);color:#64748b}
+.badge-churn-sim{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-churn-nao{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-equip-sim{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-equip-nao{background:rgba(239,68,68,.15);color:#ef4444}
+.motivo-churn{font-size:11px;color:var(--muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .table-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border)}
 .table-footer span{font-size:12px;color:var(--muted)}
@@ -176,6 +181,9 @@ tr:hover td{background:rgba(59,130,246,.04)}
           <th onclick="sortBy('status')">Status ↕</th>
           <th onclick="sortBy('venc')">Vencimento ↕</th>
           <th onclick="sortBy('dias')">Dias Atraso ↕</th>
+          <th onclick="sortBy('churn')">Churn ↕</th>
+          <th onclick="sortBy('equip')">Equip. Recolhido ↕</th>
+          <th onclick="sortBy('motivo')">Motivo Churn ↕</th>
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
@@ -234,6 +242,25 @@ function statusBadge(s) {
   const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
   return `<span class="badge badge-${map[s]||'pendente'}">${s||'—'}</span>`;
 }
+function churnBadge(v) {
+  if (!v) return '—';
+  const upper = v.toString().toUpperCase().trim();
+  if (upper === 'SIM') return '<span class="badge badge-churn-sim">SIM</span>';
+  if (upper === 'NÃO' || upper === 'NAO') return '<span class="badge badge-churn-nao">NÃO</span>';
+  return `<span class="badge badge-churn-nao">${v}</span>`;
+}
+function equipBadge(v, churn) {
+  const churnUpper = (churn||'').toString().toUpperCase().trim();
+  if (churnUpper !== 'SIM') return '—';
+  if (!v) return '—';
+  const upper = v.toString().toUpperCase().trim();
+  if (upper === 'SIM') return '<span class="badge badge-equip-sim">SIM</span>';
+  if (upper === 'NÃO' || upper === 'NAO') return '<span class="badge badge-equip-nao">NÃO</span>';
+  return `<span>${v}</span>`;
+}
+function getChurn(r) { return r['Churn'] || r['churn'] || r['CHURN'] || ''; }
+function getEquip(r) { return r['Equipamento Recolhido'] || r['Equip. Recolhido'] || r['Equipamento recolhido'] || ''; }
+function getMotivo(r) { return r['Motivo Churn'] || r['Motivo do Churn'] || r['Motivo churn'] || ''; }
 
 async function fetchSheet(name, label) {
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
@@ -355,7 +382,7 @@ function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key;
 
 function renderTable() {
   const search = document.getElementById('search-input').value.toLowerCase();
-  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso'};
+  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn'};
   let rows = [...filteredData];
   if (search) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(search));
   rows.sort((a,b)=>{
@@ -371,7 +398,9 @@ function renderTable() {
   const slice = rows.slice((currentPage-1)*ROWS_PER_PAGE, currentPage*ROWS_PER_PAGE);
   document.getElementById('row-count').textContent = `${total} clientes`;
   const tbody = document.getElementById('table-body');
-  tbody.innerHTML = slice.map(r => `<tr>
+  tbody.innerHTML = slice.map(r => {
+    const churn = getChurn(r), equip = getEquip(r), motivo = getMotivo(r);
+    return `<tr>
     <td>${r['Mes']||'—'}</td>
     <td>${r['ID Venda']||'—'}</td>
     <td>${r['Nome do Cliente']||'—'}</td>
@@ -382,7 +411,11 @@ function renderTable() {
     <td>${statusBadge(r['Status do Pagamento'])}</td>
     <td>${r['Data de Vencimento']||'—'}</td>
     <td>${r['Dias em atraso']||'0'}</td>
-  </tr>`).join('');
+    <td>${churnBadge(churn)}</td>
+    <td>${equipBadge(equip, churn)}</td>
+    <td><span class="motivo-churn" title="${motivo}">${motivo||'—'}</span></td>
+  </tr>`;
+  }).join('');
   // pagination
   const pg = document.getElementById('pagination');
   pg.innerHTML = '';
