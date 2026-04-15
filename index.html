@@ -138,17 +138,53 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 }
 .btn-logout:hover{border-color:var(--red);color:var(--red)}
 
+/* ── DARK THEME POLISH ──────────────────────────────────────────────────── */
+#sidebar{box-shadow:1px 0 0 var(--border)}
+#topbar{box-shadow:0 1px 0 var(--border)}
+.sb-item{border-radius:8px}
+.login-box{box-shadow:0 24px 64px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04)}
+
 /* ── LIGHT THEME ────────────────────────────────────────────────────────── */
-body.light{--bg:#f0f4f8;--card:#ffffff;--border:#dde3ed;--text:#1e293b;--muted:#64748b}
-body.light #sidebar{background:#f8fafc}
-body.light #topbar{background:#ffffff}
+body.light{
+  --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
+  --accent:#E8390E;--accent2:#CC2200;
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;
+  --text:#1e293b;--muted:#64748b;
+  --brand-gradient:linear-gradient(135deg,#CC2200,#FF5500);
+}
+/* Sidebar */
+body.light #sidebar{background:#ffffff;box-shadow:1px 0 0 #e2e8f0}
+body.light .sb-brand{border-bottom-color:#e2e8f0}
+body.light .sb-section{color:#94a3b8}
+body.light .sb-item{color:#64748b}
+body.light .sb-item:hover{background:rgba(232,57,14,.07);color:#1e293b}
+body.light .sb-item.active{background:rgba(232,57,14,.13);color:#E8390E;font-weight:600}
+body.light .sb-user-info strong{color:#1e293b}
+body.light .sb-user-info span{color:#94a3b8}
+body.light .sb-footer{border-top-color:#e2e8f0}
+body.light .btn-logout{border-color:#e2e8f0;color:#94a3b8}
+body.light .btn-logout:hover{border-color:#dc2626;color:#dc2626}
+/* Topbar */
+body.light #topbar{background:#ffffff;box-shadow:0 1px 0 #e2e8f0}
+body.light .topbar-badge{background:rgba(232,57,14,.1);color:#E8390E}
+body.light #topbar h2{color:#1e293b}
+body.light #topbar-user{color:#64748b}
+body.light .tb-btn{border-color:#e2e8f0;color:#64748b;background:#ffffff}
+body.light .tb-btn:hover{border-color:#E8390E;color:#1e293b;background:#fff5f3}
+body.light .tb-btn-danger:hover{border-color:#dc2626!important;color:#dc2626!important;background:#fef2f2!important}
+/* Login */
 body.light #login-screen{background:var(--bg)}
-body.light .login-box{background:#ffffff}
-body.light .lf input{background:var(--bg)}
-body.light .sb-brand{border-bottom-color:var(--border)}
-body.light .sb-footer{border-top-color:var(--border)}
-body.light .sb-item:hover{background:rgba(232,57,14,.07);color:var(--text)}
-body.light .sb-item.active{background:rgba(232,57,14,.12);color:var(--accent)}
+body.light .login-box{background:#ffffff;box-shadow:0 8px 40px rgba(0,0,0,.1),0 0 0 1px #e2e8f0}
+body.light .lf input{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+body.light .lf input:focus{border-color:#E8390E}
+body.light .login-box h3{color:#1e293b}
+/* Suggestions modal */
+body.light .sug-box{box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px #e2e8f0}
+body.light .sug-head{border-bottom-color:#e2e8f0}
+body.light .sug-foot{border-top-color:#e2e8f0}
+body.light .sug-field input,body.light .sug-field textarea,body.light .sug-field select{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+body.light .sug-item{background:#f8fafc;border-color:#e2e8f0}
+body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b}
 
 /* ── TOPBAR BUTTONS ─────────────────────────────────────────────────────── */
 .tb-btn{
