@@ -83,8 +83,7 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 /* ── STATUS CHART — layout legenda lateral ─────────────────────────────── */
 .chart-card-status{display:flex;flex-direction:column}
 .status-wrap{display:flex;align-items:center;gap:24px;flex:1}
-.donut-wrap{position:relative;width:200px;height:200px;flex-shrink:0}
-.donut-wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+.donut-wrap{width:210px;flex-shrink:0}
 .status-legend{flex:1;display:flex;flex-direction:column;gap:9px;min-width:0}
 .sl-row{display:flex;align-items:center;gap:9px;cursor:default}
 .sl-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
@@ -512,15 +511,20 @@ function updateCharts() {
       backgroundColor:statusData.map(x=>statusColors[x[0]]||'#6366f1'),
       borderColor:borderC, borderWidth:2, hoverOffset:8, hoverBorderWidth:0
     }]},
-    {cutout:'68%',plugins:{
-      legend:{display:false},
-      tooltip:{callbacks:{
-        label(ctx){
-          const pct = donutTotal>0 ? Math.round(ctx.parsed/donutTotal*100) : 0;
-          return `  ${ctx.label}: ${ctx.parsed} (${pct}%)`;
-        }
-      }}
-    }}
+    {
+      maintainAspectRatio: true,
+      aspectRatio: 1,
+      cutout:'68%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          label(ctx){
+            const pct = donutTotal>0 ? Math.round(ctx.parsed/donutTotal*100) : 0;
+            return `  ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+          }
+        }}
+      }
+    }
   );
   renderStatusLegend(statusData, statusColors, donutTotal);
 
