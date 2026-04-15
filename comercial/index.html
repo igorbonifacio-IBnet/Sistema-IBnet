@@ -259,7 +259,7 @@ function equipBadge(v, churn) {
   return `<span>${v}</span>`;
 }
 function getChurn(r) { return r['Churn'] || r['churn'] || r['CHURN'] || ''; }
-function getEquip(r) { return r['Equipamento Recolhido'] || r['Equip. Recolhido'] || r['Equipamento recolhido'] || ''; }
+function getEquip(r) { return r['Equipamento recolhido'] || r['Equipamento Recolhido'] || r['Equip. Recolhido'] || ''; }
 function getMotivo(r) { return r['Motivo Churn'] || r['Motivo do Churn'] || r['Motivo churn'] || ''; }
 
 async function fetchSheet(name, label) {
