@@ -80,6 +80,19 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 .chart-card h3{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:16px;text-transform:uppercase;letter-spacing:.6px}
 .chart-card canvas{max-height:260px;min-height:200px}
 
+/* ── STATUS CHART — layout legenda lateral ─────────────────────────────── */
+.chart-card-status{display:flex;flex-direction:column}
+.status-wrap{display:flex;align-items:center;gap:20px;flex:1;min-height:220px}
+#chart-status{flex:0 0 180px;width:180px!important;height:220px!important;min-height:unset!important;max-height:unset!important}
+.status-legend{flex:1;display:flex;flex-direction:column;gap:9px;min-width:0}
+.sl-row{display:flex;align-items:center;gap:9px;cursor:default}
+.sl-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.sl-name{flex:1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-bar-wrap{width:60px;height:4px;background:var(--border);border-radius:4px;flex-shrink:0}
+.sl-bar{height:4px;border-radius:4px;transition:width .4s}
+.sl-count{font-size:13px;font-weight:700;color:var(--text);min-width:20px;text-align:right}
+.sl-pct{font-size:11px;color:var(--muted);min-width:32px;text-align:right}
+
 /* TABLE */
 .table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .table-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
@@ -229,7 +242,13 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
   <!-- Charts -->
   <div class="charts-grid">
     <div class="chart-card"><h3>📡 Vendas por POP</h3><canvas id="chart-pop"></canvas></div>
-    <div class="chart-card"><h3>🔵 Status de Pagamento</h3><canvas id="chart-status"></canvas></div>
+    <div class="chart-card chart-card-status">
+      <h3>🔵 Status de Pagamento</h3>
+      <div class="status-wrap">
+        <canvas id="chart-status"></canvas>
+        <div class="status-legend" id="status-legend"></div>
+      </div>
+    </div>
     <div class="chart-card"><h3>📦 Vendas por Plano</h3><canvas id="chart-plano"></canvas></div>
     <div class="chart-card"><h3>📅 MRR por Mês</h3><canvas id="chart-mes"></canvas></div>
   </div>
@@ -488,31 +507,19 @@ function updateCharts() {
     {labels:statusData.map(x=>x[0]),datasets:[{
       data:statusData.map(x=>x[1]),
       backgroundColor:statusData.map(x=>statusColors[x[0]]||'#6366f1'),
-      borderColor:borderC, borderWidth:2, hoverOffset:10, hoverBorderWidth:0
+      borderColor:borderC, borderWidth:2, hoverOffset:8, hoverBorderWidth:0
     }]},
-    {cutout:'65%',plugins:{
-      legend:{
-        position:'bottom',
-        labels:{
-          color:tickC,boxWidth:10,padding:16,font:{size:11},
-          generateLabels(chart){
-            const ds=chart.data.datasets[0];
-            return chart.data.labels.map((label,i)=>({
-              text:`${label}  ${donutTotal>0?Math.round(ds.data[i]/donutTotal*100):0}%`,
-              fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],
-              lineWidth:0,index:i,hidden:false
-            }));
-          }
-        }
-      },
+    {cutout:'68%',plugins:{
+      legend:{display:false},
       tooltip:{callbacks:{
         label(ctx){
           const pct = donutTotal>0 ? Math.round(ctx.parsed/donutTotal*100) : 0;
-          return `  ${ctx.label}: ${ctx.parsed} clientes (${pct}%)`;
+          return `  ${ctx.label}: ${ctx.parsed} (${pct}%)`;
         }
       }}
     }}
   );
+  renderStatusLegend(statusData, statusColors, donutTotal);
 
   // ── PLANO ──
   const planoData = sorted(grp('Plano Contratado'));
@@ -543,6 +550,24 @@ function updateCharts() {
       y:{grid:{color:gridC},ticks:{color:tickC,callback:v=>'R$'+(v/1000).toFixed(1)+'k'},border:{display:false}}
     }}
   );
+}
+
+function renderStatusLegend(data, colors, total) {
+  const el = document.getElementById('status-legend');
+  if (!el) return;
+  const max = Math.max(...data.map(x=>x[1]), 1);
+  el.innerHTML = data.map(([label, count]) => {
+    const color = colors[label] || '#6366f1';
+    const pct   = total > 0 ? Math.round(count/total*100) : 0;
+    const bar   = Math.round(count/max*100);
+    return `<div class="sl-row">
+      <span class="sl-dot" style="background:${color}"></span>
+      <span class="sl-name">${label}</span>
+      <div class="sl-bar-wrap"><div class="sl-bar" style="width:${bar}%;background:${color}"></div></div>
+      <span class="sl-count">${count}</span>
+      <span class="sl-pct">${pct}%</span>
+    </div>`;
+  }).join('');
 }
 
 function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; } renderTable(); }
