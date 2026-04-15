@@ -78,7 +78,7 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:box-shadow .2s}
 .chart-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
 .chart-card h3{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:16px;text-transform:uppercase;letter-spacing:.6px}
-.chart-card canvas{max-height:220px}
+.chart-card canvas{max-height:260px;min-height:200px}
 
 /* TABLE */
 .table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.2)}
@@ -417,7 +417,30 @@ function updateKPIs() {
 }
 
 const COLORS = ['#3b82f6','#6366f1','#22c55e','#f97316','#eab308','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
-Chart.defaults.color = '#94a3b8'; Chart.defaults.font.family = 'Segoe UI, Arial, sans-serif';
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = 'Segoe UI, Arial, sans-serif';
+
+// Plugin: texto central no donut
+Chart.register({
+  id: 'doughnutCenter',
+  afterDraw(chart) {
+    if (chart.config.type !== 'doughnut') return;
+    const { ctx, chartArea: {left, right, top, bottom} } = chart;
+    const total = chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+    if (!total) return;
+    const cx = (left+right)/2, cy = (top+bottom)/2;
+    const isLight = document.body.classList.contains('light');
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = "bold 24px 'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = isLight ? '#1e293b' : '#e2e8f0';
+    ctx.fillText(total, cx, cy - 10);
+    ctx.font = "11px 'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('clientes', cx, cy + 12);
+    ctx.restore();
+  }
+});
 
 function mkChart(id, type, data, options) {
   const isLight = document.body.classList.contains('light');
@@ -442,31 +465,84 @@ function updateCharts() {
     const m = {}; filteredData.forEach(r => { const k=r[col]||'?'; m[k]=(m[k]||0)+1; }); return m;
   };
   const sorted = (obj) => Object.entries(obj).sort((a,b)=>b[1]-a[1]);
+  const isLight = document.body.classList.contains('light');
+  const gridC  = isLight ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.05)';
+  const tickC  = isLight ? '#64748b' : '#94a3b8';
+  const borderC = isLight ? '#f1f5fb' : '#0f1117';
 
-  // POP
+  // ── POP ──
   const popData = sorted(grp('POP'));
-  mkChart('chart-pop','bar',{labels:popData.map(x=>x[0]),datasets:[{data:popData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:5}]},
-    {plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#94a3b8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8'}}}});
+  mkChart('chart-pop','bar',
+    {labels:popData.map(x=>x[0]),datasets:[{data:popData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:6,borderSkipped:false}]},
+    {plugins:{legend:{display:false}},scales:{
+      x:{grid:{display:false},ticks:{color:tickC},border:{display:false}},
+      y:{grid:{color:gridC},ticks:{color:tickC},border:{display:false}}
+    }}
+  );
 
-  // Status
+  // ── STATUS (Donut) ──
   const statusData = sorted(grp('Status do Pagamento'));
   const statusColors = {Pago:'#22c55e',Pendente:'#eab308','Em atraso':'#ef4444',Isento:'#3b82f6',Cancelado:'#64748b'};
-  mkChart('chart-status','doughnut',{labels:statusData.map(x=>x[0]),datasets:[{data:statusData.map(x=>x[1]),backgroundColor:statusData.map(x=>statusColors[x[0]]||'#6366f1'),borderColor:'#0f1117',borderWidth:3}]},
-    {plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',boxWidth:12,padding:12}}},cutout:'62%'});
+  const donutTotal = statusData.reduce((s,x)=>s+x[1],0);
+  mkChart('chart-status','doughnut',
+    {labels:statusData.map(x=>x[0]),datasets:[{
+      data:statusData.map(x=>x[1]),
+      backgroundColor:statusData.map(x=>statusColors[x[0]]||'#6366f1'),
+      borderColor:borderC, borderWidth:2, hoverOffset:10, hoverBorderWidth:0
+    }]},
+    {cutout:'65%',plugins:{
+      legend:{
+        position:'bottom',
+        labels:{
+          color:tickC,boxWidth:10,padding:16,font:{size:11},
+          generateLabels(chart){
+            const ds=chart.data.datasets[0];
+            return chart.data.labels.map((label,i)=>({
+              text:`${label}  ${donutTotal>0?Math.round(ds.data[i]/donutTotal*100):0}%`,
+              fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],
+              lineWidth:0,index:i,hidden:false
+            }));
+          }
+        }
+      },
+      tooltip:{callbacks:{
+        label(ctx){
+          const pct = donutTotal>0 ? Math.round(ctx.parsed/donutTotal*100) : 0;
+          return `  ${ctx.label}: ${ctx.parsed} clientes (${pct}%)`;
+        }
+      }}
+    }}
+  );
 
-  // Plano
+  // ── PLANO ──
   const planoData = sorted(grp('Plano Contratado'));
-  mkChart('chart-plano','bar',{labels:planoData.map(x=>x[0]),datasets:[{data:planoData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:5}]},
-    {plugins:{legend:{display:false}},indexAxis:'y',scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8'}},y:{grid:{display:false},ticks:{color:'#94a3b8'}}}});
+  mkChart('chart-plano','bar',
+    {labels:planoData.map(x=>x[0]),datasets:[{data:planoData.map(x=>x[1]),backgroundColor:COLORS,borderRadius:6,borderSkipped:false}]},
+    {plugins:{legend:{display:false}},indexAxis:'y',scales:{
+      x:{grid:{color:gridC},ticks:{color:tickC},border:{display:false}},
+      y:{grid:{display:false},ticks:{color:tickC},border:{display:false}}
+    }}
+  );
 
-  // MRR por Mês
+  // ── MRR por Mês ──
   const mrrByMes = {};
   filteredData.filter(r=>r['Status do Pagamento']!=='Cancelado').forEach(r=>{
     const m=r['Mes']||'?'; mrrByMes[m]=(mrrByMes[m]||0)+getVal(r);
   });
   const mesLabels = mesOrder.filter(m => mrrByMes[m] !== undefined);
-  mkChart('chart-mes','bar',{labels:mesLabels,datasets:[{data:mesLabels.map(m=>mrrByMes[m]||0),backgroundColor:'rgba(59,130,246,.75)',borderRadius:5,label:'MRR'}]},
-    {plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#94a3b8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8',callback:v=>'R$'+(v/1000).toFixed(0)+'k'}}}});
+  mkChart('chart-mes','bar',
+    {labels:mesLabels,datasets:[{
+      data:mesLabels.map(m=>mrrByMes[m]||0),
+      backgroundColor: isLight ? 'rgba(37,99,235,.7)' : 'rgba(59,130,246,.75)',
+      borderRadius:6, borderSkipped:false, label:'MRR'
+    }]},
+    {plugins:{legend:{display:false},tooltip:{callbacks:{
+      label(ctx){ return `  MRR: ${fmtBRL(ctx.parsed.y)}`; }
+    }}},scales:{
+      x:{grid:{display:false},ticks:{color:tickC},border:{display:false}},
+      y:{grid:{color:gridC},ticks:{color:tickC,callback:v=>'R$'+(v/1000).toFixed(1)+'k'},border:{display:false}}
+    }}
+  );
 }
 
 function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; } renderTable(); }
@@ -551,8 +627,9 @@ function refreshChartTheme() {
   const tp = isLight
     ? {backgroundColor:'#ffffff',borderColor:'#e2e8f0',borderWidth:1,titleColor:'#1e293b',bodyColor:'#64748b',padding:10,cornerRadius:8}
     : {backgroundColor:'#1a1d27',borderColor:'#2a2d3e',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:10,cornerRadius:8};
-  const gridC  = isLight ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.05)';
-  const tickC  = isLight ? '#64748b' : '#94a3b8';
+  const gridC   = isLight ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.05)';
+  const tickC   = isLight ? '#64748b' : '#94a3b8';
+  const borderC = isLight ? '#f1f5fb' : '#0f1117';
   Object.values(charts).forEach(chart => {
     if (chart.options.plugins?.tooltip) Object.assign(chart.options.plugins.tooltip, tp);
     if (chart.options.scales) {
@@ -562,6 +639,9 @@ function refreshChartTheme() {
       });
     }
     if (chart.options.plugins?.legend?.labels) chart.options.plugins.legend.labels.color = tickC;
+    if (chart.config.type === 'doughnut' && chart.data.datasets?.[0]) {
+      chart.data.datasets[0].borderColor = borderC;
+    }
     chart.update('none');
   });
 }
