@@ -95,14 +95,50 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 
 /* TABLE */
 .table-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.table-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
-.table-header h3{font-size:14px;font-weight:700}
-.table-header input{
+.table-header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.table-header h3{font-size:14px;font-weight:700;margin-right:auto}
+.table-search{
   background:var(--bg);border:1px solid var(--border);color:var(--text);
-  padding:7px 12px;border-radius:8px;font-size:13px;width:240px;
-  transition:border-color .15s
+  padding:7px 12px;border-radius:8px;font-size:13px;width:220px;
+  transition:border-color .15s;font-family:inherit
 }
-.table-header input:focus{outline:none;border-color:var(--accent)}
+.table-search:focus{outline:none;border-color:var(--accent)}
+.btn-filter-toggle{
+  display:flex;align-items:center;gap:6px;
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:6px 13px;border-radius:8px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap
+}
+.btn-filter-toggle:hover{border-color:var(--accent);color:var(--text)}
+.btn-filter-toggle.active{background:rgba(59,130,246,.12);border-color:var(--accent);color:var(--accent)}
+.filter-badge{
+  background:var(--accent);color:#fff;border-radius:10px;
+  font-size:10px;font-weight:700;padding:1px 6px;margin-left:2px
+}
+
+/* ── PAINEL DE FILTROS AVANÇADOS ─────────────────────────────────────────── */
+.adv-filters{
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  background:rgba(0,0,0,.1);
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;
+  animation:fadeIn .15s ease
+}
+body.light .adv-filters{background:#f8fafc}
+.adv-filters.hidden{display:none}
+.adv-filters label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.adv-filters select{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;transition:border-color .15s
+}
+body.light .adv-filters select{background:#ffffff}
+.adv-filters select:focus{outline:none;border-color:var(--accent)}
+.adv-filter-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;padding-top:2px}
+.btn-clear-adv{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit
+}
+.btn-clear-adv:hover{border-color:var(--red);color:var(--red)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;background:rgba(0,0,0,.15)}
@@ -259,8 +295,51 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
   <div class="table-card">
     <div class="table-header">
       <h3>📋 Clientes</h3>
-      <input type="text" id="search-input" placeholder="🔍 Buscar cliente…" oninput="renderTable()"/>
+      <input class="table-search" type="text" id="search-input" placeholder="🔍 Buscar…" oninput="renderTable()"/>
+      <button class="btn-filter-toggle" id="btn-filter-toggle" onclick="toggleAdvFilters()">
+        ⚙ Filtros <span class="filter-badge hidden" id="filter-count"></span>
+      </button>
     </div>
+
+    <!-- PAINEL FILTROS AVANÇADOS -->
+    <div class="adv-filters hidden" id="adv-filters">
+      <label>Mês
+        <select id="af-mes" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <label>POP
+        <select id="af-pop" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <label>Plano
+        <select id="af-plano" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <label>Bairro
+        <select id="af-bairro" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <label>Status
+        <select id="af-status" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <label>Churn
+        <select id="af-churn" onchange="applyAdvFilters()">
+          <option value="">Todos</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+        </select>
+      </label>
+      <label>Equip. Recolhido
+        <select id="af-equip" onchange="applyAdvFilters()">
+          <option value="">Todos</option>
+          <option value="Sim">Sim</option>
+          <option value="Não">Não</option>
+        </select>
+      </label>
+      <label>Responsável
+        <select id="af-resp" onchange="applyAdvFilters()"><option value="">Todos</option></select>
+      </label>
+      <div class="adv-filter-actions">
+        <button class="btn-clear-adv" onclick="clearAdvFilters()">✕ Limpar filtros</button>
+      </div>
+    </div>
+
     <div class="qf-bar" id="qf-status">
       <button class="qf-btn active" data-status=""        onclick="qfFilter('')">Todos</button>
       <button class="qf-btn"        data-status="Pago"    onclick="qfFilter('Pago')">✅ Pago</button>
@@ -379,6 +458,7 @@ async function loadData() {
     const results = await Promise.all(SHEETS.map(s => fetchSheet(s.name, s.label)));
     allData = results.flat();
     populateFilters();
+    populateAdvFilters();
     applyFilters();
     refreshChartTheme();
     document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
@@ -582,7 +662,7 @@ function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key;
 function renderTable() {
   const search = document.getElementById('search-input').value.toLowerCase();
   const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn'};
-  let rows = [...filteredData];
+  let rows = getAdvFilteredRows([...filteredData]);
   if (search) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(search));
   rows.sort((a,b)=>{
     const col = colMap[sortKey]||sortKey;
@@ -650,6 +730,115 @@ function syncQfBar() {
   document.querySelectorAll('#qf-status .qf-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.status === val)
   );
+}
+
+// ── ADVANCED FILTERS ─────────────────────────────────────────────────────
+function toggleAdvFilters() {
+  const panel = document.getElementById('adv-filters');
+  const btn   = document.getElementById('btn-filter-toggle');
+  panel.classList.toggle('hidden');
+  // button stays active if panel is open OR if any filter is applied
+  btn.classList.toggle('active', !panel.classList.contains('hidden') || countAdvActive() > 0);
+}
+
+function populateAdvFilters() {
+  const dynFields = {
+    'af-mes':    r => r['Mes'],
+    'af-pop':    r => r['POP'],
+    'af-plano':  r => r['Plano Contratado'],
+    'af-bairro': r => r['Região/Bairro'] || r['Regiao/Bairro'],
+    'af-status': r => r['Status do Pagamento'],
+    'af-resp':   r => r['Responsável'] || r['Responsavel'] || r['Vendedor'] || r['Resp.']
+  };
+  Object.entries(dynFields).forEach(([id, fn]) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    let vals = [...new Set(allData.map(fn).filter(Boolean))];
+    if (id === 'af-mes') {
+      vals.sort((a,b)=>{const ai=mesOrder.indexOf(a),bi=mesOrder.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
+    } else {
+      vals.sort((a,b)=>a.localeCompare(b,'pt'));
+    }
+    sel.innerHTML = '<option value="">Todos</option>' +
+      vals.map(v=>`<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('');
+  });
+}
+
+function countAdvActive() {
+  return ['af-mes','af-pop','af-plano','af-bairro','af-status','af-churn','af-equip','af-resp']
+    .filter(id => { const el=document.getElementById(id); return el && el.value !== ''; }).length;
+}
+
+function updateFilterBadge() {
+  const n = countAdvActive();
+  const badge = document.getElementById('filter-count');
+  const btn   = document.getElementById('btn-filter-toggle');
+  if (n > 0) {
+    badge.textContent = n;
+    badge.classList.remove('hidden');
+    btn.classList.add('active');
+  } else {
+    badge.classList.add('hidden');
+    // only remove active if panel is also closed
+    if (document.getElementById('adv-filters').classList.contains('hidden')) {
+      btn.classList.remove('active');
+    }
+  }
+}
+
+function getAdvFilteredRows(data) {
+  const afMes    = document.getElementById('af-mes').value;
+  const afPop    = document.getElementById('af-pop').value;
+  const afPlano  = document.getElementById('af-plano').value;
+  const afBairro = document.getElementById('af-bairro').value;
+  const afStatus = document.getElementById('af-status').value;
+  const afChurn  = (document.getElementById('af-churn').value||'').toUpperCase().trim();
+  const afEquip  = (document.getElementById('af-equip').value||'').toUpperCase().trim();
+  const afResp   = document.getElementById('af-resp').value;
+
+  // quick check — if nothing is set, skip all filtering
+  if (!afMes && !afPop && !afPlano && !afBairro && !afStatus && !afChurn && !afEquip && !afResp) return data;
+
+  return data.filter(r => {
+    if (afMes    && r['Mes'] !== afMes) return false;
+    if (afPop    && r['POP'] !== afPop) return false;
+    if (afPlano  && r['Plano Contratado'] !== afPlano) return false;
+    if (afBairro && (r['Região/Bairro']||r['Regiao/Bairro']||'') !== afBairro) return false;
+    if (afStatus && r['Status do Pagamento'] !== afStatus) return false;
+    if (afChurn) {
+      const v = (getChurn(r)||'').toUpperCase().trim();
+      const ok = afChurn === 'SIM' ? v === 'SIM' : (v === 'NÃO' || v === 'NAO');
+      if (!ok) return false;
+    }
+    if (afEquip) {
+      const churnV = (getChurn(r)||'').toUpperCase().trim();
+      // equipment only applies to churn=SIM rows
+      if (churnV !== 'SIM') return false;
+      const v = (getEquip(r)||'').toUpperCase().trim();
+      const ok = afEquip === 'SIM' ? v === 'SIM' : (v === 'NÃO' || v === 'NAO');
+      if (!ok) return false;
+    }
+    if (afResp) {
+      const resp = r['Responsável'] || r['Responsavel'] || r['Vendedor'] || r['Resp.'] || '';
+      if (resp !== afResp) return false;
+    }
+    return true;
+  });
+}
+
+function applyAdvFilters() {
+  updateFilterBadge();
+  currentPage = 1;
+  renderTable();
+}
+
+function clearAdvFilters() {
+  ['af-mes','af-pop','af-plano','af-bairro','af-status','af-churn','af-equip','af-resp']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  updateFilterBadge();
+  currentPage = 1;
+  renderTable();
 }
 
 // ── THEME & CHART COLORS ──────────────────────────────────────────────────
