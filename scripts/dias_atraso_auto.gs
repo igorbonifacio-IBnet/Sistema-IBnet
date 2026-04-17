@@ -1,11 +1,13 @@
 /**
  * ============================================================
- *  IBNET TELECOM — Automação Google Sheets (v2)
+ *  IBNET TELECOM — Automação Google Sheets (v3)
  *  Funções:
  *    1. Cálculo automático de "Dias em atraso"
  *    2. Alerta diário de inadimplência por e-mail
  *    3. Relatório semanal de KPIs por e-mail
  *    4. Score de risco de churn por cliente
+ *    5. Log automático de todas as alterações
+ *    6. Backup semanal automático (sexta-feira)
  * ============================================================
  *
  *  ATUALIZAÇÃO (substitua o script antigo por este):
@@ -422,6 +424,153 @@ function calcularScoreChurn() {
 
 
 // ════════════════════════════════════════════════════════════════════════════
+//  5. LOG AUTOMÁTICO DE ALTERAÇÕES
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Registra cada edição na aba "📋 Log".
+ * Acionado por gatilho instalável (não é o onEdit simples).
+ * Captura: data/hora, usuário, aba, célula, valor anterior, novo valor.
+ */
+function registrarEdicao(e) {
+  if (!e || !e.range) return;
+
+  const ss    = e.source || SpreadsheetApp.getActiveSpreadsheet();
+  const range = e.range;
+  const nomeAba = range.getSheet().getName();
+
+  // Ignora edições dentro do próprio Log para não criar loop
+  if (nomeAba === '📋 Log') return;
+
+  // Cria a aba de Log se ainda não existir
+  let logSheet = ss.getSheetByName('📋 Log');
+  if (!logSheet) {
+    logSheet = ss.insertSheet('📋 Log');
+    // Cabeçalho formatado
+    const cabecalho = [['Data/Hora', 'Usuário', 'Aba', 'Célula', 'Valor Anterior', 'Novo Valor']];
+    logSheet.getRange(1, 1, 1, 6).setValues(cabecalho);
+    logSheet.getRange(1, 1, 1, 6)
+      .setBackground('#CC2200')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold')
+      .setFontSize(11);
+    logSheet.setFrozenRows(1);
+    logSheet.setColumnWidth(1, 160); // Data/Hora
+    logSheet.setColumnWidth(2, 220); // Usuário
+    logSheet.setColumnWidth(3, 120); // Aba
+    logSheet.setColumnWidth(4, 80);  // Célula
+    logSheet.setColumnWidth(5, 180); // Valor Anterior
+    logSheet.setColumnWidth(6, 180); // Novo Valor
+  }
+
+  const agora         = new Date();
+  const usuario       = e.user ? e.user.getEmail() : Session.getActiveUser().getEmail() || 'Desconhecido';
+  const celula        = range.getA1Notation();
+  const valorAnterior = e.oldValue !== undefined ? e.oldValue : '';
+  const novoValor     = e.value    !== undefined ? e.value    : range.getValue();
+
+  logSheet.appendRow([agora, usuario, nomeAba, celula, valorAnterior, novoValor]);
+
+  // Cor da linha por tipo de alteração
+  const ultimaLinha = logSheet.getLastRow();
+  const corLinha = valorAnterior === '' ? '#f0fdf4' :   // novo valor
+                   novoValor === ''     ? '#fff7f5' :   // valor apagado
+                   '#fffbeb';                            // valor modificado
+  logSheet.getRange(ultimaLinha, 1, 1, 6).setBackground(corLinha);
+
+  Logger.log(`📝 Log: ${usuario} editou ${nomeAba}!${celula} — "${valorAnterior}" → "${novoValor}"`);
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  6. BACKUP SEMANAL AUTOMÁTICO
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cria uma cópia de todas as abas monitoradas em uma nova planilha no Drive.
+ * Nome do arquivo: "IBnet Backup DD-MM-AAAA"
+ * Roda toda sexta-feira às 18h (configurado em configurarGatilhos).
+ * Envia e-mail com o link direto para o backup.
+ */
+function backupSemanal() {
+  const ss      = SpreadsheetApp.getActiveSpreadsheet();
+  const hoje    = new Date();
+  const dataStr = Utilities.formatDate(hoje, Session.getScriptTimeZone(), 'dd-MM-yyyy');
+  const nomeBackup = `IBnet Backup ${dataStr}`;
+
+  // Cria nova planilha no Drive
+  const backup = SpreadsheetApp.create(nomeBackup);
+  let abaCopiadasNomes = [];
+
+  ABAS_MONITORADAS.forEach(nomeAba => {
+    const aba = ss.getSheetByName(nomeAba);
+    if (!aba) return;
+    aba.copyTo(backup).setName(nomeAba);
+    abaCopiadasNomes.push(nomeAba);
+  });
+
+  // Copia também a aba de Log se existir
+  const logSheet = ss.getSheetByName('📋 Log');
+  if (logSheet) {
+    logSheet.copyTo(backup).setName('📋 Log');
+    abaCopiadasNomes.push('📋 Log');
+  }
+
+  // Remove a aba padrão vazia criada automaticamente pelo Google
+  ['Planilha1', 'Sheet1', 'Plan1'].forEach(nome => {
+    const aba = backup.getSheetByName(nome);
+    if (aba) try { backup.deleteSheet(aba); } catch(err) {}
+  });
+
+  const linkBackup = `https://docs.google.com/spreadsheets/d/${backup.getId()}`;
+  Logger.log(`✅ Backup criado: "${nomeBackup}" · Link: ${linkBackup}`);
+
+  // Envia e-mail com link do backup
+  const dataFormatada = hoje.toLocaleDateString('pt-BR');
+  const assunto = `💾 IBnet — Backup semanal realizado · ${dataFormatada}`;
+  const html = `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px">
+    <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#CC2200,#FF5500);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700">💾 Backup Semanal Concluído</h1>
+        <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:13px">${dataFormatada} · IBnet Telecom</p>
+      </div>
+      <div style="padding:24px 28px">
+        <p style="margin:0 0 16px;color:#374151">O backup semanal foi criado com sucesso no Google Drive.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+          <tr style="background:#f8fafc">
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600">Arquivo</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#1e293b">${nomeBackup}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600">Abas incluídas</td>
+            <td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:#1e293b">${abaCopiadasNomes.join(', ')}</td>
+          </tr>
+          <tr style="background:#f8fafc">
+            <td style="padding:10px 14px;color:#64748b;font-weight:600">Data</td>
+            <td style="padding:10px 14px;color:#1e293b">${dataFormatada}</td>
+          </tr>
+        </table>
+        <a href="${linkBackup}"
+           style="display:inline-block;background:#CC2200;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">
+          📂 Abrir Backup no Drive
+        </a>
+      </div>
+      <div style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8">Backup automático semanal · Sistema IBnet · ${dataFormatada}</p>
+      </div>
+    </div>
+  </div>`;
+
+  EMAILS_GESTAO.forEach(email => {
+    MailApp.sendEmail({ to: email, subject: assunto, htmlBody: html });
+  });
+
+  return linkBackup;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
 //  GATILHOS E AGENDAMENTO
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -437,17 +586,29 @@ function configurarGatilhos() {
   ScriptApp.newTrigger('enviarAlertaInadimplencia')
     .timeBased().everyDays(1).atHour(8).create();
 
-  // Relatório semanal → segunda-feira às 07h30
+  // Relatório semanal → segunda-feira às 07h
   ScriptApp.newTrigger('enviarRelatorioSemanal')
     .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).create();
 
-  Logger.log('✅ Gatilhos configurados!');
+  // Backup semanal → sexta-feira às 18h
+  ScriptApp.newTrigger('backupSemanal')
+    .timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(18).create();
+
+  // Log de alterações → a cada edição na planilha (gatilho instalável)
+  ScriptApp.newTrigger('registrarEdicao')
+    .forSpreadsheet(SpreadsheetApp.getActive())
+    .onEdit()
+    .create();
+
+  Logger.log('✅ Todos os gatilhos configurados!');
   SpreadsheetApp.getUi().alert(
-    '✅ Automação completa configurada!\n\n' +
-    '• 07h00 todo dia  → Dias em atraso + Score de Churn\n' +
-    '• 08h00 todo dia  → Alerta de inadimplência por e-mail\n' +
-    '• Segunda às 07h  → Relatório semanal de KPIs\n\n' +
-    'E-mails configurados:\n' + EMAILS_GESTAO.join('\n')
+    '✅ Automação v3 completa!\n\n' +
+    '• 07h00 todo dia     → Dias em atraso + Score de Churn\n' +
+    '• 08h00 todo dia     → Alerta de inadimplência (e-mail)\n' +
+    '• Segunda às 07h     → Relatório semanal de KPIs (e-mail)\n' +
+    '• Sexta às 18h       → Backup semanal no Drive (e-mail)\n' +
+    '• A cada edição      → Registro na aba 📋 Log\n\n' +
+    'E-mails: ' + EMAILS_GESTAO.join(' · ')
   );
 }
 
@@ -471,13 +632,14 @@ function removerGatilhos() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('⚡ IBnet')
-    .addItem('🔄 Calcular dias em atraso agora',    'calcularDiasEmAtraso')
-    .addItem('📊 Calcular score de churn agora',    'calcularScoreChurn')
+    .addItem('🔄 Calcular dias em atraso agora',      'calcularDiasEmAtraso')
+    .addItem('📊 Calcular score de churn agora',      'calcularScoreChurn')
     .addItem('⚠️  Enviar alerta inadimplência agora', 'enviarAlertaInadimplencia')
-    .addItem('📧 Enviar relatório semanal agora',   'enviarRelatorioSemanal')
+    .addItem('📧 Enviar relatório semanal agora',     'enviarRelatorioSemanal')
+    .addItem('💾 Fazer backup agora',                 'backupSemanal')
     .addSeparator()
     .addItem('⚙️  Configurar automação (fazer uma vez)', 'configurarGatilhos')
-    .addItem('🗑️  Remover automação', 'removerGatilhos')
+    .addItem('🗑️  Remover automação',                 'removerGatilhos')
     .addToUi();
 }
 
