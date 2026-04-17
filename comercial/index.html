@@ -244,7 +244,10 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
 </div>
 
 <div class="mini-header">
-  <span id="last-update">—</span>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span id="last-update">—</span>
+    <span id="auto-countdown" style="font-size:11px;color:var(--muted)"></span>
+  </div>
   <button class="btn-refresh" id="refresh-btn">↻ Atualizar</button>
 </div>
 
@@ -450,10 +453,10 @@ async function fetchSheet(name, label) {
   return rows.filter(r => r['ID Venda']).map(r => ({...r, 'Mes': r['Mes'] || label}));
 }
 
-async function loadData() {
+async function loadData(silent = false) {
   const btn = document.getElementById('refresh-btn');
   btn.textContent = '⟳ Atualizando…'; btn.style.opacity = '.6'; btn.style.pointerEvents = 'none';
-  document.getElementById('loading-overlay').classList.remove('hidden');
+  if (!silent) document.getElementById('loading-overlay').classList.remove('hidden');
   try {
     const results = await Promise.all(SHEETS.map(s => fetchSheet(s.name, s.label)));
     allData = results.flat();
@@ -463,7 +466,7 @@ async function loadData() {
     refreshChartTheme();
     document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
   } catch(e) { console.error(e); }
-  document.getElementById('loading-overlay').classList.add('hidden');
+  if (!silent) document.getElementById('loading-overlay').classList.add('hidden');
   btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
 }
 
@@ -712,11 +715,43 @@ function renderTable() {
   addBtn('»',pages,currentPage===pages,false);
 }
 
-document.getElementById('refresh-btn').addEventListener('click', loadData);
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  loadData(false);
+  resetCountdown();
+});
 ['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { applyFilters(); syncQfBar(); });
 });
-loadData();
+loadData(false);
+
+// ── AUTO-REFRESH SILENCIOSO ───────────────────────────────────────────────
+const AUTO_REFRESH_MS = 15 * 60 * 1000; // 15 minutos
+let _nextRefresh = 0;
+let _countdownTimer = null;
+
+function resetCountdown() {
+  _nextRefresh = Date.now() + AUTO_REFRESH_MS;
+}
+
+function startAutoRefresh() {
+  resetCountdown();
+  if (_countdownTimer) clearInterval(_countdownTimer);
+  _countdownTimer = setInterval(() => {
+    const remaining = _nextRefresh - Date.now();
+    const el = document.getElementById('auto-countdown');
+    if (remaining <= 0) {
+      if (el) el.textContent = '· atualizando…';
+      resetCountdown();
+      loadData(true); // silencioso — sem overlay, sem interrupção
+      return;
+    }
+    const m = Math.floor(remaining / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    if (el) el.textContent = `· próx. atualização em ${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+
+startAutoRefresh();
 
 // ── QUICK FILTER PILLS ────────────────────────────────────────────────────
 function qfFilter(status) {
