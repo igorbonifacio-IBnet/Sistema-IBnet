@@ -382,6 +382,14 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
       <span class="sb-lock" id="fin-lock">🔒</span>
     </button>
 
+    <div class="sb-section">Operacional</div>
+
+    <button class="sb-item" data-tab="suporte" id="sb-suporte">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+      Suporte
+      <span class="sb-lock" id="sup-lock">🔒</span>
+    </button>
+
     <div class="sb-footer">
       <div class="sb-user">
         <div class="sb-avatar" id="sb-avatar">?</div>
@@ -414,6 +422,10 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
     <div class="tab-panel" id="tab-financeiro">
       <iframe src="financeiro/index.html" id="iframe-financeiro" title="Painel Financeiro"></iframe>
     </div>
+
+    <div class="tab-panel" id="tab-suporte">
+      <iframe src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
+    </div>
   </div>
 </div>
 
@@ -425,7 +437,7 @@ const USERS = {
 };
 
 const ROLE_ACCESS = {
-  admin:      ['comercial', 'financeiro'],
+  admin:      ['comercial', 'financeiro', 'suporte'],
   financeiro: ['comercial', 'financeiro'],
   comercial:  ['comercial'],
 };
@@ -437,6 +449,7 @@ const ROLE_LABELS = {
 const TAB_META = {
   comercial:  { title: 'Dashboard Comercial',  badge: 'COMERCIAL' },
   financeiro: { title: 'Painel Financeiro',    badge: 'FINANCEIRO' },
+  suporte:    { title: 'Painel de Suporte',    badge: 'SUPORTE' },
 };
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -496,6 +509,19 @@ function bootPlatform(session) {
     sbFin.style.pointerEvents = 'none';
   }
 
+  // Show/hide suporte based on role
+  const hasSup = canAccess(session.role, 'suporte');
+  const sbSup  = document.getElementById('sb-suporte');
+  const supLock = document.getElementById('sup-lock');
+  if (hasSup) {
+    supLock.style.display = 'none';
+    sbSup.style.opacity = '1';
+    sbSup.style.pointerEvents = 'auto';
+  } else {
+    sbSup.style.opacity = '.4';
+    sbSup.style.pointerEvents = 'none';
+  }
+
   switchTab('comercial');
 }
 
@@ -536,7 +562,7 @@ function applyTheme(t) {
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-financeiro'].forEach(id => {
+  ['iframe-comercial','iframe-financeiro','iframe-suporte'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -545,6 +571,7 @@ function toggleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
 
 document.getElementById('iframe-comercial').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
+document.getElementById('iframe-suporte').addEventListener('load', () => applyTheme(currentTheme));
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';

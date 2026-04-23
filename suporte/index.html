@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Painel de Suporte — IBNET</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#3b82f6;
+  --green:#22c55e;--red:#ef4444;--orange:#f97316;--yellow:#eab308;--gray:#64748b;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:12px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh}
+
+/* ── LOADING ─────────────────────────────────────────────────────────────── */
+#loading-overlay{position:fixed;inset:0;background:rgba(15,17,23,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px}
+#loading-overlay.hidden{display:none}
+.spinner{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MINI HEADER ─────────────────────────────────────────────────────────── */
+.mini-header{background:#0d1018;border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.month-nav{display:flex;align-items:center;gap:8px}
+.month-btn{background:transparent;border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s;font-family:inherit;line-height:1}
+.month-btn:hover{border-color:var(--accent);color:var(--text)}
+.month-label{font-size:14px;font-weight:700;color:var(--text);min-width:160px;text-align:center;letter-spacing:-.2px}
+.today-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;transition:all .15s;white-space:nowrap}
+.today-btn:hover{border-color:var(--accent);color:var(--text)}
+.header-desc{font-size:11px;color:var(--muted);margin-left:auto}
+
+/* ── MAIN ────────────────────────────────────────────────────────────────── */
+main{padding:20px 24px;max-width:1440px;margin:0 auto}
+
+/* ── KPIS ────────────────────────────────────────────────────────────────── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.kpi-card:hover{transform:translateY(-2px);border-color:var(--kpi-color,var(--accent));box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
+.kpi-icon{font-size:20px;margin-bottom:8px;display:block}
+.kpi-value{font-size:26px;font-weight:700;color:var(--kpi-color,var(--text));line-height:1;margin-bottom:4px;letter-spacing:-.5px}
+.kpi-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
+
+/* ── SECTION HEADER ──────────────────────────────────────────────────────── */
+.section-header{margin-bottom:18px}
+.section-header h2{font-size:14px;font-weight:700;color:var(--text)}
+.section-header p{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+
+/* ── PARTNERS GRID ───────────────────────────────────────────────────────── */
+.partners-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px}
+
+/* ── PARTNER CARD ────────────────────────────────────────────────────────── */
+.partner-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .2s,border-color .3s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.partner-card:hover{box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.partner-card.card-concluido{border-color:rgba(34,197,94,.35)}
+
+/* Card Header */
+.card-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.card-header-left{display:flex;align-items:center;gap:12px}
+.partner-avatar{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:.5px}
+.partner-title{font-size:16px;font-weight:700;letter-spacing:-.2px}
+.partner-subtitle{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* Status Badge */
+.status-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;border:none;font-family:inherit;user-select:none;white-space:nowrap}
+.status-pendente{background:rgba(100,116,139,.15);color:#94a3b8}
+.status-pendente:hover{background:rgba(100,116,139,.25)}
+.status-em_conferencia{background:rgba(234,179,8,.15);color:#eab308}
+.status-em_conferencia:hover{background:rgba(234,179,8,.25)}
+.status-concluido{background:rgba(34,197,94,.15);color:#22c55e}
+.status-concluido:hover{background:rgba(34,197,94,.25)}
+
+/* Card Meta */
+.card-meta{display:flex;align-items:center;gap:10px;padding:8px 20px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(0,0,0,.12);flex-wrap:wrap}
+.meta-venc{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.meta-venc strong{color:var(--text)}
+.btn-edit-venc{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;transition:all .15s;font-family:inherit}
+.btn-edit-venc:hover{color:var(--accent);background:rgba(59,130,246,.12)}
+.countdown-pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.cd-ok{background:rgba(34,197,94,.1);color:#22c55e}
+.cd-warn{background:rgba(234,179,8,.1);color:#eab308}
+.cd-urgent{background:rgba(239,68,68,.1);color:#ef4444}
+.cd-past{background:rgba(100,116,139,.1);color:#64748b}
+
+/* Checklist */
+.checklist{padding:12px 20px 8px;display:flex;flex-direction:column;gap:2px}
+.chk-item{display:flex;align-items:flex-start;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .15s;user-select:none}
+.chk-item:hover{background:rgba(59,130,246,.07)}
+.chk-box{width:18px;height:18px;border-radius:5px;border:2px solid var(--border);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .2s;background:transparent}
+.chk-item.chk-done .chk-box{background:var(--green);border-color:var(--green)}
+.chk-item.chk-done .chk-text{color:var(--muted);text-decoration:line-through;opacity:.5}
+.chk-text{font-size:13px;line-height:1.4}
+
+/* Progress */
+.progress-section{padding:4px 20px 12px}
+.prog-bar-bg{height:6px;background:var(--border);border-radius:6px;overflow:hidden;margin-bottom:5px}
+.prog-bar-fill{height:100%;border-radius:6px;transition:width .4s ease}
+.prog-labels{display:flex;justify-content:space-between;align-items:center}
+.prog-text{font-size:11px;color:var(--muted)}
+.prog-pct{font-size:11px;font-weight:700}
+
+/* Metrics */
+.card-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 20px 12px}
+.metric-group{display:flex;flex-direction:column;gap:5px}
+.metric-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.metric-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .15s}
+.metric-input:focus{outline:none;border-color:var(--accent)}
+
+/* Notes */
+.card-notes{padding:0 20px 14px}
+.notes-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:block}
+.notes-ta{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;min-height:72px;transition:border-color .15s;line-height:1.5}
+.notes-ta:focus{outline:none;border-color:var(--accent)}
+
+/* Card Footer */
+.card-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border);gap:8px;flex-wrap:wrap}
+.footer-ts{font-size:10px;color:var(--muted)}
+.footer-actions{display:flex;gap:6px}
+.btn-reset{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.btn-reset:hover{border-color:var(--red);color:var(--red)}
+.btn-advance{border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;white-space:nowrap}
+.btn-advance:hover{opacity:.85}
+
+/* ── MODAL ───────────────────────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;width:100%;max-width:320px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-title{font-size:15px;font-weight:700}
+.modal-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.mf{display:flex;flex-direction:column;gap:5px}
+.mf label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.mf input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:14px;font-family:inherit;transition:border-color .2s}
+.mf input:focus{outline:none;border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px}
+.btn-mcancel{flex:1;background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-mcancel:hover{border-color:var(--red);color:var(--red)}
+.btn-msave{flex:2;background:var(--accent);border:none;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.btn-msave:hover{opacity:.85}
+
+/* ── LIGHT THEME ─────────────────────────────────────────────────────────── */
+body.light{
+  --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
+  --accent:#2563eb;
+  --green:#16a34a;--red:#dc2626;--orange:#c2410c;--yellow:#a16207;--gray:#475569;
+  --text:#1e293b;--muted:#64748b;
+}
+body.light .mini-header{background:#ffffff;border-bottom-color:#e8eef6;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+body.light .card-meta{background:#f8fafc}
+body.light .chk-item:hover{background:rgba(37,99,235,.05)}
+body.light .metric-input,body.light .notes-ta{background:#f8fafc;border-color:#dde6f0;color:#1e293b}
+body.light .metric-input:focus,body.light .notes-ta:focus{border-color:#2563eb}
+body.light .partner-card{border-color:#e8eef6;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+body.light .partner-card:hover{box-shadow:0 6px 20px rgba(37,99,235,.1)}
+body.light .partner-card.card-concluido{border-color:rgba(22,163,74,.3)}
+body.light .kpi-card{background:#ffffff;border-color:#e8eef6;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+body.light #loading-overlay{background:rgba(241,245,251,.97)}
+body.light .status-pendente{background:rgba(100,116,139,.1);color:#64748b}
+body.light .status-em_conferencia{background:rgba(161,98,7,.12);color:#a16207}
+body.light .status-concluido{background:rgba(22,163,74,.12);color:#16a34a}
+body.light .modal-box{box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px #e2e8f0}
+body.light .mf input{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+body.light .prog-bar-bg{background:#e2e8f0}
+body.light .chk-box{border-color:#cbd5e1}
+
+@media(max-width:800px){.partners-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p style="font-size:13px;color:var(--muted)">Carregando painel de suporte…</p>
+</div>
+
+<div class="mini-header">
+  <div class="month-nav">
+    <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+    <span class="month-label" id="month-label">—</span>
+    <button class="month-btn" onclick="changeMonth(1)">›</button>
+  </div>
+  <button class="today-btn" onclick="goToday()">Mês atual</button>
+  <span class="header-desc">📡 Conferência de Rede Neutra — IBNET TELECOM</span>
+</div>
+
+<main>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--kpi-color:#3b82f6">
+      <span class="kpi-icon">🏢</span>
+      <div class="kpi-value" id="kpi-parceiros">4</div>
+      <div class="kpi-label">Parceiros Ativos</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#22c55e">
+      <span class="kpi-icon">✅</span>
+      <div class="kpi-value" id="kpi-concluidos">—</div>
+      <div class="kpi-label">Conferências Concluídas</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#f97316">
+      <span class="kpi-icon">🔌</span>
+      <div class="kpi-value" id="kpi-portas">—</div>
+      <div class="kpi-label">Portas Liberadas</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#22c55e">
+      <span class="kpi-icon">💰</span>
+      <div class="kpi-value" id="kpi-economia">—</div>
+      <div class="kpi-label">Economia Gerada</div>
+    </div>
+  </div>
+
+  <!-- Section title -->
+  <div class="section-header">
+    <h2>📋 Checklist Mensal por Parceiro</h2>
+    <p>Confira cada rede neutra antes do seu vencimento e desprovisione clientes inativos para evitar cobranças desnecessárias.</p>
+  </div>
+
+  <!-- Partner Cards -->
+  <div class="partners-grid" id="partners-grid">
+    <!-- Preenchido pelo JS -->
+  </div>
+
+</main>
+
+<!-- Modal: Configurar Vencimento -->
+<div class="modal-overlay" id="venc-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚙ Configurar Vencimento</div>
+    <div class="modal-desc">Informe o dia do mês em que este parceiro realiza a cobrança das portas ativas.</div>
+    <div class="mf">
+      <label>Dia do Vencimento (1 – 31)</label>
+      <input type="number" id="modal-venc-day" min="1" max="31" placeholder="Ex: 10"
+             onkeydown="if(event.key==='Enter') saveVencModal()"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeVencModal()">Cancelar</button>
+      <button class="btn-msave"   onclick="saveVencModal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── GUARD ─────────────────────────────────────────────────────────────────
+if (window.self === window.top) { window.location.href = '../'; }
+
+// ── CONFIG ────────────────────────────────────────────────────────────────
+const CONFIG_KEY  = 'ibnet_suporte_config';
+const DATA_PREFIX = 'ibnet_suporte_';
+
+const DEFAULT_PARTNERS = [
+  { id:'intel',    nome:'INTEL',     cor:'#2563eb', icone:'IN', vencDia:10 },
+  { id:'ragtek',   nome:'RAGTEK',    cor:'#7c3aed', icone:'RT', vencDia:15 },
+  { id:'alanhouse',nome:'ALANHOUSE', cor:'#059669', icone:'AH', vencDia:20 },
+  { id:'opyt',     nome:'OPYT',      cor:'#dc2626', icone:'OP', vencDia:25 },
+];
+
+const TASKS = [
+  'Extrair relatório de clientes autenticados',
+  'Cruzar com a base de clientes ativos IBNET',
+  'Identificar clientes inativos / a desprovisionar',
+  'Solicitar desprovisionamento ao parceiro',
+  'Confirmar desprovisionamento realizado',
+  'Registrar portas liberadas e economia gerada',
+];
+
+const STATUS_ORDER  = ['pendente', 'em_conferencia', 'concluido'];
+const STATUS_LABELS = {
+  pendente:        '⏳ Pendente',
+  em_conferencia:  '🔍 Em Conferência',
+  concluido:       '✅ Concluído',
+};
+
+const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+let partners  = [];
+let viewYear  = new Date().getFullYear();
+let viewMonth = new Date().getMonth(); // 0-indexed
+
+// ── PERSISTENCE ───────────────────────────────────────────────────────────
+function loadConfig() {
+  try {
+    const c = localStorage.getItem(CONFIG_KEY);
+    if (c) { partners = JSON.parse(c); return; }
+  } catch(e) {}
+  partners = JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
+}
+
+function saveConfig() {
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(partners));
+}
+
+function dataKey() {
+  return `${DATA_PREFIX}${viewYear}_${String(viewMonth + 1).padStart(2, '0')}`;
+}
+
+function getMonthData() {
+  try {
+    const d = localStorage.getItem(dataKey());
+    if (d) return JSON.parse(d);
+  } catch(e) {}
+  return {};
+}
+
+function saveMonthData(d) {
+  localStorage.setItem(dataKey(), JSON.stringify(d));
+}
+
+function getPD(pid) {
+  const md = getMonthData();
+  return md[pid] || {
+    status:   'pendente',
+    tasks:    Array(TASKS.length).fill(false),
+    portas:   '',
+    economia: '',
+    notas:    '',
+    ts:       null,
+  };
+}
+
+function setPD(pid, data) {
+  const md = getMonthData();
+  md[pid] = { ...data, ts: new Date().toLocaleString('pt-BR') };
+  saveMonthData(md);
+}
+
+// ── COUNTDOWN ─────────────────────────────────────────────────────────────
+function isCurrentMonth() {
+  const n = new Date();
+  return viewYear === n.getFullYear() && viewMonth === n.getMonth();
+}
+
+function daysUntil(dia) {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  let d = new Date(now.getFullYear(), now.getMonth(), dia);
+  d.setHours(0, 0, 0, 0);
+  if (d <= now) d = new Date(now.getFullYear(), now.getMonth() + 1, dia);
+  return Math.ceil((d - now) / 86400000);
+}
+
+function countdownPill(dia) {
+  if (!isCurrentMonth()) {
+    return `<span class="countdown-pill cd-past">dia ${dia}</span>`;
+  }
+  const days = daysUntil(dia);
+  if (days === 0) return `<span class="countdown-pill cd-urgent">⚡ Vence hoje!</span>`;
+  if (days <= 3)  return `<span class="countdown-pill cd-urgent">⚠️ ${days}d para vencer</span>`;
+  if (days <= 7)  return `<span class="countdown-pill cd-warn">⏰ ${days} dias</span>`;
+  return `<span class="countdown-pill cd-ok">📅 ${days} dias</span>`;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function renderAll() {
+  document.getElementById('month-label').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+  renderKPIs();
+  document.getElementById('partners-grid').innerHTML = partners.map(renderCard).join('');
+}
+
+function renderKPIs() {
+  const md = getMonthData();
+  let conc = 0, portas = 0, econ = 0;
+  partners.forEach(p => {
+    const pd = md[p.id]; if (!pd) return;
+    if (pd.status === 'concluido') conc++;
+    portas += parseInt(pd.portas) || 0;
+    econ   += parseFloat((pd.economia || '').replace(',', '.')) || 0;
+  });
+  setText('kpi-parceiros', partners.length);
+  setText('kpi-concluidos', `${conc}/${partners.length}`);
+  setText('kpi-portas',  portas || '—');
+  setText('kpi-economia', econ > 0
+    ? 'R$ ' + econ.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+    : '—'
+  );
+}
+
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+function renderCard(p) {
+  const pd     = getPD(p.id);
+  const done   = pd.tasks.filter(Boolean).length;
+  const pct    = Math.round(done / TASKS.length * 100);
+  const pColor = pct === 100 ? '#22c55e' : pct > 50 ? '#3b82f6' : pct > 0 ? '#eab308' : '#2a2d3e';
+
+  const isConcluido = pd.status === 'concluido';
+  const advLabel = pd.status === 'pendente'       ? '▶ Iniciar Conferência'
+                 : pd.status === 'em_conferencia' ? '✔ Concluir'
+                 :                                  '↺ Reabrir';
+  const advColor = isConcluido ? '#22c55e' : '#3b82f6';
+
+  return `
+<div class="partner-card${isConcluido ? ' card-concluido' : ''}">
+
+  <div class="card-header">
+    <div class="card-header-left">
+      <div class="partner-avatar" style="background:${p.cor}">${p.icone}</div>
+      <div>
+        <div class="partner-title">${p.nome}</div>
+        <div class="partner-subtitle">Rede Neutra</div>
+      </div>
+    </div>
+    <button class="status-btn status-${pd.status}"
+            onclick="cycleStatus('${p.id}')">${STATUS_LABELS[pd.status]}</button>
+  </div>
+
+  <div class="card-meta">
+    <div class="meta-venc">
+      📅 Venc.:&nbsp;<strong>dia ${p.vencDia}</strong>
+      <button class="btn-edit-venc" onclick="openVencModal('${p.id}')" title="Alterar dia de vencimento">✎ editar</button>
+    </div>
+    ${countdownPill(p.vencDia)}
+  </div>
+
+  <div class="checklist">
+    ${TASKS.map((t, i) => `
+    <div class="chk-item${pd.tasks[i] ? ' chk-done' : ''}" onclick="toggleTask('${p.id}', ${i})">
+      <div class="chk-box">
+        ${pd.tasks[i]
+          ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+          : ''}
+      </div>
+      <span class="chk-text">${t}</span>
+    </div>`).join('')}
+  </div>
+
+  <div class="progress-section">
+    <div class="prog-bar-bg">
+      <div class="prog-bar-fill" style="width:${pct}%;background:${pColor}"></div>
+    </div>
+    <div class="prog-labels">
+      <span class="prog-text">${done} de ${TASKS.length} tarefas</span>
+      <span class="prog-pct" style="color:${pColor}">${pct}%</span>
+    </div>
+  </div>
+
+  <div class="card-metrics">
+    <div class="metric-group">
+      <div class="metric-label">🔌 Portas Liberadas</div>
+      <input class="metric-input" type="number" min="0" placeholder="0"
+             value="${pd.portas || ''}"
+             onchange="saveMetric('${p.id}', 'portas', this.value)"/>
+    </div>
+    <div class="metric-group">
+      <div class="metric-label">💰 Economia (R$)</div>
+      <input class="metric-input" type="text" placeholder="0,00"
+             value="${pd.economia || ''}"
+             onchange="saveMetric('${p.id}', 'economia', this.value)"/>
+    </div>
+  </div>
+
+  <div class="card-notes">
+    <span class="notes-lbl">📝 Observações</span>
+    <textarea class="notes-ta"
+              placeholder="Registre o que foi feito: clientes desprovisionados, pendências, contato realizado…"
+              onchange="saveMetric('${p.id}', 'notas', this.value)">${pd.notas || ''}</textarea>
+  </div>
+
+  <div class="card-footer">
+    <span class="footer-ts">${pd.ts ? '💾 Salvo: ' + pd.ts : 'Não salvo ainda'}</span>
+    <div class="footer-actions">
+      <button class="btn-reset"   onclick="resetPartner('${p.id}')">🗑 Limpar</button>
+      <button class="btn-advance" style="background:${advColor}"
+              onclick="advanceStatus('${p.id}')">${advLabel}</button>
+    </div>
+  </div>
+
+</div>`;
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────
+function toggleTask(pid, idx) {
+  const pd = getPD(pid);
+  pd.tasks[idx] = !pd.tasks[idx];
+  // Auto: primeiro check → muda de pendente para em_conferencia
+  if (pd.tasks[idx] && pd.status === 'pendente') {
+    pd.status = 'em_conferencia';
+  }
+  setPD(pid, pd);
+  renderAll();
+}
+
+function cycleStatus(pid) {
+  const pd = getPD(pid);
+  const i  = STATUS_ORDER.indexOf(pd.status);
+  pd.status = STATUS_ORDER[(i + 1) % STATUS_ORDER.length];
+  setPD(pid, pd);
+  renderAll();
+}
+
+function advanceStatus(pid) {
+  const pd = getPD(pid);
+  const i  = STATUS_ORDER.indexOf(pd.status);
+  pd.status = STATUS_ORDER[(i + 1) % STATUS_ORDER.length];
+  setPD(pid, pd);
+  renderAll();
+}
+
+function saveMetric(pid, field, value) {
+  const pd   = getPD(pid);
+  pd[field]  = value;
+  setPD(pid, pd);
+  renderKPIs();
+}
+
+function resetPartner(pid) {
+  const p = partners.find(x => x.id === pid);
+  if (!confirm(`Limpar todos os dados de ${p?.nome || pid} neste mês?`)) return;
+  const md = getMonthData();
+  delete md[pid];
+  saveMonthData(md);
+  renderAll();
+}
+
+// ── MONTH NAV ─────────────────────────────────────────────────────────────
+function changeMonth(delta) {
+  viewMonth += delta;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
+  renderAll();
+}
+
+function goToday() {
+  const n = new Date();
+  viewYear  = n.getFullYear();
+  viewMonth = n.getMonth();
+  renderAll();
+}
+
+// ── VENCIMENTO MODAL ──────────────────────────────────────────────────────
+let _editPid = null;
+
+function openVencModal(pid) {
+  _editPid = pid;
+  const p = partners.find(x => x.id === pid);
+  document.getElementById('modal-venc-day').value = p?.vencDia || '';
+  document.getElementById('venc-modal').classList.add('show');
+  setTimeout(() => document.getElementById('modal-venc-day').focus(), 100);
+}
+
+function closeVencModal() {
+  document.getElementById('venc-modal').classList.remove('show');
+  _editPid = null;
+}
+
+function saveVencModal() {
+  const dia = parseInt(document.getElementById('modal-venc-day').value);
+  if (!dia || dia < 1 || dia > 31) { alert('Informe um dia válido (1 a 31).'); return; }
+  const p = partners.find(x => x.id === _editPid);
+  if (p) { p.vencDia = dia; saveConfig(); }
+  closeVencModal();
+  renderAll();
+}
+
+document.getElementById('venc-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeVencModal();
+});
+
+// ── THEME ─────────────────────────────────────────────────────────────────
+window.addEventListener('message', function(e) {
+  if (e.data?.type === 'theme') {
+    document.body.classList.toggle('light', e.data.value === 'light');
+    localStorage.setItem('ibnet_theme', e.data.value);
+  }
+});
+(function() {
+  const t = localStorage.getItem('ibnet_theme') || 'dark';
+  document.body.classList.toggle('light', t === 'light');
+})();
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+loadConfig();
+document.getElementById('loading-overlay').classList.add('hidden');
+renderAll();
+</script>
+</body>
+</html>
