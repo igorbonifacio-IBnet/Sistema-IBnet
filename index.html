@@ -374,6 +374,7 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
     <button class="sb-item active" data-tab="comercial">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
       Comercial
+      <span class="sb-lock" style="display:none">🔒</span>
     </button>
 
     <button class="sb-item" data-tab="financeiro" id="sb-financeiro">
@@ -432,18 +433,20 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
 <script>
 // ── USERS & ROLES ─────────────────────────────────────────────────────────
 const USERS = {
-  'igor':    { senha: 'Comdata12@', role: 'admin',     nome: 'Igor',    email: 'igorbonifacio23@gmail.com' },
-  'matheus': { senha: 'Ibnet@2026', role: 'comercial', nome: 'Matheus', email: 'matheushenrique161013@gmail.com' },
+  'igor':    { senha: 'Comdata12@',  role: 'admin',    nome: 'Igor',    email: 'igorbonifacio23@gmail.com' },
+  'matheus': { senha: 'Ibnet@2026',  role: 'comercial',nome: 'Matheus', email: 'matheushenrique161013@gmail.com' },
+  'rutiele': { senha: 'Rutiele@123', role: 'suporte',  nome: 'Rutiele', email: '' },
 };
 
 const ROLE_ACCESS = {
   admin:      ['comercial', 'financeiro', 'suporte'],
   financeiro: ['comercial', 'financeiro'],
   comercial:  ['comercial'],
+  suporte:    ['suporte'],
 };
 
 const ROLE_LABELS = {
-  admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial'
+  admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial', suporte: 'Suporte'
 };
 
 const TAB_META = {
@@ -496,33 +499,21 @@ function bootPlatform(session) {
   document.getElementById('sb-avatar').textContent = session.nome[0].toUpperCase();
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
-  // Show/hide financeiro based on role
-  const hasFin = canAccess(session.role, 'financeiro');
-  const sbFin = document.getElementById('sb-financeiro');
-  const finLock = document.getElementById('fin-lock');
-  if (hasFin) {
-    finLock.style.display = 'none';
-    sbFin.style.opacity = '1';
-    sbFin.style.pointerEvents = 'auto';
-  } else {
-    sbFin.style.opacity = '.4';
-    sbFin.style.pointerEvents = 'none';
-  }
+  // Visibilidade de cada aba baseada no papel do usuário
+  ['comercial', 'financeiro', 'suporte'].forEach(tab => {
+    const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
+    const lockEl   = btn?.querySelector('.sb-lock');
+    const hasAccess = canAccess(session.role, tab);
+    if (btn) {
+      btn.style.opacity      = hasAccess ? '1' : '.4';
+      btn.style.pointerEvents = hasAccess ? 'auto' : 'none';
+    }
+    if (lockEl) lockEl.style.display = hasAccess ? 'none' : '';
+  });
 
-  // Show/hide suporte based on role
-  const hasSup = canAccess(session.role, 'suporte');
-  const sbSup  = document.getElementById('sb-suporte');
-  const supLock = document.getElementById('sup-lock');
-  if (hasSup) {
-    supLock.style.display = 'none';
-    sbSup.style.opacity = '1';
-    sbSup.style.pointerEvents = 'auto';
-  } else {
-    sbSup.style.opacity = '.4';
-    sbSup.style.pointerEvents = 'none';
-  }
-
-  switchTab('comercial');
+  // Abre a primeira aba acessível ao usuário
+  const firstTab = ['comercial', 'financeiro', 'suporte'].find(t => canAccess(session.role, t)) || 'comercial';
+  switchTab(firstTab);
 }
 
 function switchTab(tab) {

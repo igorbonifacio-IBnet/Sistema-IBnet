@@ -600,11 +600,13 @@ function renderCard(p) {
     <div class="metric-group">
       <div class="metric-label">🔌 Portas Liberadas</div>
       <input class="metric-input" type="number" min="0" placeholder="0" value="${pd.portas||''}"
-             onchange="saveMetric('${p.id}','portas',this.value)"/>
+             id="metric-portas-${p.id}"
+             onchange="onPortasChange('${p.id}', this.value)"/>
     </div>
     <div class="metric-group">
-      <div class="metric-label">💰 Economia (R$)</div>
-      <input class="metric-input" type="text" placeholder="0,00" value="${pd.economia||''}"
+      <div class="metric-label">💰 Economia (R$ 25/porta)</div>
+      <input class="metric-input" type="text" placeholder="Automático" value="${pd.economia||''}"
+             id="metric-economia-${p.id}"
              onchange="saveMetric('${p.id}','economia',this.value)"/>
     </div>
   </div>
@@ -621,6 +623,22 @@ function renderCard(p) {
     </div>
   </div>
 </div>`;
+}
+
+// ── PORTAS → ECONOMIA AUTO-CALC ───────────────────────────────────────────
+const VALOR_POR_PORTA = 25; // R$ por porta liberada
+
+function onPortasChange(pid, value) {
+  const portas  = parseInt(value) || 0;
+  const economia = portas > 0
+    ? (portas * VALOR_POR_PORTA).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+    : '';
+  saveMetric(pid, 'portas',   value);
+  saveMetric(pid, 'economia', economia);
+  // Atualiza o campo visual sem re-renderizar o card inteiro
+  const econInput = document.getElementById(`metric-economia-${pid}`);
+  if (econInput) econInput.value = economia;
+  renderKPIs();
 }
 
 // ── CHECKLIST ACTIONS ─────────────────────────────────────────────────────
