@@ -162,6 +162,9 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 .act-partner-chip{padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;flex-shrink:0}
 .act-due{padding:3px 8px;border-radius:5px;font-size:11px;font-weight:600;white-space:nowrap}
 .act-desc{font-size:12px;color:var(--muted);line-height:1.4;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.act-obs{font-size:11px;color:var(--muted);font-style:italic;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.act-link-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(59,130,246,.12);color:var(--accent);text-decoration:none;transition:all .15s;white-space:nowrap;flex-shrink:0;border:1px solid rgba(59,130,246,.2)}
+.act-link-btn:hover{background:rgba(59,130,246,.22);border-color:rgba(59,130,246,.4)}
 
 /* Activity controls */
 .act-controls{display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
@@ -220,6 +223,8 @@ body.light .partner-card.card-concluido{border-color:rgba(22,163,74,.3)}
 body.light .kpi-card{background:#ffffff;border-color:#e8eef6;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 body.light .act-item{background:#ffffff;border-color:#e8eef6}
 body.light .act-empty{background:#ffffff;border-color:#e2e8f0}
+body.light .act-link-btn{background:rgba(37,99,235,.08);color:#2563eb;border-color:rgba(37,99,235,.2)}
+body.light .act-link-btn:hover{background:rgba(37,99,235,.15)}
 body.light .modal-box{box-shadow:0 8px 40px rgba(0,0,0,.12),0 0 0 1px #e2e8f0}
 body.light .mf input,.body.light .mf select,.body.light .mf textarea{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
 body.light .prog-bar-bg{background:#e2e8f0}
@@ -385,6 +390,15 @@ body.light #loading-overlay{background:rgba(241,245,251,.97)}
           <option value="concluido">✅ Concluído</option>
         </select>
       </div>
+    </div>
+
+    <div class="mf">
+      <label>🔗 Link de Acompanhamento</label>
+      <input type="url" id="act-link" placeholder="https://docs.google.com/spreadsheets/…"/>
+    </div>
+    <div class="mf">
+      <label>📝 Observação</label>
+      <textarea id="act-observacao" placeholder="Notas internas, contexto ou detalhes relevantes…" style="min-height:64px"></textarea>
     </div>
 
     <div class="modal-actions">
@@ -705,10 +719,13 @@ function renderActivities() {
 }
 
 function renderActItem(act) {
-  const p     = partners.find(x=>x.id===act.parceiro);
-  const chip  = p ? `<span class="act-partner-chip" style="background:${p.cor}">${p.nome}</span>` : `<span class="act-partner-chip" style="background:#64748b">Geral</span>`;
-  const due   = duePill(act.prazo, act.status);
-  const over  = isOverdue(act);
+  const p       = partners.find(x=>x.id===act.parceiro);
+  const chip    = p ? `<span class="act-partner-chip" style="background:${p.cor}">${p.nome}</span>` : `<span class="act-partner-chip" style="background:#64748b">Geral</span>`;
+  const due     = duePill(act.prazo, act.status);
+  const over    = isOverdue(act);
+  const linkBtn = act.link
+    ? `<a class="act-link-btn" href="${act.link}" target="_blank" rel="noopener noreferrer" title="${act.link}">🔗 Acompanhar</a>`
+    : '';
 
   return `<div class="act-item${act.status==='concluido'?' act-done':''}${over?' act-overdue':''}">
   <div class="act-dot ${PRI_DOT[act.prioridade]||'dot-media'}"></div>
@@ -717,8 +734,10 @@ function renderActItem(act) {
       <span class="act-title">${act.titulo}</span>
       ${chip}
       ${due}
+      ${linkBtn}
     </div>
-    ${act.descricao?`<div class="act-desc">${act.descricao}</div>`:''}
+    ${act.descricao ? `<div class="act-desc">${act.descricao}</div>` : ''}
+    ${act.observacao ? `<div class="act-obs">💬 ${act.observacao}</div>` : ''}
   </div>
   <div class="act-controls">
     <button class="act-status-btn ${ACT_STATUS_CSS[act.status]||'ast-a_fazer'}"
@@ -766,6 +785,8 @@ function openActModal(id=null) {
   document.getElementById('act-prioridade').value  = act?.prioridade  || 'media';
   document.getElementById('act-status-sel').value  = act?.status      || 'a_fazer';
   document.getElementById('act-prazo').value        = act?.prazo       || '';
+  document.getElementById('act-link').value         = act?.link        || '';
+  document.getElementById('act-observacao').value   = act?.observacao  || '';
 
   document.getElementById('act-modal-title').textContent = id ? '✎ Editar Atividade' : '+ Nova Atividade';
   document.getElementById('act-modal').classList.add('show');
@@ -788,6 +809,8 @@ function saveActModal() {
       act.prioridade = document.getElementById('act-prioridade').value;
       act.status     = document.getElementById('act-status-sel').value;
       act.prazo      = document.getElementById('act-prazo').value;
+      act.link       = document.getElementById('act-link').value.trim();
+      act.observacao = document.getElementById('act-observacao').value.trim();
     }
   } else {
     acts.unshift({
@@ -798,6 +821,8 @@ function saveActModal() {
       prioridade: document.getElementById('act-prioridade').value,
       status:     document.getElementById('act-status-sel').value,
       prazo:      document.getElementById('act-prazo').value,
+      link:       document.getElementById('act-link').value.trim(),
+      observacao: document.getElementById('act-observacao').value.trim(),
       criadoEm:   new Date().toISOString(),
       concluidoEm:null,
     });
