@@ -276,6 +276,120 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
 }
 #topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
 #topbar-user{font-size:12px;color:var(--muted)}
+
+/* ── HAMBURGER ─────────────────────────────────────────────────────────── */
+.hamburger-btn{
+  display:none;background:transparent;border:1px solid var(--border);
+  color:var(--muted);width:34px;height:34px;border-radius:8px;
+  cursor:pointer;font-size:18px;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0
+}
+.hamburger-btn:hover{border-color:var(--accent);color:var(--text)}
+.sidebar-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:999;backdrop-filter:blur(2px)
+}
+.sidebar-overlay.show{display:block}
+
+/* ── NOTIFICATIONS ─────────────────────────────────────────────────────── */
+.notif-wrap{position:relative}
+.notif-btn{position:relative}
+.notif-badge{
+  position:absolute;top:-4px;right:-4px;
+  background:var(--red);color:#fff;border-radius:10px;
+  font-size:9px;font-weight:700;padding:1px 5px;min-width:16px;
+  text-align:center;line-height:14px;display:none
+}
+.notif-panel{
+  position:absolute;top:calc(100% + 8px);right:0;
+  width:320px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);
+  z-index:2000;display:none;overflow:hidden
+}
+.notif-panel.open{display:block}
+.notif-head{padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.notif-head h4{font-size:13px;font-weight:700}
+.notif-mark-read{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;font-family:var(--font)}
+.notif-mark-read:hover{opacity:.7}
+.notif-list{max-height:340px;overflow-y:auto}
+.notif-item{
+  padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:background .15s;display:flex;gap:10px;align-items:flex-start
+}
+.notif-item:hover{background:rgba(255,255,255,.04)}
+.notif-item:last-child{border-bottom:none}
+.notif-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.notif-empty{padding:28px;text-align:center;color:var(--muted);font-size:12px}
+.notif-tag{
+  display:inline-block;padding:1px 7px;border-radius:5px;
+  font-size:10px;font-weight:700;margin-bottom:3px
+}
+.ntag-red{background:rgba(239,68,68,.15);color:#ef4444}
+.ntag-yellow{background:rgba(245,158,11,.15);color:#f59e0b}
+.ntag-blue{background:rgba(59,130,246,.15);color:#3b82f6}
+body.light .notif-panel{box-shadow:0 8px 32px rgba(0,0,0,.15)}
+body.light .notif-item{border-bottom-color:rgba(0,0,0,.06)}
+body.light .notif-item:hover{background:rgba(0,0,0,.03)}
+
+/* ── SEARCH ────────────────────────────────────────────────────────────── */
+.search-wrap{position:relative}
+.search-panel{
+  position:fixed;top:62px;left:50%;transform:translateX(-50%);
+  width:min(560px,calc(100vw - 32px));
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);
+  z-index:2000;display:none;overflow:hidden
+}
+.search-panel.open{display:block}
+.search-input-wrap{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.search-input-wrap span{font-size:16px;color:var(--muted)}
+#search-input{
+  flex:1;background:transparent;border:none;color:var(--text);
+  font-size:14px;font-family:var(--font);outline:none
+}
+#search-input::placeholder{color:var(--muted)}
+.search-results{max-height:380px;overflow-y:auto}
+.search-result-item{
+  padding:11px 18px;border-bottom:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:background .15s;display:flex;gap:10px;align-items:center
+}
+.search-result-item:hover{background:rgba(255,255,255,.04)}
+.search-result-item:last-child{border-bottom:none}
+.sr-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sr-info{flex:1;min-width:0}
+.sr-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.sr-status{font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;flex-shrink:0}
+.sr-st-a_fazer{background:rgba(100,116,139,.15);color:#94a3b8}
+.sr-st-em_andamento{background:rgba(59,130,246,.15);color:#3b82f6}
+.sr-st-concluido{background:rgba(34,197,94,.15);color:#22c55e}
+.search-empty{padding:28px;text-align:center;color:var(--muted);font-size:12px}
+.search-hint{padding:10px 18px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)}
+body.light .search-panel,.body.light .search-result-item{border-bottom-color:rgba(0,0,0,.06)}
+body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
+
+/* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
+@media (max-width:768px){
+  .hamburger-btn{display:flex}
+  #sidebar{
+    position:fixed;left:calc(-1 * var(--sidebar-w));top:0;
+    z-index:1000;transition:left .25s ease;height:100vh
+  }
+  #sidebar.mob-open{left:0}
+  #topbar{padding:0 12px;gap:8px}
+  #topbar h2{font-size:13px}
+  .topbar-badge{display:none}
+  #topbar-user{display:none}
+  .tb-btn span,.tb-btn-text{display:none}
+  .notif-panel{width:calc(100vw - 24px);right:-80px}
+  .search-panel{top:56px}
+}
+@media (max-width:480px){
+  #topbar-right>span{display:none}
+}
 </style>
 </head>
 <body>
@@ -361,6 +475,9 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
   </div>
 </div>
 
+<!-- SIDEBAR OVERLAY (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <!-- PLATFORM -->
 <div id="platform">
   <!-- Sidebar -->
@@ -414,10 +531,44 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
   <!-- Content -->
   <div id="content-area">
     <div id="topbar">
+      <button class="hamburger-btn" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
       <h2 id="topbar-title">Dashboard Comercial</h2>
       <span class="topbar-badge" id="topbar-badge">COMERCIAL</span>
       <div id="topbar-right">
         <span id="topbar-user"></span>
+
+        <!-- BUSCA GLOBAL -->
+        <div class="search-wrap">
+          <button class="tb-btn" id="btn-search" onclick="toggleSearch()" title="Buscar">🔍</button>
+          <div class="search-panel" id="search-panel">
+            <div class="search-input-wrap">
+              <span>🔍</span>
+              <input type="text" id="search-input" placeholder="Buscar atividades, parceiros…" oninput="doSearch(this.value)" autocomplete="off"/>
+              <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="closeSearch()">×</button>
+            </div>
+            <div class="search-results" id="search-results">
+              <div class="search-empty">Digite para buscar…</div>
+            </div>
+            <div class="search-hint">Pesquisando em atividades · pressione <kbd style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px">Esc</kbd> para fechar</div>
+          </div>
+        </div>
+
+        <!-- NOTIFICAÇÕES -->
+        <div class="notif-wrap">
+          <button class="tb-btn notif-btn" id="btn-notif" onclick="toggleNotifications()" title="Notificações">
+            🔔 <span class="notif-badge" id="notif-badge"></span>
+          </button>
+          <div class="notif-panel" id="notif-panel">
+            <div class="notif-head">
+              <h4>🔔 Notificações</h4>
+              <button class="notif-mark-read" onclick="clearNotifications()">Limpar tudo</button>
+            </div>
+            <div class="notif-list" id="notif-list">
+              <div class="notif-empty">Nenhuma notificação.</div>
+            </div>
+          </div>
+        </div>
+
         <button class="tb-btn" id="btn-theme" onclick="toggleTheme()">☀️ Claro</button>
         <button class="tb-btn" id="btn-sugestoes" onclick="openSugestoes()">💡 Sugestões</button>
         <button class="tb-btn tb-btn-danger" onclick="doLogout()">⏏ Sair</button>
@@ -786,6 +937,246 @@ document.getElementById('reset-modal').addEventListener('click', function(e) {
 document.getElementById('reset-user').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') sendReset();
 });
+
+// ── MOBILE SIDEBAR ────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sb  = document.getElementById('sidebar');
+  const ov  = document.getElementById('sidebar-overlay');
+  const open = sb.classList.toggle('mob-open');
+  ov.classList.toggle('show', open);
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('mob-open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+// Fecha sidebar ao clicar em item (mobile)
+document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => { if (window.innerWidth <= 768) closeSidebar(); });
+});
+
+// ── FIREBASE (notificações + busca) ──────────────────────────────────────
+const fbCfg = {
+  apiKey:            "AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:        "ibnet-platform.firebaseapp.com",
+  databaseURL:       "https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:         "ibnet-platform",
+  storageBucket:     "ibnet-platform.firebasestorage.app",
+  messagingSenderId: "468380845527",
+  appId:             "1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+// Inicializa somente se ainda não foi inicializado (evita duplicatas)
+let _fbApp2;
+try { _fbApp2 = firebase.app('portal'); } catch(e) {
+  _fbApp2 = firebase.initializeApp(fbCfg, 'portal');
+}
+const _db2 = firebase.database(_fbApp2);
+
+let _allActivities = [];
+
+function fbToArr(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  return Object.values(val).filter(Boolean);
+}
+
+function setupPortalFirebase() {
+  _db2.ref('suporte/atividades').on('value', snap => {
+    _allActivities = fbToArr(snap.val());
+    refreshNotifications();
+  });
+}
+
+// ── NOTIFICAÇÕES ──────────────────────────────────────────────────────────
+const NOTIF_KEY = 'ibnet_notif_seen';
+
+function getSeenIds() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
+}
+function markSeen(ids) {
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(ids));
+}
+
+function buildNotifications() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const notifs = [];
+
+  _allActivities.forEach(act => {
+    if (act.status === 'concluido') return;
+    if (!act.prazo) return;
+    const due = new Date(act.prazo + 'T00:00:00');
+    const diff = Math.ceil((due - today) / 86400000);
+    if (diff < 0)
+      notifs.push({ id: act.id + '_v', tipo: 'vencida', acao: act.titulo, prazo: act.prazo, diff });
+    else if (diff === 0)
+      notifs.push({ id: act.id + '_h', tipo: 'hoje',    acao: act.titulo, prazo: act.prazo, diff });
+    else if (diff <= 3)
+      notifs.push({ id: act.id + '_p', tipo: 'proxima', acao: act.titulo, prazo: act.prazo, diff });
+  });
+
+  return notifs;
+}
+
+function refreshNotifications() {
+  const notifs  = buildNotifications();
+  const seen    = getSeenIds();
+  const unseen  = notifs.filter(n => !seen.includes(n.id));
+
+  const badge = document.getElementById('notif-badge');
+  if (badge) {
+    badge.style.display = unseen.length ? '' : 'none';
+    badge.textContent   = unseen.length > 9 ? '9+' : unseen.length;
+  }
+
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+
+  if (!notifs.length) {
+    list.innerHTML = '<div class="notif-empty">✅ Tudo em dia! Sem alertas.</div>';
+    return;
+  }
+
+  const tagMap = {
+    vencida: ['ntag-red',    '⚠️ Vencida'],
+    hoje:    ['ntag-yellow', '⚡ Vence hoje'],
+    proxima: ['ntag-blue',   '🕐 Em breve'],
+  };
+
+  list.innerHTML = notifs.map(n => {
+    const [cls, label] = tagMap[n.tipo];
+    const sub = n.diff < 0
+      ? `${Math.abs(n.diff)} dia${Math.abs(n.diff)>1?'s':''} de atraso`
+      : n.diff === 0 ? 'Hoje' : `${n.diff} dia${n.diff>1?'s':''} restante${n.diff>1?'s':''}`;
+    return `<div class="notif-item" onclick="handleNotifClick('${n.id}')">
+      <div class="notif-icon">${n.tipo==='vencida'?'🚨':n.tipo==='hoje'?'⚡':'🔔'}</div>
+      <div class="notif-body">
+        <span class="notif-tag ${cls}">${label}</span>
+        <div class="notif-title">${n.acao}</div>
+        <div class="notif-sub">${sub} · prazo: ${fmtDateBR(n.prazo)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function fmtDateBR(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function toggleNotifications() {
+  const panel = document.getElementById('notif-panel');
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) closeSearch();
+  // marca tudo como visto ao abrir
+  if (isOpen) {
+    const seen = buildNotifications().map(n => n.id);
+    markSeen(seen);
+    setTimeout(() => {
+      const badge = document.getElementById('notif-badge');
+      if (badge) badge.style.display = 'none';
+    }, 500);
+  }
+}
+
+function clearNotifications() {
+  const all = buildNotifications().map(n => n.id);
+  markSeen(all);
+  document.getElementById('notif-badge').style.display = 'none';
+  document.getElementById('notif-list').innerHTML = '<div class="notif-empty">✅ Tudo em dia! Sem alertas.</div>';
+}
+
+function handleNotifClick(id) {
+  closeNotifications();
+  switchTab('suporte');
+}
+
+function closeNotifications() {
+  document.getElementById('notif-panel')?.classList.remove('open');
+}
+
+// ── BUSCA GLOBAL ─────────────────────────────────────────────────────────
+const PRI_COLORS = { alta:'#ef4444', media:'#f59e0b', baixa:'#22c55e' };
+const ST_LABELS  = { a_fazer:'A Fazer', em_andamento:'Em Andamento', concluido:'Concluído' };
+
+function toggleSearch() {
+  const panel = document.getElementById('search-panel');
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) {
+    closeNotifications();
+    setTimeout(() => document.getElementById('search-input')?.focus(), 80);
+  }
+}
+
+function closeSearch() {
+  document.getElementById('search-panel')?.classList.remove('open');
+  const inp = document.getElementById('search-input');
+  if (inp) inp.value = '';
+  const res = document.getElementById('search-results');
+  if (res) res.innerHTML = '<div class="search-empty">Digite para buscar…</div>';
+}
+
+function doSearch(q) {
+  const results = document.getElementById('search-results');
+  const term = q.trim().toLowerCase();
+  if (!term) {
+    results.innerHTML = '<div class="search-empty">Digite para buscar…</div>';
+    return;
+  }
+  const found = _allActivities.filter(a =>
+    (a.titulo    || '').toLowerCase().includes(term) ||
+    (a.descricao || '').toLowerCase().includes(term) ||
+    (a.parceiro  || '').toLowerCase().includes(term) ||
+    (a.observacao|| '').toLowerCase().includes(term)
+  ).slice(0, 12);
+
+  if (!found.length) {
+    results.innerHTML = `<div class="search-empty">Nenhum resultado para "<strong>${q}</strong>"</div>`;
+    return;
+  }
+
+  results.innerHTML = found.map(a => {
+    const cor  = PRI_COLORS[a.prioridade] || '#94a3b8';
+    const stCls = 'sr-st-' + (a.status || 'a_fazer');
+    const stLbl = ST_LABELS[a.status] || a.status;
+    const sub   = [a.parceiro ? a.parceiro.toUpperCase() : 'Geral', a.prazo ? fmtDateBR(a.prazo) : null].filter(Boolean).join(' · ');
+    return `<div class="search-result-item" onclick="openSearchResult('${a.id}')">
+      <div class="sr-dot" style="background:${cor}"></div>
+      <div class="sr-info">
+        <div class="sr-title">${a.titulo}</div>
+        ${sub ? `<div class="sr-meta">${sub}</div>` : ''}
+      </div>
+      <span class="sr-status ${stCls}">${stLbl}</span>
+    </div>`;
+  }).join('');
+}
+
+function openSearchResult(id) {
+  closeSearch();
+  switchTab('suporte');
+  // Passa o id para o iframe do suporte abrir o modal de edição
+  setTimeout(() => {
+    document.getElementById('iframe-suporte')?.contentWindow
+      ?.postMessage({ type: 'openActivity', id }, '*');
+  }, 400);
+}
+
+// Fecha painéis ao clicar fora
+document.addEventListener('click', e => {
+  if (!e.target.closest('.notif-wrap'))  closeNotifications();
+  if (!e.target.closest('.search-wrap') && !e.target.closest('#btn-search')) closeSearch();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSearch(); closeNotifications(); }
+});
+
+// Inicializa Firebase do portal após login
+const _origBoot = bootPlatform;
+function bootPlatform(session) {
+  _origBoot(session);
+  setupPortalFirebase();
+}
+// Se sessão já existia, setup agora
+if (getSession()) setupPortalFirebase();
 </script>
 </body>
 </html>

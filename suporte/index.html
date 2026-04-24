@@ -6,6 +6,7 @@
 <title>Painel de Suporte — IBNET</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -237,6 +238,66 @@ body.light #loading-overlay{background:rgba(241,245,251,.97)}
 
 @media(max-width:800px){.partners-grid{grid-template-columns:1fr}.mf-row{grid-template-columns:1fr}}
 
+/* ── KANBAN ──────────────────────────────────────────────────────────────── */
+.view-toggle{display:flex;gap:3px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px;flex-shrink:0}
+.vt-btn{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:inherit;transition:all .15s;white-space:nowrap}
+.vt-btn.active{background:var(--accent);color:#fff}
+.vt-btn:not(.active):hover{color:var(--text)}
+.kanban-board{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:0}
+.kanban-board.hidden,.act-list.hidden,.act-filter-bar.hidden{display:none}
+.kanban-col{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;min-height:200px;display:flex;flex-direction:column;gap:8px;transition:background .15s,border-color .15s}
+.kanban-col[data-status="a_fazer"]{border-top:3px solid #64748b}
+.kanban-col[data-status="em_andamento"]{border-top:3px solid #3b82f6}
+.kanban-col[data-status="concluido"]{border-top:3px solid #22c55e}
+.kanban-col.drag-over{background:rgba(59,130,246,.07);border-color:var(--accent)}
+.kanban-col-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.kanban-col-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
+.kanban-col-count{background:rgba(255,255,255,.08);color:var(--muted);font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;min-width:24px;text-align:center}
+.kanban-empty{font-size:12px;color:var(--muted);text-align:center;padding:24px 0;font-style:italic}
+.kanban-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:grab;transition:box-shadow .15s,border-color .15s;user-select:none;position:relative}
+.kanban-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.25);border-color:var(--accent)}
+.kanban-card.act-overdue{border-left:3px solid var(--red)}
+.kanban-card.sortable-ghost{opacity:.35;border:2px dashed var(--accent)}
+.kanban-card.sortable-drag{box-shadow:0 10px 28px rgba(0,0,0,.45);transform:rotate(1.5deg);cursor:grabbing}
+.kc-title-row{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px}
+.kc-title{font-size:13px;font-weight:600;line-height:1.35;flex:1}
+.kc-pri{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.kc-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.kc-partner{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap}
+.kc-due{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap}
+.kc-desc{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.kc-actions{display:flex;gap:4px;margin-top:7px;justify-content:flex-end}
+.kc-btn{background:transparent;border:1px solid var(--border);color:var(--muted);width:24px;height:24px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .15s;flex-shrink:0}
+.kc-btn:hover{border-color:var(--accent);color:var(--text)}
+.kc-del:hover{border-color:var(--red)!important;color:var(--red)!important}
+body.light .kanban-col{background:#fff;border-color:#e8eef6}
+body.light .kanban-card{background:#f8fafc;border-color:#e2e8f0}
+body.light .kanban-col-count{background:#f1f5f9;color:#64748b}
+body.light .kanban-col.drag-over{background:rgba(37,99,235,.05)}
+
+/* ── MOBILE ──────────────────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .mini-header{padding:8px 12px;gap:8px}
+  .month-label{min-width:110px;font-size:13px}
+  .header-desc{display:none}
+  main{padding:12px 12px}
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi-value{font-size:20px}
+  .kpi-icon{font-size:17px;margin-bottom:5px}
+  .kpi-card{padding:14px 12px}
+  .partners-grid{grid-template-columns:1fr}
+  .act-section-header{gap:8px}
+  .act-section-header>div:last-child{width:100%;justify-content:space-between}
+  .view-toggle{flex:1}
+  .vt-btn{flex:1;text-align:center}
+  .act-item{flex-wrap:wrap}
+  .act-controls{width:100%;justify-content:flex-start;margin-left:0;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+  .kanban-board{grid-template-columns:1fr;gap:12px}
+  .modal-box,.modal-box-lg{max-width:100%}
+  .partner-filter{padding:8px 10px}
+  .section-header{gap:8px}
+}
+
 /* ── ALERT BANNER ─────────────────────────────────────────────────────────── */
 .alert-banner{padding:10px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.08)}
 .alert-banner.hidden{display:none}
@@ -371,7 +432,13 @@ body.light .hist-stat{border-bottom-color:#f1f5f9}
         <h2>📌 Atividades de Suporte</h2>
         <p id="act-stats">Carregando…</p>
       </div>
-      <button class="btn-new-act" onclick="openActModal()">+ Nova Atividade</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="view-toggle">
+          <button class="vt-btn active" id="vt-lista"   onclick="setViewMode('lista')">📋 Lista</button>
+          <button class="vt-btn"        id="vt-kanban"  onclick="setViewMode('kanban')">🗂️ Kanban</button>
+        </div>
+        <button class="btn-new-act" onclick="openActModal()">+ Nova Atividade</button>
+      </div>
     </div>
 
     <div class="act-filter-bar" id="act-filter-bar">
@@ -384,6 +451,28 @@ body.light .hist-stat{border-bottom-color:#f1f5f9}
 
     <div class="act-list" id="act-list">
       <!-- Renderizado pelo JS -->
+    </div>
+
+    <!-- ── KANBAN BOARD ──────────────────────────────────────────────────── -->
+    <div class="kanban-board hidden" id="kanban-board">
+      <div class="kanban-col" id="kb-a_fazer" data-status="a_fazer">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title" style="color:#94a3b8">⏳ A Fazer</span>
+          <span class="kanban-col-count" id="kb-count-a_fazer">0</span>
+        </div>
+      </div>
+      <div class="kanban-col" id="kb-em_andamento" data-status="em_andamento">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title" style="color:#3b82f6">🔵 Em Andamento</span>
+          <span class="kanban-col-count" id="kb-count-em_andamento">0</span>
+        </div>
+      </div>
+      <div class="kanban-col" id="kb-concluido" data-status="concluido">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title" style="color:#22c55e">✅ Concluído</span>
+          <span class="kanban-col-count" id="kb-count-concluido">0</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -534,6 +623,8 @@ let activePartnerFilter = '';   // '' = todos, ou id do parceiro
 let actStatusFilter    = '';    // '' | 'a_fazer' | 'em_andamento' | 'concluido' | 'vencidas'
 let _editActId         = null;
 let _editVencPid       = null;
+let viewMode           = 'lista';   // 'lista' | 'kanban'
+let _sortables         = {};        // instâncias SortableJS por coluna
 
 // ── PERSISTENCE — CACHES ─────────────────────────────────────────────────
 let _activities = [];
@@ -584,6 +675,7 @@ function setupActivityListener() {
     _activities = fbToArray(snap.val());
     renderActivities();
     renderKPIs();
+    if(viewMode === 'kanban') renderKanban();
   });
 }
 
@@ -1131,8 +1223,101 @@ window.addEventListener('message',function(e){
     document.body.classList.toggle('light',e.data.value==='light');
     localStorage.setItem('ibnet_theme',e.data.value);
   }
+  // Busca global: abre modal da atividade pelo ID
+  if(e.data?.type==='openActivity' && e.data.id){
+    openActModal(e.data.id);
+  }
 });
 (function(){const t=localStorage.getItem('ibnet_theme')||'dark';document.body.classList.toggle('light',t==='light');})();
+
+// ── KANBAN — VIEW MODE ────────────────────────────────────────────────────
+function setViewMode(mode) {
+  viewMode = mode;
+  document.getElementById('vt-lista').classList.toggle('active', mode==='lista');
+  document.getElementById('vt-kanban').classList.toggle('active', mode==='kanban');
+  document.getElementById('act-list').classList.toggle('hidden', mode==='kanban');
+  document.getElementById('act-filter-bar').classList.toggle('hidden', mode==='kanban');
+  document.getElementById('kanban-board').classList.toggle('hidden', mode==='lista');
+  if(mode==='kanban') renderKanban();
+}
+
+// ── KANBAN — RENDER ───────────────────────────────────────────────────────
+function renderKanban() {
+  const all = getActivities().filter(a =>
+    !activePartnerFilter || a.parceiro === activePartnerFilter
+  );
+
+  const cols = { a_fazer: [], em_andamento: [], concluido: [] };
+  all.forEach(a => { if(cols[a.status]) cols[a.status].push(a); });
+
+  ['a_fazer','em_andamento','concluido'].forEach(status => {
+    const col = document.getElementById('kb-' + status);
+    if(!col) return;
+
+    // Atualiza contador
+    const countEl = document.getElementById('kb-count-' + status);
+    if(countEl) countEl.textContent = cols[status].length;
+
+    // Remove cards antigos (preserva header)
+    [...col.children].forEach(c => {
+      if(!c.classList.contains('kanban-col-header')) c.remove();
+    });
+
+    if(!cols[status].length) {
+      const empty = document.createElement('div');
+      empty.className = 'kanban-empty';
+      empty.textContent = 'Nenhuma atividade';
+      col.appendChild(empty);
+    } else {
+      cols[status].forEach(act => {
+        const over = isOverdue(act);
+        const p    = partners.find(x => x.id === act.parceiro);
+        const card = document.createElement('div');
+        card.className = 'kanban-card' + (over ? ' act-overdue' : '');
+        card.dataset.id = act.id;
+        card.innerHTML = `
+          <div class="kc-title-row">
+            <span class="kc-title">${act.titulo}</span>
+            <span class="kc-pri ${PRI_DOT[act.prioridade]||'dot-media'}"></span>
+          </div>
+          <div class="kc-chips">
+            ${p ? `<span class="kc-partner" style="background:${p.cor}">${p.nome}</span>` : ''}
+            ${act.prazo ? `<span class="kc-due ${over?'cd-urgent':'cd-ok'}">${over?'⚠️ ':'📅 '}${fmtDate(act.prazo)}</span>` : ''}
+          </div>
+          ${act.descricao ? `<div class="kc-desc">${act.descricao}</div>` : ''}
+          <div class="kc-actions">
+            <button class="kc-btn" onclick="openActModal('${act.id}')" title="Editar">✎</button>
+            <button class="kc-btn kc-del" onclick="deleteAct('${act.id}')" title="Excluir">✕</button>
+          </div>`;
+        col.appendChild(card);
+      });
+    }
+
+    // (Re)inicializa SortableJS na coluna
+    if(_sortables[status]) { try { _sortables[status].destroy(); } catch(e){} }
+    _sortables[status] = Sortable.create(col, {
+      group:       'activities',
+      animation:   150,
+      ghostClass:  'sortable-ghost',
+      dragClass:   'sortable-drag',
+      filter:      '.kanban-col-header,.kanban-empty,.kc-btn',
+      preventOnFilter: false,
+      onEnd(evt) {
+        const id        = evt.item.dataset.id;
+        const newStatus = evt.to.dataset.status;
+        if(!id || !newStatus) return;
+        const acts = getActivities();
+        const act  = acts.find(a => a.id === id);
+        if(!act || act.status === newStatus) return;
+        act.status = newStatus;
+        if(newStatus === 'concluido') act.concluidoEm = new Date().toISOString();
+        logAction('Status de atividade alterado', `"${act.titulo}" → ${newStatus} (drag)`);
+        saveActivities(acts);
+        // O listener Firebase irá atualizar ambas as views
+      }
+    });
+  });
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 (async function init(){
