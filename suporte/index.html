@@ -4,6 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Painel de Suporte — IBNET</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -412,10 +414,28 @@ body.light #loading-overlay{background:rgba(241,245,251,.97)}
 // ── GUARD ─────────────────────────────────────────────────────────────────
 if (window.self === window.top) { window.location.href = '../'; }
 
+// ── FIREBASE ───────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:        "ibnet-platform.firebaseapp.com",
+  databaseURL:       "https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:         "ibnet-platform",
+  storageBucket:     "ibnet-platform.firebasestorage.app",
+  messagingSenderId: "468380845527",
+  appId:             "1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Converte val do Firebase (pode vir como objeto) em array
+function fbToArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  return Object.values(val).filter(Boolean);
+}
+
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
-const CONFIG_KEY  = 'ibnet_suporte_config';
-const DATA_PREFIX = 'ibnet_suporte_';
-const ACT_KEY     = 'ibnet_suporte_atividades';
+const ACT_KEY = 'ibnet_suporte_atividades'; // mantido para log (localStorage)
 
 const DEFAULT_PARTNERS = [
   { id:'intel',    nome:'INTEL',     cor:'#2563eb', icone:'IN', vencDia:10 },
@@ -453,27 +473,58 @@ let actStatusFilter    = '';    // '' | 'a_fazer' | 'em_andamento' | 'concluido'
 let _editActId         = null;
 let _editVencPid       = null;
 
+// ── PERSISTENCE — CACHES ─────────────────────────────────────────────────
+let _activities = [];
+let _monthData  = {};
+
 // ── PERSISTENCE — CONFIG ──────────────────────────────────────────────────
 function loadConfig() {
-  try { const c=localStorage.getItem(CONFIG_KEY); if(c){partners=JSON.parse(c);return;} } catch(e){}
-  partners = JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
+  return db.ref('suporte/config').once('value').then(snap => {
+    partners = snap.val() ? snap.val() : JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
+  }).catch(() => {
+    partners = JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
+  });
 }
-function saveConfig() { localStorage.setItem(CONFIG_KEY,JSON.stringify(partners)); }
+function saveConfig() {
+  db.ref('suporte/config').set(partners).catch(()=>{});
+}
 
 // ── PERSISTENCE — MONTHLY DATA ────────────────────────────────────────────
-function dataKey() { return `${DATA_PREFIX}${viewYear}_${String(viewMonth+1).padStart(2,'0')}`; }
-function getMonthData() { try{const d=localStorage.getItem(dataKey());if(d)return JSON.parse(d);}catch(e){} return {}; }
-function saveMonthData(d) { localStorage.setItem(dataKey(),JSON.stringify(d)); }
+function dataKey() { return `${viewYear}_${String(viewMonth+1).padStart(2,'0')}`; }
+function getMonthData() { return _monthData; }
+function saveMonthData(d) {
+  _monthData = d;
+  db.ref('suporte/data/' + dataKey()).set(d).catch(()=>{});
+}
+function loadMonthData() {
+  return db.ref('suporte/data/' + dataKey()).once('value').then(snap => {
+    _monthData = snap.val() || {};
+  }).catch(() => { _monthData = {}; });
+}
 function getPD(pid) {
-  return getMonthData()[pid] || { status:'pendente', tasks:Array(CHK_TASKS.length).fill(false), portas:'', economia:'', notas:'', ts:null };
+  return _monthData[pid] || { status:'pendente', tasks:Array(CHK_TASKS.length).fill(false), portas:'', economia:'', notas:'', ts:null };
 }
 function setPD(pid, data) {
   const md=getMonthData(); md[pid]={...data,ts:new Date().toLocaleString('pt-BR')}; saveMonthData(md);
 }
 
 // ── PERSISTENCE — ACTIVITIES ──────────────────────────────────────────────
-function getActivities() { try{return JSON.parse(localStorage.getItem(ACT_KEY)||'[]');}catch(e){return[];} }
-function saveActivities(arr) { localStorage.setItem(ACT_KEY,JSON.stringify(arr)); }
+function getActivities() { return _activities; }
+function saveActivities(arr) {
+  _activities = arr;
+  // Firebase não gosta de array vazio — usa null para limpar
+  db.ref('suporte/atividades').set(arr.length ? arr : null).catch(()=>{});
+}
+
+// Listener em tempo real — qualquer usuário que salvar uma atividade
+// aparece instantaneamente para todos os outros sem precisar recarregar
+function setupActivityListener() {
+  db.ref('suporte/atividades').on('value', snap => {
+    _activities = fbToArray(snap.val());
+    renderActivities();
+    renderKPIs();
+  });
+}
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
@@ -655,25 +706,54 @@ function onPortasChange(pid, value) {
   renderKPIs();
 }
 
+// ── LOG ACTION ────────────────────────────────────────────────────────────
+const LOG_KEY = 'ibnet_activity_log';
+const MAX_LOG = 500;
+function logAction(acao, detalhes) {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('ibnet_session') || 'null');
+    const entry = {
+      ts:       new Date().toISOString(),
+      usuario:  s?.nome || 'Sistema',
+      modulo:   'Suporte',
+      acao,
+      detalhes: detalhes || '',
+    };
+    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    logs.unshift(entry);
+    if (logs.length > MAX_LOG) logs.splice(MAX_LOG);
+    localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+  } catch(e) {}
+}
+
 // ── CHECKLIST ACTIONS ─────────────────────────────────────────────────────
 function toggleTask(pid, idx) {
   const pd=getPD(pid);
   pd.tasks[idx]=!pd.tasks[idx];
   if(pd.tasks[idx]&&pd.status==='pendente') pd.status='em_conferencia';
+  const p=partners.find(x=>x.id===pid);
+  logAction('Checklist atualizado', `${p?.nome||pid} — tarefa ${idx+1}: ${pd.tasks[idx]?'marcada':'desmarcada'}`);
   setPD(pid,pd); renderAll();
 }
 function cycleStatus(pid) {
   const pd=getPD(pid); const i=STATUS_ORDER.indexOf(pd.status);
-  pd.status=STATUS_ORDER[(i+1)%STATUS_ORDER.length]; setPD(pid,pd); renderAll();
+  pd.status=STATUS_ORDER[(i+1)%STATUS_ORDER.length];
+  const p=partners.find(x=>x.id===pid);
+  logAction('Status do parceiro alterado', `${p?.nome||pid} → ${pd.status}`);
+  setPD(pid,pd); renderAll();
 }
 function advanceStatus(pid) {
   const pd=getPD(pid); const i=STATUS_ORDER.indexOf(pd.status);
-  pd.status=STATUS_ORDER[(i+1)%STATUS_ORDER.length]; setPD(pid,pd); renderAll();
+  pd.status=STATUS_ORDER[(i+1)%STATUS_ORDER.length];
+  const p=partners.find(x=>x.id===pid);
+  logAction('Status do parceiro avançado', `${p?.nome||pid} → ${pd.status}`);
+  setPD(pid,pd); renderAll();
 }
 function saveMetric(pid,field,value) { const pd=getPD(pid);pd[field]=value;setPD(pid,pd);renderKPIs(); }
 function resetPartner(pid) {
   const p=partners.find(x=>x.id===pid);
   if(!confirm(`Limpar dados de ${p?.nome||pid} neste mês?`)) return;
+  logAction('Parceiro resetado', `${p?.nome||pid} — dados do mês apagados`);
   const md=getMonthData();delete md[pid];saveMonthData(md);renderAll();
 }
 
@@ -760,11 +840,14 @@ function cycleActStatus(id) {
   const i=ACT_STATUS_ORDER.indexOf(act.status);
   act.status=ACT_STATUS_ORDER[(i+1)%ACT_STATUS_ORDER.length];
   if(act.status==='concluido') act.concluidoEm=new Date().toISOString();
+  logAction('Status de atividade alterado', `"${act.titulo}" → ${act.status}`);
   saveActivities(acts); renderActivities(); renderKPIs();
 }
 
 function deleteAct(id) {
   if(!confirm('Excluir esta atividade permanentemente?')) return;
+  const act=getActivities().find(a=>a.id===id);
+  logAction('Atividade excluída', act ? `"${act.titulo}"` : `id ${id}`);
   saveActivities(getActivities().filter(a=>a.id!==id));
   renderActivities(); renderKPIs();
 }
@@ -827,6 +910,11 @@ function saveActModal() {
       concluidoEm:null,
     });
   }
+  if (_editActId) {
+    logAction('Atividade editada', `"${titulo}"`);
+  } else {
+    logAction('Atividade criada', `"${titulo}"`);
+  }
   saveActivities(acts);
   closeActModal();
   renderActivities();
@@ -848,19 +936,29 @@ function saveVencModal(){
   const dia=parseInt(document.getElementById('modal-venc-day').value);
   if(!dia||dia<1||dia>31){alert('Informe um dia válido (1 a 31).');return;}
   const p=partners.find(x=>x.id===_editVencPid);
-  if(p){p.vencDia=dia;saveConfig();}
+  if(p){
+    logAction('Vencimento alterado', `${p.nome} — dia ${p.vencDia} → dia ${dia}`);
+    p.vencDia=dia;saveConfig();
+  }
   closeVencModal(); renderAll();
 }
 document.getElementById('venc-modal').addEventListener('click',function(e){if(e.target===this)closeVencModal();});
 
 // ── MONTH NAV ─────────────────────────────────────────────────────────────
-function changeMonth(delta){
+async function changeMonth(delta){
   viewMonth+=delta;
   if(viewMonth>11){viewMonth=0;viewYear++;}
   if(viewMonth<0){viewMonth=11;viewYear--;}
+  await loadMonthData();
   renderAll();
 }
-function goToday(){const n=new Date();viewYear=n.getFullYear();viewMonth=n.getMonth();renderAll();}
+async function goToday(){
+  const n=new Date();
+  viewYear=n.getFullYear();
+  viewMonth=n.getMonth();
+  await loadMonthData();
+  renderAll();
+}
 
 // ── THEME ─────────────────────────────────────────────────────────────────
 window.addEventListener('message',function(e){
@@ -872,9 +970,20 @@ window.addEventListener('message',function(e){
 (function(){const t=localStorage.getItem('ibnet_theme')||'dark';document.body.classList.toggle('light',t==='light');})();
 
 // ── INIT ──────────────────────────────────────────────────────────────────
-loadConfig();
-document.getElementById('loading-overlay').classList.add('hidden');
-renderAll();
+(async function init() {
+  try {
+    await loadConfig();
+    await loadMonthData();
+    setupActivityListener(); // listener real-time de atividades (dispara renderAll internamente)
+  } catch(e) {
+    console.error('Erro Firebase:', e);
+    partners    = JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
+    _monthData  = {};
+    _activities = [];
+  }
+  document.getElementById('loading-overlay').classList.add('hidden');
+  renderAll();
+})();
 </script>
 </body>
 </html>

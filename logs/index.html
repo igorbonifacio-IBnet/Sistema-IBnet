@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Log de Atividades — IBNET</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#E8390E;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:10px;
+  --font:'Segoe UI',system-ui,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
+
+/* ── ACCESS DENIED ─────────────────────────────────────────────────────────── */
+#access-denied{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  background:var(--bg);z-index:9999
+}
+#access-denied.hidden{display:none}
+#access-denied .ad-icon{font-size:48px}
+#access-denied h2{font-size:18px;font-weight:700;color:var(--red)}
+#access-denied p{font-size:13px;color:var(--muted)}
+
+/* ── HEADER ────────────────────────────────────────────────────────────────── */
+.log-header{
+  background:#0d1018;border-bottom:1px solid var(--border);
+  padding:12px 24px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:100;flex-wrap:wrap
+}
+.log-header h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.log-header h1 span{font-size:18px}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hdr-btn{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:var(--font);transition:all .15s;
+  display:flex;align-items:center;gap:5px
+}
+.hdr-btn:hover{border-color:var(--accent);color:var(--text)}
+.hdr-btn-danger:hover{border-color:var(--red)!important;color:var(--red)!important}
+.auto-refresh-badge{
+  font-size:10px;background:rgba(34,197,94,.12);color:var(--green);
+  padding:2px 8px;border-radius:10px;font-weight:600
+}
+
+/* ── MAIN ──────────────────────────────────────────────────────────────────── */
+main{padding:20px 24px;max-width:1400px;margin:0 auto}
+
+/* ── STAT CHIPS ────────────────────────────────────────────────────────────── */
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.stat-chip{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:120px
+}
+.stat-chip .sv{font-size:22px;font-weight:700;line-height:1}
+.stat-chip .sl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+.chip-total  .sv{color:var(--blue)}
+.chip-today  .sv{color:var(--green)}
+.chip-filter .sv{color:var(--yellow)}
+.chip-users  .sv{color:var(--purple)}
+
+/* ── FILTERS ───────────────────────────────────────────────────────────────── */
+.filter-bar{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 18px;margin-bottom:16px;
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap
+}
+.filter-bar label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.filter-input,.filter-select{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 12px;border-radius:7px;font-size:12px;font-family:var(--font);
+  transition:border-color .2s;flex:1;min-width:120px
+}
+.filter-input:focus,.filter-select:focus{outline:none;border-color:var(--accent)}
+.filter-select{min-width:140px;flex:0 0 auto}
+.filter-clear{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:7px 12px;border-radius:7px;font-size:12px;cursor:pointer;
+  font-family:var(--font);white-space:nowrap;transition:all .15s
+}
+.filter-clear:hover{border-color:var(--red);color:var(--red)}
+
+/* ── TABLE ─────────────────────────────────────────────────────────────────── */
+.log-table-wrap{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;margin-bottom:16px
+}
+.log-table{width:100%;border-collapse:collapse}
+.log-table th{
+  background:#0d1018;padding:10px 14px;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+  text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)
+}
+.log-table td{
+  padding:9px 14px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);
+  vertical-align:middle;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.log-table tr:last-child td{border-bottom:none}
+.log-table tr:hover td{background:rgba(255,255,255,.025)}
+.log-ts{color:var(--muted);font-size:11px;font-family:monospace;white-space:nowrap}
+.log-user{font-weight:600}
+.mod-badge{
+  display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px
+}
+.mod-portal   {background:rgba(232,57,14,.15);color:#f97316}
+.mod-suporte  {background:rgba(59,130,246,.15);color:#3b82f6}
+.mod-comercial{background:rgba(34,197,94,.15);color:#22c55e}
+.mod-financeiro{background:rgba(139,92,246,.15);color:#8b5cf6}
+.log-acao{font-weight:500}
+.log-det{color:var(--muted);font-size:11px}
+.log-empty{text-align:center;color:var(--muted);padding:40px 24px;font-size:13px}
+
+/* ── PAGINATION ────────────────────────────────────────────────────────────── */
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.page-info{font-size:12px;color:var(--muted)}
+.page-btns{display:flex;gap:6px}
+.page-btn{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:5px 12px;border-radius:7px;font-size:12px;cursor:pointer;
+  font-family:var(--font);transition:all .15s
+}
+.page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--text)}
+.page-btn:disabled{opacity:.35;cursor:default}
+.page-btn.active{background:rgba(232,57,14,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+
+/* ── CONFIRM MODAL ─────────────────────────────────────────────────────────── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.72);
+  display:flex;align-items:center;justify-content:center;z-index:10000;
+  opacity:0;pointer-events:none;transition:opacity .2s
+}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-box{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:28px 24px;width:100%;max-width:340px;
+  display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 24px 64px rgba(0,0,0,.6)
+}
+.modal-title{font-size:15px;font-weight:700}
+.modal-desc{font-size:13px;color:var(--muted);line-height:1.5}
+.modal-actions{display:flex;gap:8px}
+.btn-cancel{
+  flex:1;background:transparent;border:1px solid var(--border);
+  color:var(--muted);padding:9px;border-radius:8px;font-size:13px;
+  cursor:pointer;font-family:var(--font)
+}
+.btn-cancel:hover{border-color:var(--red);color:var(--red)}
+.btn-confirm{
+  flex:2;background:var(--red);border:none;color:#fff;
+  padding:9px;border-radius:8px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:var(--font)
+}
+.btn-confirm:hover{opacity:.85}
+
+/* ── LIGHT THEME ───────────────────────────────────────────────────────────── */
+body.light{
+  --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
+  --text:#1e293b;--muted:#64748b
+}
+body.light .log-header{background:#ffffff}
+body.light .log-table th{background:#f8fafc}
+body.light .log-table td{border-bottom-color:#f1f5f9}
+body.light .log-table tr:hover td{background:rgba(0,0,0,.02)}
+body.light .filter-input,body.light .filter-select{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+
+/* ── SCROLLBAR ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ACCESS DENIED -->
+<div id="access-denied">
+  <div class="ad-icon">🔒</div>
+  <h2>Acesso Restrito</h2>
+  <p>Esta área é exclusiva para administradores.</p>
+</div>
+
+<!-- LOG VIEWER -->
+<div id="log-app" style="display:none">
+  <header class="log-header">
+    <h1><span>📋</span> Log de Atividades</h1>
+    <div class="header-right">
+      <span class="auto-refresh-badge" id="refresh-badge">● Atualizando em <span id="refresh-countdown">30</span>s</span>
+      <button class="hdr-btn" onclick="refreshNow()">↺ Atualizar</button>
+      <button class="hdr-btn hdr-btn-danger" id="btn-clear-log" onclick="openClearModal()">🗑 Limpar Log</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stats -->
+    <div class="stat-row">
+      <div class="stat-chip chip-total">
+        <span class="sv" id="stat-total">0</span>
+        <span class="sl">Total de registros</span>
+      </div>
+      <div class="stat-chip chip-today">
+        <span class="sv" id="stat-today">0</span>
+        <span class="sl">Registros hoje</span>
+      </div>
+      <div class="stat-chip chip-filter">
+        <span class="sv" id="stat-filtered">0</span>
+        <span class="sl">Exibindo</span>
+      </div>
+      <div class="stat-chip chip-users">
+        <span class="sv" id="stat-users">0</span>
+        <span class="sl">Usuários ativos</span>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <label>Filtros</label>
+      <input type="text" class="filter-input" id="f-search" placeholder="Buscar ação ou detalhes…" oninput="applyFilters()"/>
+      <select class="filter-select" id="f-user" onchange="applyFilters()">
+        <option value="">Todos os usuários</option>
+      </select>
+      <select class="filter-select" id="f-modulo" onchange="applyFilters()">
+        <option value="">Todos os módulos</option>
+        <option value="Portal">Portal</option>
+        <option value="Suporte">Suporte</option>
+        <option value="Comercial">Comercial</option>
+        <option value="Financeiro">Financeiro</option>
+      </select>
+      <button class="filter-clear" onclick="clearFilters()">✕ Limpar</button>
+    </div>
+
+    <!-- Table -->
+    <div class="log-table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>Data / Hora</th>
+            <th>Usuário</th>
+            <th>Módulo</th>
+            <th>Ação</th>
+            <th>Detalhes</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <span class="page-info" id="page-info">—</span>
+      <div class="page-btns" id="page-btns"></div>
+    </div>
+  </main>
+</div>
+
+<!-- CLEAR CONFIRM MODAL -->
+<div class="modal-overlay" id="clear-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚠️ Limpar Log</div>
+    <div class="modal-desc">Todos os <strong id="clear-count">0</strong> registros serão apagados permanentemente. Esta ação não pode ser desfeita.</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeClearModal()">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmClear()">Limpar tudo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── GUARD: only inside iframe + admin ────────────────────────────────────────
+if (window.self === window.top) { window.location.href = '../'; }
+
+const LOG_KEY = 'ibnet_activity_log';
+const PAGE_SIZE = 25;
+
+let allLogs    = [];
+let filtered   = [];
+let currentPage = 1;
+let countdownVal = 30;
+let countdownTimer = null;
+
+// ── SESSION CHECK ────────────────────────────────────────────────────────────
+function getSession() {
+  try { return JSON.parse(sessionStorage.getItem('ibnet_session') || 'null'); } catch { return null; }
+}
+
+function init() {
+  const session = getSession();
+  if (!session || session.role !== 'admin') {
+    document.getElementById('access-denied').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('access-denied').classList.add('hidden');
+  document.getElementById('log-app').style.display = '';
+  refreshNow();
+  startCountdown();
+}
+
+// ── DATA ─────────────────────────────────────────────────────────────────────
+function getLogs() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; }
+}
+
+function refreshNow() {
+  allLogs = getLogs();
+  populateUserFilter();
+  applyFilters();
+  resetCountdown();
+}
+
+// ── USER FILTER OPTIONS ──────────────────────────────────────────────────────
+function populateUserFilter() {
+  const sel   = document.getElementById('f-user');
+  const prev  = sel.value;
+  const users = [...new Set(allLogs.map(l => l.usuario))].sort();
+  sel.innerHTML = '<option value="">Todos os usuários</option>' +
+    users.map(u => `<option value="${u}"${u===prev?' selected':''}>${u}</option>`).join('');
+}
+
+// ── STATS ────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = allLogs.filter(l => l.ts && l.ts.slice(0,10) === today).length;
+  const users = new Set(allLogs.map(l => l.usuario)).size;
+
+  document.getElementById('stat-total').textContent    = allLogs.length;
+  document.getElementById('stat-today').textContent    = todayCount;
+  document.getElementById('stat-filtered').textContent = filtered.length;
+  document.getElementById('stat-users').textContent    = users;
+}
+
+// ── FILTERS ──────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const search = document.getElementById('f-search').value.trim().toLowerCase();
+  const fUser  = document.getElementById('f-user').value;
+  const fMod   = document.getElementById('f-modulo').value;
+
+  filtered = allLogs.filter(l => {
+    if (fUser && l.usuario !== fUser) return false;
+    if (fMod  && l.modulo  !== fMod)  return false;
+    if (search) {
+      const haystack = ((l.acao||'') + ' ' + (l.detalhes||'') + ' ' + (l.usuario||'')).toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  currentPage = 1;
+  updateStats();
+  renderTable();
+}
+
+function clearFilters() {
+  document.getElementById('f-search').value = '';
+  document.getElementById('f-user').value   = '';
+  document.getElementById('f-modulo').value = '';
+  applyFilters();
+}
+
+// ── TABLE ─────────────────────────────────────────────────────────────────────
+const MOD_CLASS = {
+  'Portal':    'mod-portal',
+  'Suporte':   'mod-suporte',
+  'Comercial': 'mod-comercial',
+  'Financeiro':'mod-financeiro',
+};
+
+function fmtTS(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    const date = d.toLocaleDateString('pt-BR');
+    const time = d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    return `${date} ${time}`;
+  } catch { return ts; }
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('log-tbody');
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="log-empty">
+      ${allLogs.length ? 'Nenhum registro encontrado com os filtros atuais.' : 'Nenhuma ação registrada ainda.'}
+    </td></tr>`;
+    renderPagination();
+    return;
+  }
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filtered.slice(start, start + PAGE_SIZE);
+
+  tbody.innerHTML = page.map(l => {
+    const cls = MOD_CLASS[l.modulo] || 'mod-portal';
+    return `<tr>
+      <td class="log-ts">${fmtTS(l.ts)}</td>
+      <td class="log-user">${esc(l.usuario)}</td>
+      <td><span class="mod-badge ${cls}">${esc(l.modulo)}</span></td>
+      <td class="log-acao">${esc(l.acao)}</td>
+      <td class="log-det" title="${esc(l.detalhes)}">${esc(l.detalhes)}</td>
+    </tr>`;
+  }).join('');
+
+  renderPagination();
+}
+
+// ── PAGINATION ────────────────────────────────────────────────────────────────
+function renderPagination() {
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const start = total ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const end   = Math.min(currentPage * PAGE_SIZE, total);
+
+  document.getElementById('page-info').textContent =
+    total ? `Mostrando ${start}–${end} de ${total} registros` : 'Nenhum registro';
+
+  const container = document.getElementById('page-btns');
+  if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+  let btns = '';
+  btns += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹ Anterior</button>`;
+
+  // Page number buttons (max 7 visible)
+  const range = pageRange(currentPage, totalPages);
+  let prev = null;
+  for (const p of range) {
+    if (prev !== null && p - prev > 1) btns += `<button class="page-btn" disabled>…</button>`;
+    btns += `<button class="page-btn${p===currentPage?' active':''}" onclick="goPage(${p})">${p}</button>`;
+    prev = p;
+  }
+
+  btns += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>Próxima ›</button>`;
+  container.innerHTML = btns;
+}
+
+function pageRange(current, total) {
+  const delta = 2;
+  const range = [];
+  const rangeSet = new Set();
+  [1, total].forEach(p => rangeSet.add(p));
+  for (let p = Math.max(2, current - delta); p <= Math.min(total - 1, current + delta); p++) rangeSet.add(p);
+  return [...rangeSet].sort((a,b)=>a-b);
+}
+
+function goPage(p) {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  renderTable();
+  document.querySelector('.log-table-wrap')?.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── CLEAR LOG ─────────────────────────────────────────────────────────────────
+function openClearModal() {
+  const logs = getLogs();
+  document.getElementById('clear-count').textContent = logs.length;
+  document.getElementById('clear-modal').classList.add('show');
+}
+function closeClearModal() {
+  document.getElementById('clear-modal').classList.remove('show');
+}
+function confirmClear() {
+  localStorage.setItem(LOG_KEY, '[]');
+  closeClearModal();
+  refreshNow();
+}
+document.getElementById('clear-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeClearModal();
+});
+
+// ── AUTO-REFRESH COUNTDOWN ────────────────────────────────────────────────────
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownVal = 30;
+  document.getElementById('refresh-countdown').textContent = countdownVal;
+  countdownTimer = setInterval(() => {
+    countdownVal--;
+    document.getElementById('refresh-countdown').textContent = Math.max(0, countdownVal);
+    if (countdownVal <= 0) {
+      refreshNow();
+    }
+  }, 1000);
+}
+function resetCountdown() {
+  countdownVal = 30;
+  document.getElementById('refresh-countdown').textContent = 30;
+}
+
+// ── THEME ─────────────────────────────────────────────────────────────────────
+window.addEventListener('message', function(e) {
+  if (e.data?.type === 'theme') {
+    document.body.classList.toggle('light', e.data.value === 'light');
+    localStorage.setItem('ibnet_theme', e.data.value);
+  }
+});
+(function(){
+  const t = localStorage.getItem('ibnet_theme') || 'dark';
+  document.body.classList.toggle('light', t === 'light');
+})();
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

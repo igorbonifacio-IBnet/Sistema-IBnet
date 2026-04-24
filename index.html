@@ -391,6 +391,14 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
       <span class="sb-lock" id="sup-lock">🔒</span>
     </button>
 
+    <div class="sb-section">Sistema</div>
+
+    <button class="sb-item" data-tab="logs" id="sb-logs">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Log de Atividades
+      <span class="sb-lock" id="log-lock">🔒</span>
+    </button>
+
     <div class="sb-footer">
       <div class="sb-user">
         <div class="sb-avatar" id="sb-avatar">?</div>
@@ -427,6 +435,10 @@ body.light .sug-status-sel{background:#ffffff;border-color:#e2e8f0;color:#1e293b
     <div class="tab-panel" id="tab-suporte">
       <iframe src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
     </div>
+
+    <div class="tab-panel" id="tab-logs">
+      <iframe src="logs/index.html" id="iframe-logs" title="Log de Atividades"></iframe>
+    </div>
   </div>
 </div>
 
@@ -439,7 +451,7 @@ const USERS = {
 };
 
 const ROLE_ACCESS = {
-  admin:      ['comercial', 'financeiro', 'suporte'],
+  admin:      ['comercial', 'financeiro', 'suporte', 'logs'],
   financeiro: ['comercial', 'financeiro'],
   comercial:  ['comercial'],
   suporte:    ['suporte'],
@@ -453,7 +465,29 @@ const TAB_META = {
   comercial:  { title: 'Dashboard Comercial',  badge: 'COMERCIAL' },
   financeiro: { title: 'Painel Financeiro',    badge: 'FINANCEIRO' },
   suporte:    { title: 'Painel de Suporte',    badge: 'SUPORTE' },
+  logs:       { title: 'Log de Atividades',    badge: 'LOG' },
 };
+
+// ── LOG ───────────────────────────────────────────────────────────────────────
+const LOG_KEY = 'ibnet_activity_log';
+const MAX_LOG = 500;
+
+function logAction(modulo, acao, detalhes) {
+  try {
+    const session = getSession();
+    const entry = {
+      ts:       new Date().toISOString(),
+      usuario:  session?.nome || 'Sistema',
+      modulo,
+      acao,
+      detalhes: detalhes || '',
+    };
+    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    logs.unshift(entry);
+    if (logs.length > MAX_LOG) logs.splice(MAX_LOG);
+    localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+  } catch(e) {}
+}
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
 function getSession() {
@@ -474,6 +508,7 @@ function doLogin() {
   const user = USERS[u];
   if (user && user.senha === p) {
     setSession({ username: u, role: user.role, nome: user.nome });
+    logAction('Portal', 'Login', `Usuário ${user.nome} entrou na plataforma`);
     err.classList.remove('show');
     bootPlatform({ username: u, role: user.role, nome: user.nome });
   } else {
@@ -500,7 +535,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['comercial', 'financeiro', 'suporte'].forEach(tab => {
+  ['comercial', 'financeiro', 'suporte', 'logs'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab);
@@ -512,7 +547,7 @@ function bootPlatform(session) {
   });
 
   // Abre a primeira aba acessível ao usuário
-  const firstTab = ['comercial', 'financeiro', 'suporte'].find(t => canAccess(session.role, t)) || 'comercial';
+  const firstTab = ['comercial', 'financeiro', 'suporte', 'logs'].find(t => canAccess(session.role, t)) || 'comercial';
   switchTab(firstTab);
 }
 
@@ -529,6 +564,7 @@ function switchTab(tab) {
   const meta = TAB_META[tab];
   document.getElementById('topbar-title').textContent = meta.title;
   document.getElementById('topbar-badge').textContent = meta.badge;
+  if (currentTab && currentTab !== tab) logAction('Portal', 'Navegação', `Acessou aba: ${meta.title}`);
   currentTab = tab;
 }
 
@@ -537,12 +573,17 @@ document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
 });
 
 document.getElementById('btn-logout').addEventListener('click', () => {
+  logAction('Portal', 'Logout', 'Usuário saiu da plataforma');
   clearSession();
   location.reload();
 });
 
 // ── LOGOUT ────────────────────────────────────────────────────────────────
-function doLogout() { clearSession(); location.reload(); }
+function doLogout() {
+  logAction('Portal', 'Logout', `Usuário saiu da plataforma`);
+  clearSession();
+  location.reload();
+}
 
 // ── THEME ─────────────────────────────────────────────────────────────────
 let currentTheme = localStorage.getItem('ibnet_theme') || 'dark';
@@ -553,7 +594,7 @@ function applyTheme(t) {
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-financeiro','iframe-suporte'].forEach(id => {
+  ['iframe-comercial','iframe-financeiro','iframe-suporte','iframe-logs'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -563,6 +604,7 @@ function toggleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
 document.getElementById('iframe-comercial').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-suporte').addEventListener('load', () => applyTheme(currentTheme));
+document.getElementById('iframe-logs').addEventListener('load', () => applyTheme(currentTheme));
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';
