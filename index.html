@@ -700,6 +700,9 @@ function bootPlatform(session) {
   // Abre a primeira aba acessível ao usuário
   const firstTab = ['comercial', 'financeiro', 'suporte', 'logs'].find(t => canAccess(session.role, t)) || 'comercial';
   switchTab(firstTab);
+
+  // Inicia Firebase do portal (notificações + busca global)
+  setupPortalFirebase();
 }
 
 function switchTab(tab) {
@@ -1169,13 +1172,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeSearch(); closeNotifications(); }
 });
 
-// Inicializa Firebase do portal após login
-const _origBoot = bootPlatform;
-function bootPlatform(session) {
-  _origBoot(session);
-  setupPortalFirebase();
-}
-// Se sessão já existia, setup agora
+// Se a sessão já existia (reload sem logout), reconecta Firebase imediatamente
 if (getSession()) setupPortalFirebase();
 </script>
 </body>
