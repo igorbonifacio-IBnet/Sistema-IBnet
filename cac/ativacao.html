@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Registro de Ativação — IBNET</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#E8390E;--green:#22c55e;--red:#ef4444;
+  --text:#e2e8f0;--muted:#94a3b8;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+
+/* ── TELAS ─────────────────────────────────────────────────────────────── */
+.screen{display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+.screen.active{display:flex}
+
+/* ── PIN ─────────────────────────────────────────────────────────────────── */
+.pin-logo{width:130px;height:auto;margin-bottom:28px;border-radius:8px}
+.pin-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:6px}
+.pin-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:32px}
+.pin-display{display:flex;gap:14px;margin-bottom:34px}
+.pd{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all .15s}
+.pd.on{background:var(--accent);border-color:var(--accent);transform:scale(1.2)}
+.pd.err{background:var(--red);border-color:var(--red)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:270px}
+.pk{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:26px;font-weight:600;padding:17px 10px;border-radius:14px;cursor:pointer;font-family:inherit;transition:all .1s;-webkit-user-select:none;user-select:none;line-height:1;text-align:center}
+.pk:active{transform:scale(.88);background:var(--accent);border-color:var(--accent);color:#fff}
+.pk.ghost{visibility:hidden}
+.pk.del{font-size:20px;color:var(--muted)}
+.pin-err{font-size:13px;color:var(--red);text-align:center;margin-top:16px;min-height:20px}
+
+/* ── FORM ────────────────────────────────────────────────────────────────── */
+.form-wrap{width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px;padding-bottom:32px}
+.form-greeting{font-size:22px;font-weight:700;margin-bottom:2px}
+.form-datestr{font-size:12px;color:var(--muted)}
+.ff{display:flex;flex-direction:column;gap:6px}
+.ff label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.7px}
+.ff input{background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:10px;font-size:16px;font-family:inherit;width:100%;transition:border-color .2s;-webkit-appearance:none}
+.ff input:focus{outline:none;border-color:var(--accent)}
+
+/* Item cards */
+.icard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.icard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.icard-name{font-size:15px;font-weight:700}
+.icard-pinfo{font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:3px 9px;border-radius:20px}
+.icard-row{display:flex;align-items:center;gap:10px}
+.qty-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:10px;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;-webkit-user-select:none;user-select:none;transition:all .1s;line-height:1}
+.qty-btn:active{transform:scale(.88);background:var(--accent);border-color:var(--accent);color:#fff}
+.icard-row input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 6px;border-radius:8px;font-size:24px;font-weight:700;font-family:inherit;text-align:center;width:100%;-webkit-appearance:none}
+.icard-row input:focus{outline:none;border-color:var(--accent)}
+.icard-sub{font-size:12px;color:var(--muted);text-align:right;margin-top:8px}
+.icard-sub strong{color:var(--green);font-weight:600}
+
+/* CAC total */
+.cac-card{background:linear-gradient(135deg,rgba(232,57,14,.13),rgba(204,34,0,.04));border:2px solid rgba(232,57,14,.3);border-radius:16px;padding:20px;text-align:center}
+.cac-lbl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.cac-val{font-size:42px;font-weight:700;color:#E8390E;letter-spacing:-1.5px;line-height:1}
+
+/* Botões */
+.btn-submit{background:#E8390E;border:none;color:#fff;padding:17px;border-radius:14px;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;margin-top:4px;transition:opacity .15s;letter-spacing:.2px}
+.btn-submit:hover{opacity:.88}
+.btn-submit:disabled{opacity:.45;cursor:default}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;width:100%;transition:all .15s}
+.btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+
+/* ── SUCESSO ─────────────────────────────────────────────────────────────── */
+.suc-icon{font-size:80px;margin-bottom:18px;animation:pop .45s cubic-bezier(.175,.885,.32,1.275)}
+@keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.suc-title{font-size:26px;font-weight:700;margin-bottom:8px;text-align:center}
+.suc-cliente{font-size:15px;color:var(--muted);text-align:center;margin-bottom:4px}
+.suc-cac{font-size:40px;font-weight:700;color:var(--green);letter-spacing:-1px;margin:14px 0 8px;text-align:center}
+.suc-note{font-size:11px;color:var(--muted);text-align:center;margin-bottom:28px;line-height:1.5}
+.suc-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px}
+</style>
+</head>
+<body>
+
+<!-- ── TELA: PIN ───────────────────────────────────────────────────────── -->
+<div class="screen active" id="sc-pin">
+  <img class="pin-logo" src="../LOGO BRANCA.jpeg" alt="IBNET"/>
+  <div class="pin-title">Registro de Ativação</div>
+  <div class="pin-sub">Insira seu PIN para continuar</div>
+  <div class="pin-display">
+    <div class="pd" id="pd0"></div>
+    <div class="pd" id="pd1"></div>
+    <div class="pd" id="pd2"></div>
+    <div class="pd" id="pd3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pk" onclick="pinKey('1')">1</button>
+    <button class="pk" onclick="pinKey('2')">2</button>
+    <button class="pk" onclick="pinKey('3')">3</button>
+    <button class="pk" onclick="pinKey('4')">4</button>
+    <button class="pk" onclick="pinKey('5')">5</button>
+    <button class="pk" onclick="pinKey('6')">6</button>
+    <button class="pk" onclick="pinKey('7')">7</button>
+    <button class="pk" onclick="pinKey('8')">8</button>
+    <button class="pk" onclick="pinKey('9')">9</button>
+    <button class="pk ghost"></button>
+    <button class="pk" onclick="pinKey('0')">0</button>
+    <button class="pk del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-err" id="pin-err"></div>
+</div>
+
+<!-- ── TELA: FORMULÁRIO ───────────────────────────────────────────────── -->
+<div class="screen" id="sc-form">
+  <div class="form-wrap">
+    <div>
+      <div class="form-greeting" id="form-greeting">Olá! 👋</div>
+      <div class="form-datestr" id="form-date"></div>
+    </div>
+
+    <div class="ff">
+      <label>Cliente *</label>
+      <input type="text" id="f-cliente" placeholder="Nome completo do cliente" autocapitalize="words" autocomplete="off"/>
+    </div>
+    <div class="ff">
+      <label>Nº Contrato <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(opcional)</span></label>
+      <input type="text" id="f-contrato" placeholder="Ex: 12345" inputmode="numeric"/>
+    </div>
+
+    <!-- ONT -->
+    <div class="icard">
+      <div class="icard-head">
+        <div class="icard-name">📡 ONT</div>
+        <div class="icard-pinfo" id="pinfo-ont">—/un</div>
+      </div>
+      <div class="icard-row">
+        <button class="qty-btn" onclick="adj('ont',-1)">−</button>
+        <input type="number" id="f-ont" value="1" min="0" max="10" inputmode="numeric" oninput="calc()"/>
+        <button class="qty-btn" onclick="adj('ont',1)">+</button>
+      </div>
+      <div class="icard-sub">Total: <strong id="tot-ont">R$ 0,00</strong></div>
+    </div>
+
+    <!-- DROP -->
+    <div class="icard">
+      <div class="icard-head">
+        <div class="icard-name">🔌 DROP (cabo)</div>
+        <div class="icard-pinfo" id="pinfo-drop">—/metro</div>
+      </div>
+      <div class="icard-row">
+        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="metros" oninput="calc()" style="font-size:22px;font-weight:700"/>
+      </div>
+      <div class="icard-sub">metros utilizados · Total: <strong id="tot-drop">R$ 0,00</strong></div>
+    </div>
+
+    <!-- Conector -->
+    <div class="icard">
+      <div class="icard-head">
+        <div class="icard-name">🔗 Conector SC/APC</div>
+        <div class="icard-pinfo" id="pinfo-con">—/un</div>
+      </div>
+      <div class="icard-row">
+        <button class="qty-btn" onclick="adj('con',-1)">−</button>
+        <input type="number" id="f-con" value="2" min="0" max="20" inputmode="numeric" oninput="calc()"/>
+        <button class="qty-btn" onclick="adj('con',1)">+</button>
+      </div>
+      <div class="icard-sub">Total: <strong id="tot-con">R$ 0,00</strong></div>
+    </div>
+
+    <!-- CAC Total -->
+    <div class="cac-card">
+      <div class="cac-lbl">💰 CAC desta ativação</div>
+      <div class="cac-val" id="cac-total">R$ 0,00</div>
+    </div>
+
+    <button class="btn-submit" id="btn-submit" onclick="submitAtiv()">✅ Registrar Ativação</button>
+    <button class="btn-ghost" onclick="logout()">↩ Trocar técnico</button>
+  </div>
+</div>
+
+<!-- ── TELA: SUCESSO ──────────────────────────────────────────────────── -->
+<div class="screen" id="sc-ok">
+  <div class="suc-icon">✅</div>
+  <div class="suc-title">Ativação registrada!</div>
+  <div class="suc-cliente" id="suc-cliente"></div>
+  <div class="suc-cac" id="suc-cac"></div>
+  <div class="suc-note">📦 Estoque atualizado automaticamente.<br>O Igor já consegue ver no painel.</div>
+  <div class="suc-actions">
+    <button class="btn-submit" onclick="resetForm()">+ Registrar outra</button>
+    <button class="btn-ghost" onclick="logout()">↩ Sair</button>
+  </div>
+</div>
+
+<script>
+// ── FIREBASE ──────────────────────────────────────────────────────────────
+const FB = {
+  apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:"ibnet-platform.firebaseapp.com",
+  databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:"ibnet-platform",
+  storageBucket:"ibnet-platform.firebasestorage.app",
+  messagingSenderId:"468380845527",
+  appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+firebase.initializeApp(FB);
+const db = firebase.database();
+
+// ── ESTADO ────────────────────────────────────────────────────────────────
+let pin = '';
+let tecnico = null;
+let cfg = {
+  ont:     { precoUnit: 120 },
+  drop:    { precoPorMetro: 0.30 },
+  conector:{ precoUnit: 5, qtdPadrao: 2 }
+};
+
+// Carrega configuração de preços do Firebase
+db.ref('cac/config').once('value').then(s => {
+  const v = s.val() || {};
+  if (v.ont)      cfg.ont      = { ...cfg.ont,      ...v.ont };
+  if (v.drop)     cfg.drop     = { ...cfg.drop,     ...v.drop };
+  if (v.conector) cfg.conector = { ...cfg.conector, ...v.conector };
+  updateInfos();
+});
+
+function fmt(v) {
+  return 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function updateInfos() {
+  document.getElementById('pinfo-ont').textContent  = fmt(cfg.ont.precoUnit) + '/un';
+  document.getElementById('pinfo-drop').textContent = fmt(cfg.drop.precoPorMetro) + '/m';
+  document.getElementById('pinfo-con').textContent  = fmt(cfg.conector.precoUnit) + '/un';
+  calc();
+}
+
+// ── PIN ───────────────────────────────────────────────────────────────────
+function pinKey(k) {
+  if (pin.length >= 4) return;
+  pin += k;
+  renderDots();
+  if (pin.length === 4) verifyPin();
+}
+function pinDel() {
+  pin = pin.slice(0,-1);
+  document.getElementById('pin-err').textContent = '';
+  renderDots();
+}
+function renderDots(mode) {
+  for (let i=0;i<4;i++) {
+    const d = document.getElementById('pd'+i);
+    d.classList.toggle('on', !mode && i < pin.length);
+    d.classList.toggle('err', mode === 'err');
+  }
+}
+async function verifyPin() {
+  document.getElementById('pin-err').textContent = '';
+  try {
+    const snap = await db.ref('cac/tecnicos').once('value');
+    const data = snap.val() || {};
+    const found = Object.entries(data).find(([,t]) => t.pin === pin && t.ativo !== false);
+    if (found) {
+      tecnico = { id: found[0], ...found[1] };
+      showForm();
+    } else {
+      renderDots('err');
+      document.getElementById('pin-err').textContent = 'PIN incorreto. Tente novamente.';
+      setTimeout(() => { pin = ''; renderDots(); }, 1400);
+    }
+  } catch(e) {
+    document.getElementById('pin-err').textContent = 'Erro de conexão. Verifique a internet.';
+    setTimeout(() => { pin = ''; renderDots(); }, 2000);
+  }
+}
+
+// ── FORM ──────────────────────────────────────────────────────────────────
+function showForm() {
+  const now = new Date();
+  document.getElementById('form-greeting').textContent = `Olá, ${tecnico.nome}! 👋`;
+  document.getElementById('form-date').textContent =
+    now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('f-cliente').value  = '';
+  document.getElementById('f-contrato').value = '';
+  document.getElementById('f-ont').value  = '1';
+  document.getElementById('f-drop').value = '';
+  document.getElementById('f-con').value  = String(cfg.conector.qtdPadrao ?? 2);
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = false;
+  btn.textContent = '✅ Registrar Ativação';
+  calc();
+  setScreen('sc-form');
+  setTimeout(()=>document.getElementById('f-cliente').focus(), 350);
+}
+
+function adj(item, delta) {
+  const ids = { ont:'f-ont', con:'f-con' };
+  const el  = document.getElementById(ids[item]);
+  el.value  = Math.max(0, (parseInt(el.value)||0) + delta);
+  calc();
+}
+
+function calc() {
+  const ontQtd = parseInt(document.getElementById('f-ont').value)  || 0;
+  const dropM  = parseFloat(document.getElementById('f-drop').value)|| 0;
+  const conQtd = parseInt(document.getElementById('f-con').value)   || 0;
+
+  const tOnt = ontQtd * cfg.ont.precoUnit;
+  const tDrp = dropM  * cfg.drop.precoPorMetro;
+  const tCon = conQtd * cfg.conector.precoUnit;
+  const tot  = tOnt + tDrp + tCon;
+
+  document.getElementById('tot-ont').textContent  = fmt(tOnt);
+  document.getElementById('tot-drop').textContent = fmt(tDrp);
+  document.getElementById('tot-con').textContent  = fmt(tCon);
+  document.getElementById('cac-total').textContent = fmt(tot);
+}
+
+async function submitAtiv() {
+  const cliente = document.getElementById('f-cliente').value.trim();
+  if (!cliente) { document.getElementById('f-cliente').focus(); return; }
+
+  const ontQtd = parseInt(document.getElementById('f-ont').value)  || 0;
+  const dropM  = parseFloat(document.getElementById('f-drop').value)|| 0;
+  const conQtd = parseInt(document.getElementById('f-con').value)   || 0;
+
+  const tOnt = ontQtd * cfg.ont.precoUnit;
+  const tDrp = dropM  * cfg.drop.precoPorMetro;
+  const tCon = conQtd * cfg.conector.precoUnit;
+  const totalCAC = tOnt + tDrp + tCon;
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+
+  const agora = new Date();
+  const id    = Date.now().toString();
+
+  const ativ = {
+    cliente,
+    contrato:  document.getElementById('f-contrato').value.trim(),
+    tecnicoId: tecnico.id,
+    tecnico:   tecnico.nome,
+    data:      agora.toISOString().slice(0,10),
+    criadoEm:  agora.toISOString(),
+    ont:      { qtd: ontQtd, precoUnit: cfg.ont.precoUnit,      total: tOnt },
+    drop:     { metros: dropM, precoPorMetro: cfg.drop.precoPorMetro, total: tDrp },
+    conector: { qtd: conQtd, precoUnit: cfg.conector.precoUnit, total: tCon },
+    totalCAC,
+  };
+
+  try {
+    await db.ref(`cac/ativacoes/${id}`).set(ativ);
+    // Débito no estoque
+    if (ontQtd > 0) await db.ref('cac/estoque/ont/qtd').transaction(v => (v||0) - ontQtd);
+    if (dropM  > 0) await db.ref('cac/estoque/drop/metros').transaction(v => (v||0) - dropM);
+    if (conQtd > 0) await db.ref('cac/estoque/conector/qtd').transaction(v => (v||0) - conQtd);
+
+    document.getElementById('suc-cliente').textContent = cliente;
+    document.getElementById('suc-cac').textContent     = fmt(totalCAC);
+    setScreen('sc-ok');
+  } catch(e) {
+    alert('Erro ao salvar.\nVerifique a conexão e tente novamente.\n\n' + e.message);
+    btn.disabled = false;
+    btn.textContent = '✅ Registrar Ativação';
+  }
+}
+
+function resetForm() { showForm(); }
+function logout()    { tecnico=null; pin=''; renderDots(); setScreen('sc-pin'); }
+function setScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+</script>
+</body>
+</html>

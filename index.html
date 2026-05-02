@@ -508,6 +508,14 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
       <span class="sb-lock" id="sup-lock">🔒</span>
     </button>
 
+    <div class="sb-section">Financeiro</div>
+
+    <button class="sb-item" data-tab="cac" id="sb-cac">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      CAC — Custo Ativação
+      <span class="sb-lock" id="cac-lock">🔒</span>
+    </button>
+
     <div class="sb-section">Sistema</div>
 
     <button class="sb-item" data-tab="logs" id="sb-logs">
@@ -587,6 +595,10 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
       <iframe src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
     </div>
 
+    <div class="tab-panel" id="tab-cac">
+      <iframe src="cac/index.html" id="iframe-cac" title="CAC — Custo de Ativação"></iframe>
+    </div>
+
     <div class="tab-panel" id="tab-logs">
       <iframe src="logs/index.html" id="iframe-logs" title="Log de Atividades"></iframe>
     </div>
@@ -602,8 +614,8 @@ const USERS = {
 };
 
 const ROLE_ACCESS = {
-  admin:      ['comercial', 'financeiro', 'suporte', 'logs'],
-  financeiro: ['comercial', 'financeiro'],
+  admin:      ['comercial', 'financeiro', 'suporte', 'cac', 'logs'],
+  financeiro: ['comercial', 'financeiro', 'cac'],
   comercial:  ['comercial'],
   suporte:    ['suporte'],
 };
@@ -613,10 +625,11 @@ const ROLE_LABELS = {
 };
 
 const TAB_META = {
-  comercial:  { title: 'Dashboard Comercial',  badge: 'COMERCIAL' },
-  financeiro: { title: 'Painel Financeiro',    badge: 'FINANCEIRO' },
-  suporte:    { title: 'Painel de Suporte',    badge: 'SUPORTE' },
-  logs:       { title: 'Log de Atividades',    badge: 'LOG' },
+  comercial:  { title: 'Dashboard Comercial',       badge: 'COMERCIAL' },
+  financeiro: { title: 'Painel Financeiro',         badge: 'FINANCEIRO' },
+  suporte:    { title: 'Painel de Suporte',          badge: 'SUPORTE' },
+  cac:        { title: 'CAC — Custo de Ativação',   badge: 'CAC' },
+  logs:       { title: 'Log de Atividades',          badge: 'LOG' },
 };
 
 // ── LOG ───────────────────────────────────────────────────────────────────────
@@ -686,7 +699,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['comercial', 'financeiro', 'suporte', 'logs'].forEach(tab => {
+  ['comercial', 'financeiro', 'suporte', 'cac', 'logs'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab);

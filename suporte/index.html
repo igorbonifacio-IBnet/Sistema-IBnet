@@ -146,8 +146,8 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 .act-list{display:flex;flex-direction:column;gap:8px}
 .act-empty{text-align:center;color:var(--muted);font-size:13px;padding:36px 24px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius);line-height:1.6}
 
-.act-item{background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:flex-start;gap:12px;padding:14px 16px;transition:border-color .15s,box-shadow .15s}
-.act-item:hover{box-shadow:0 2px 12px rgba(0,0,0,.18)}
+.act-item{background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:flex-start;gap:12px;padding:14px 16px;transition:border-color .15s,box-shadow .15s;cursor:pointer}
+.act-item:hover{box-shadow:0 2px 12px rgba(0,0,0,.18);border-color:var(--accent)}
 .act-item.act-done{opacity:.5}
 .act-item.act-overdue{border-left:3px solid var(--red)}
 
@@ -190,8 +190,8 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 /* ── MODALS ──────────────────────────────────────────────────────────────── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px}
 .modal-overlay.show{opacity:1;pointer-events:auto}
-.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;width:100%;max-width:320px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
-.modal-box-lg{max-width:440px}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;width:100%;max-width:320px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:92vh;overflow-y:auto}
+.modal-box-lg{max-width:480px}
 .modal-title{font-size:15px;font-weight:700}
 .modal-desc{font-size:12px;color:var(--muted);line-height:1.5}
 .mf{display:flex;flex-direction:column;gap:5px}
@@ -338,6 +338,49 @@ body.light .hist-stat{border-bottom-color:#f1f5f9}
 /* ── ACT ITEM META ────────────────────────────────────────────────────────── */
 .act-meta{font-size:10px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
 .act-meta span{display:flex;align-items:center;gap:3px}
+
+/* ── ANEXOS ──────────────────────────────────────────────────────────────── */
+.attach-zone{border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+.attach-zone:hover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.attach-zone-hint{font-size:12px;color:var(--muted);pointer-events:none}
+.attach-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.attach-thumb{position:relative;width:68px;height:68px;border-radius:7px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.attach-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.attach-thumb-file{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px}
+.attach-thumb-file-icon{font-size:22px;line-height:1}
+.attach-thumb-file-name{font-size:9px;color:var(--muted);text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;line-height:1.2}
+.attach-remove{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.75);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;transition:background .15s}
+.attach-remove:hover{background:var(--red)}
+
+/* Badge no card */
+.act-attach-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:rgba(59,130,246,.1);color:var(--accent);cursor:pointer;border:1px solid rgba(59,130,246,.2);transition:all .15s;white-space:nowrap;flex-shrink:0}
+.act-attach-badge:hover{background:rgba(59,130,246,.2)}
+
+/* Thumbs inline no card */
+.act-attach-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.act-attach-mini{width:44px;height:44px;border-radius:5px;overflow:hidden;border:1px solid var(--border);cursor:pointer;flex-shrink:0;background:var(--bg);transition:border-color .15s}
+.act-attach-mini:hover{border-color:var(--accent)}
+.act-attach-mini img{width:100%;height:100%;object-fit:cover;display:block}
+.act-attach-mini-file{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px}
+
+/* Modal visualizador */
+.viewer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20000;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px;gap:12px}
+.viewer-overlay.show{opacity:1;pointer-events:auto}
+.viewer-img{max-width:90vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.viewer-toolbar{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.6);border-radius:10px;padding:8px 14px;flex-wrap:wrap;justify-content:center}
+.viewer-name{font-size:13px;color:#fff;flex:1;text-align:center;word-break:break-all}
+.viewer-btn{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.viewer-btn:hover{background:rgba(255,255,255,.15)}
+.viewer-close{background:transparent;border:none;color:rgba(255,255,255,.7);font-size:24px;cursor:pointer;padding:4px;line-height:1;position:absolute;top:14px;right:18px}
+.viewer-close:hover{color:#fff}
+.viewer-nav{display:flex;gap:8px}
+.viewer-nav-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.viewer-nav-btn:hover{background:rgba(255,255,255,.2)}
+.viewer-file-icon{font-size:64px;color:#fff;margin:20px 0}
+body.light .attach-zone{border-color:#e2e8f0}
+body.light .attach-zone:hover{border-color:#2563eb;background:rgba(37,99,235,.04)}
+body.light .attach-thumb,.body.light .act-attach-mini{border-color:#e2e8f0}
+body.light .act-attach-badge{background:#dbeafe;color:#1d4ed8;border-color:#bfdbfe}
 </style>
 </head>
 <body>
@@ -553,10 +596,35 @@ body.light .hist-stat{border-bottom-color:#f1f5f9}
       <textarea id="act-observacao" placeholder="Notas internas, contexto ou detalhes relevantes…" style="min-height:64px"></textarea>
     </div>
 
+    <div class="mf">
+      <label>📎 Anexos (fotos ou arquivos)</label>
+      <div class="attach-zone" id="attach-zone" onclick="document.getElementById('act-file-input').click()">
+        <input type="file" id="act-file-input" multiple
+               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+               style="display:none" onchange="handleFileSelect(this)"/>
+        <span class="attach-zone-hint">Clique para adicionar foto ou arquivo<br><span style="font-size:10px;opacity:.7">Máx. 5 arquivos · 2 MB cada · imagens, PDF, Word, Excel…</span></span>
+      </div>
+      <div class="attach-preview" id="attach-preview"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn-mcancel" onclick="closeActModal()">Cancelar</button>
       <button class="btn-msave"   onclick="saveActModal()">Salvar Atividade</button>
     </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Visualizador de Anexos ────────────────────────────────────── -->
+<div class="viewer-overlay" id="viewer-overlay" onclick="if(event.target===this)closeViewer()">
+  <button class="viewer-close" onclick="closeViewer()">✕</button>
+  <div id="viewer-content"><!-- img ou ícone --></div>
+  <div class="viewer-toolbar">
+    <div class="viewer-nav">
+      <button class="viewer-nav-btn" onclick="viewerNav(-1)">‹</button>
+      <button class="viewer-nav-btn" onclick="viewerNav(1)">›</button>
+    </div>
+    <span class="viewer-name" id="viewer-name"></span>
+    <a class="viewer-btn" id="viewer-download" download>⬇ Baixar</a>
   </div>
 </div>
 
@@ -622,6 +690,9 @@ let viewMonth          = new Date().getMonth();
 let activePartnerFilter = '';   // '' = todos, ou id do parceiro
 let actStatusFilter    = '';    // '' | 'a_fazer' | 'em_andamento' | 'concluido' | 'vencidas'
 let _editActId         = null;
+let _pendingAttachments = [];   // [{name,type,data,size}] durante edição no modal
+let _viewerAttachments  = [];
+let _viewerIndex        = 0;
 let _editVencPid       = null;
 let viewMode           = 'lista';   // 'lista' | 'kanban'
 let _sortables         = {};        // instâncias SortableJS por coluna
@@ -1064,23 +1135,28 @@ function renderActItem(act) {
     ? `<a class="act-link-btn" href="${act.link}" target="_blank" rel="noopener noreferrer" title="${act.link}">🔗 Acompanhar</a>`
     : '';
 
-  return `<div class="act-item${act.status==='concluido'?' act-done':''}${over?' act-overdue':''}">
+  const linkBtnStop = act.link
+    ? `<a class="act-link-btn" href="${act.link}" target="_blank" rel="noopener noreferrer" title="${act.link}" onclick="event.stopPropagation()">🔗 Acompanhar</a>`
+    : '';
+
+  return `<div class="act-item${act.status==='concluido'?' act-done':''}${over?' act-overdue':''}" onclick="openActModal('${act.id}')">
   <div class="act-dot ${PRI_DOT[act.prioridade]||'dot-media'}"></div>
   <div class="act-main">
     <div class="act-title-row">
       <span class="act-title">${act.titulo}</span>
       ${chip}
       ${due}
-      ${linkBtn}
+      ${linkBtnStop}
     </div>
     ${act.descricao ? `<div class="act-desc">${act.descricao}</div>` : ''}
     ${act.observacao ? `<div class="act-obs">💬 ${act.observacao}</div>` : ''}
+    ${act.anexos?.length ? renderActAttachRow(act) : ''}
     <div class="act-meta">
       ${act.criadoEm?`<span>📅 Criado ${fmtDateTime(act.criadoEm)}</span>`:''}
       ${act.concluidoEm&&act.status==='concluido'?`<span>✅ Concluído ${fmtDateTime(act.concluidoEm)}</span>`:''}
     </div>
   </div>
-  <div class="act-controls">
+  <div class="act-controls" onclick="event.stopPropagation()">
     <button class="act-status-btn ${ACT_STATUS_CSS[act.status]||'ast-a_fazer'}"
             onclick="cycleActStatus('${act.id}')">${ACT_STATUS_LABELS[act.status]}</button>
     <button class="act-icon-btn" onclick="openActModal('${act.id}')" title="Editar">✎</button>
@@ -1113,6 +1189,114 @@ function deleteAct(id) {
   renderActivities(); renderKPIs();
 }
 
+// ── ANEXOS — HELPERS ─────────────────────────────────────────────────────
+function fileIcon(type) {
+  if(type.startsWith('image/')) return '🖼️';
+  if(type==='application/pdf') return '📄';
+  if(type.includes('word')||type.includes('document')) return '📝';
+  if(type.includes('sheet')||type.includes('excel')||type.includes('csv')) return '📊';
+  return '📎';
+}
+
+function renderAttachPreview() {
+  const el = document.getElementById('attach-preview');
+  if(!el) return;
+  el.innerHTML = _pendingAttachments.map((a,i) => {
+    const thumb = a.type.startsWith('image/')
+      ? `<img src="${a.data}" alt="${a.name}">`
+      : `<div class="attach-thumb-file"><span class="attach-thumb-file-icon">${fileIcon(a.type)}</span><span class="attach-thumb-file-name">${a.name}</span></div>`;
+    return `<div class="attach-thumb">
+      ${thumb}
+      <button class="attach-remove" onclick="removeAttach(${i})" title="Remover">✕</button>
+    </div>`;
+  }).join('');
+  const zone = document.getElementById('attach-zone');
+  if(zone) zone.style.display = _pendingAttachments.length >= 5 ? 'none' : '';
+}
+
+function removeAttach(i) {
+  _pendingAttachments.splice(i,1);
+  renderAttachPreview();
+}
+
+function handleFileSelect(input) {
+  const files = Array.from(input.files);
+  const remaining = 5 - _pendingAttachments.length;
+  const toProcess = files.slice(0, remaining);
+  let done = 0;
+  if(!toProcess.length) return;
+  toProcess.forEach(file => {
+    if(file.size > 2*1024*1024) {
+      alert(`"${file.name}" excede 2 MB e não foi adicionado.`);
+      done++;
+      if(done===toProcess.length) renderAttachPreview();
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      _pendingAttachments.push({ name:file.name, type:file.type||'application/octet-stream', data:e.target.result, size:file.size });
+      done++;
+      if(done===toProcess.length) renderAttachPreview();
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value='';
+}
+
+function renderActAttachRow(act) {
+  const items = act.anexos.slice(0,8).map((a,i)=>{
+    const inner = a.type.startsWith('image/')
+      ? `<img src="${a.data}" alt="${a.name}">`
+      : `<div class="act-attach-mini-file">${fileIcon(a.type)}</div>`;
+    return `<div class="act-attach-mini" onclick="event.stopPropagation();openViewer('${act.id}',${i})" title="${a.name}">${inner}</div>`;
+  }).join('');
+  const extra = act.anexos.length > 8 ? `<div class="act-attach-mini" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">+${act.anexos.length-8}</div>` : '';
+  return `<div class="act-attach-row">${items}${extra}</div>`;
+}
+
+// ── VIEWER ────────────────────────────────────────────────────────────────
+function openViewer(actId, idx) {
+  const act = getActivities().find(a=>a.id===actId);
+  if(!act?.anexos?.length) return;
+  _viewerAttachments = act.anexos;
+  _viewerIndex = idx;
+  renderViewer();
+  document.getElementById('viewer-overlay').classList.add('show');
+}
+
+function closeViewer() {
+  document.getElementById('viewer-overlay').classList.remove('show');
+  _viewerAttachments=[];
+}
+
+function viewerNav(delta) {
+  _viewerIndex = (_viewerIndex + delta + _viewerAttachments.length) % _viewerAttachments.length;
+  renderViewer();
+}
+
+function renderViewer() {
+  const a = _viewerAttachments[_viewerIndex];
+  const content = document.getElementById('viewer-content');
+  const nameEl  = document.getElementById('viewer-name');
+  const dlBtn   = document.getElementById('viewer-download');
+  nameEl.textContent = `${a.name} (${_viewerIndex+1}/${_viewerAttachments.length})`;
+  dlBtn.href = a.data;
+  dlBtn.download = a.name;
+  if(a.type.startsWith('image/')) {
+    content.innerHTML = `<img class="viewer-img" src="${a.data}" alt="${a.name}">`;
+  } else {
+    content.innerHTML = `<div class="viewer-file-icon">${fileIcon(a.type)}</div>`;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  const v = document.getElementById('viewer-overlay');
+  if(!v.classList.contains('show')) return;
+  if(e.key==='Escape') closeViewer();
+  if(e.key==='ArrowLeft') viewerNav(-1);
+  if(e.key==='ArrowRight') viewerNav(1);
+});
+
 function openActModal(id=null) {
   _editActId = id;
   const act = id ? getActivities().find(a=>a.id===id) : null;
@@ -1132,12 +1316,16 @@ function openActModal(id=null) {
   document.getElementById('act-link').value         = act?.link        || '';
   document.getElementById('act-observacao').value   = act?.observacao  || '';
 
+  _pendingAttachments = act?.anexos ? [...act.anexos] : [];
+  document.getElementById('act-file-input').value = '';
+  renderAttachPreview();
+
   document.getElementById('act-modal-title').textContent = id ? '✎ Editar Atividade' : '+ Nova Atividade';
   document.getElementById('act-modal').classList.add('show');
   setTimeout(()=>document.getElementById('act-titulo').focus(),100);
 }
 
-function closeActModal() { document.getElementById('act-modal').classList.remove('show'); _editActId=null; }
+function closeActModal() { document.getElementById('act-modal').classList.remove('show'); _editActId=null; _pendingAttachments=[]; }
 
 function saveActModal() {
   const titulo=document.getElementById('act-titulo').value.trim();
@@ -1155,6 +1343,7 @@ function saveActModal() {
       act.prazo      = document.getElementById('act-prazo').value;
       act.link       = document.getElementById('act-link').value.trim();
       act.observacao = document.getElementById('act-observacao').value.trim();
+      act.anexos     = _pendingAttachments.length ? [..._pendingAttachments] : null;
     }
   } else {
     acts.unshift({
@@ -1167,6 +1356,7 @@ function saveActModal() {
       prazo:      document.getElementById('act-prazo').value,
       link:       document.getElementById('act-link').value.trim(),
       observacao: document.getElementById('act-observacao').value.trim(),
+      anexos:     _pendingAttachments.length ? [..._pendingAttachments] : null,
       criadoEm:   new Date().toISOString(),
       concluidoEm:null,
     });
@@ -1275,6 +1465,7 @@ function renderKanban() {
         const card = document.createElement('div');
         card.className = 'kanban-card' + (over ? ' act-overdue' : '');
         card.dataset.id = act.id;
+        card.addEventListener('click', () => openActModal(act.id));
         card.innerHTML = `
           <div class="kc-title-row">
             <span class="kc-title">${act.titulo}</span>
@@ -1285,7 +1476,8 @@ function renderKanban() {
             ${act.prazo ? `<span class="kc-due ${over?'cd-urgent':'cd-ok'}">${over?'⚠️ ':'📅 '}${fmtDate(act.prazo)}</span>` : ''}
           </div>
           ${act.descricao ? `<div class="kc-desc">${act.descricao}</div>` : ''}
-          <div class="kc-actions">
+          ${act.anexos?.length ? `<div style="font-size:11px;color:var(--muted);margin-top:5px">📎 ${act.anexos.length} anexo${act.anexos.length>1?'s':''}</div>` : ''}
+          <div class="kc-actions" onclick="event.stopPropagation()">
             <button class="kc-btn" onclick="openActModal('${act.id}')" title="Editar">✎</button>
             <button class="kc-btn kc-del" onclick="deleteAct('${act.id}')" title="Excluir">✕</button>
           </div>`;

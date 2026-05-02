@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>CAC — IBNET</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#E8390E;
+  --green:#22c55e;--red:#ef4444;--yellow:#eab308;--blue:#3b82f6;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:12px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh}
+
+/* ── HEADER ──────────────────────────────────────────────────────────────── */
+.mini-header{background:#0d1018;border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.header-title{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px}
+.tab-nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.tab-btn{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{border-color:var(--accent);color:var(--text)}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.month-nav{display:flex;align-items:center;gap:6px}
+.month-btn{background:transparent;border:1px solid var(--border);color:var(--muted);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1;font-family:inherit}
+.month-btn:hover{border-color:var(--accent);color:var(--text)}
+.month-lbl{font-size:13px;font-weight:700;min-width:130px;text-align:center}
+
+/* ── MAIN ────────────────────────────────────────────────────────────────── */
+main{padding:20px 24px;max-width:1280px;margin:0 auto}
+.tab-section{display:none}
+.tab-section.active{display:block}
+
+/* ── KPIs ────────────────────────────────────────────────────────────────── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.kpi-card:hover{transform:translateY(-2px);border-color:var(--kpi-c,var(--accent))}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-c,var(--accent))}
+.kpi-icon{font-size:20px;margin-bottom:8px;display:block}
+.kpi-val{font-size:26px;font-weight:700;color:var(--kpi-c,var(--text));line-height:1;margin-bottom:4px;letter-spacing:-.5px}
+.kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
+
+/* ── SECTION TITLE ───────────────────────────────────────────────────────── */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.sec-head h2{font-size:14px;font-weight:700}
+.sec-head p{font-size:12px;color:var(--muted);margin-top:3px}
+.btn-primary{background:var(--accent);border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;white-space:nowrap}
+.btn-primary:hover{opacity:.85}
+.btn-secondary{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.btn-secondary:hover{border-color:var(--blue);color:var(--text)}
+.btn-danger{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.btn-danger:hover{border-color:var(--red);color:var(--red)}
+
+/* ── ESTOQUE CARDS ───────────────────────────────────────────────────────── */
+.stock-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:28px}
+.stock-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:box-shadow .2s}
+.stock-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.stock-card.low{border-color:rgba(234,179,8,.4)}
+.stock-card.critical{border-color:rgba(239,68,68,.4)}
+.sc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.sc-icon{font-size:26px}
+.sc-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(34,197,94,.12);color:var(--green)}
+.sc-badge.low{background:rgba(234,179,8,.12);color:var(--yellow)}
+.sc-badge.critical{background:rgba(239,68,68,.12);color:var(--red)}
+.sc-qty{font-size:36px;font-weight:700;line-height:1;letter-spacing:-1px;margin-bottom:4px}
+.sc-unit{font-size:12px;color:var(--muted);margin-bottom:10px}
+.sc-price{font-size:12px;color:var(--muted);padding:6px 10px;background:rgba(255,255,255,.04);border-radius:6px;display:inline-block;margin-bottom:14px}
+.sc-price strong{color:var(--text)}
+.sc-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── TABLE ───────────────────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:#0d1018}
+th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border)}
+td{padding:10px 14px;border-bottom:1px solid rgba(42,45,62,.5);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.tbl-empty{text-align:center;color:var(--muted);font-size:13px;padding:40px;font-style:italic}
+.tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700}
+.tag-ont{background:rgba(59,130,246,.12);color:#3b82f6}
+.tag-drop{background:rgba(34,197,94,.12);color:#22c55e}
+.tag-con{background:rgba(234,179,8,.12);color:#eab308}
+.tag-tec{background:rgba(100,116,139,.12);color:#94a3b8}
+.tbl-footer td{font-weight:700;color:var(--text);background:rgba(255,255,255,.03);border-top:2px solid var(--border)!important;border-bottom:none!important}
+
+/* ── TÉCNICOS ────────────────────────────────────────────────────────────── */
+.tec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:24px}
+.tec-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:14px;transition:box-shadow .2s}
+.tec-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.2)}
+.tec-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#E8390E,#CC2200);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
+.tec-info{flex:1;min-width:0}
+.tec-nome{font-size:14px;font-weight:600}
+.tec-pin{font-size:12px;color:var(--muted);margin-top:2px;font-family:monospace;letter-spacing:2px}
+.tec-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;margin-top:4px;display:inline-block}
+.tec-ativo{background:rgba(34,197,94,.12);color:var(--green)}
+.tec-inativo{background:rgba(100,116,139,.12);color:var(--muted)}
+.tec-actions{display:flex;gap:6px;flex-shrink:0}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s;flex-shrink:0}
+.icon-btn:hover{border-color:var(--blue);color:var(--text)}
+.icon-btn.del:hover{border-color:var(--red);color:var(--red)}
+
+.link-box{background:var(--card);border:1px dashed var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.link-url{font-size:12px;color:var(--muted);flex:1;word-break:break-all;font-family:monospace}
+
+/* ── FILTROS HISTÓRICO ───────────────────────────────────────────────────── */
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.filter-sel{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .2s}
+.filter-sel:focus{outline:none;border-color:var(--accent)}
+
+/* ── MODAIS ──────────────────────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:26px 24px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-height:92vh;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:700}
+.mf{display:flex;flex-direction:column;gap:5px}
+.mf label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.mf input,.mf select,.mf textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
+.mf textarea{resize:vertical;min-height:70px;line-height:1.5}
+.mf input:focus,.mf select:focus,.mf textarea:focus{outline:none;border-color:var(--accent)}
+.mf-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-actions{display:flex;gap:8px}
+.btn-mcancel{flex:1;background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit}
+.btn-mcancel:hover{border-color:var(--red);color:var(--red)}
+.btn-msave{flex:2;background:var(--accent);border:none;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-msave:hover{opacity:.85}
+.calc-preview{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--green)}
+
+/* ── LIGHT THEME ─────────────────────────────────────────────────────────── */
+body.light{--bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;--accent:#E8390E;--green:#16a34a;--red:#dc2626;--yellow:#a16207;--blue:#2563eb;--text:#1e293b;--muted:#64748b}
+body.light .mini-header{background:#fff;border-bottom-color:#e8eef6}
+body.light thead tr{background:#f8fafc}
+body.light .stock-card,.body.light .tec-card,.body.light .kpi-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light .mf textarea{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+
+@media(max-width:700px){
+  main{padding:14px 12px}
+  .mini-header{padding:8px 12px;gap:8px}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .mf-row{grid-template-columns:1fr}
+  .modal-box{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
+<div class="mini-header">
+  <div class="header-title">💰 CAC — Custo de Ativação</div>
+  <div class="month-nav" id="month-nav" style="display:none">
+    <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+    <span class="month-lbl" id="month-lbl">—</span>
+    <button class="month-btn" onclick="changeMonth(1)">›</button>
+  </div>
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('visao')">📊 Visão Geral</button>
+    <button class="tab-btn" onclick="showTab('estoque')">📦 Estoque</button>
+    <button class="tab-btn" onclick="showTab('historico')">📋 Histórico</button>
+    <button class="tab-btn" onclick="showTab('tecnicos')">👥 Técnicos</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- ── ABA: VISÃO GERAL ───────────────────────────────────────────────── -->
+  <div class="tab-section active" id="tab-visao">
+    <div class="kpi-grid">
+      <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Ativações no mês</div></div>
+      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">💰</span><div class="kpi-val" id="kpi-cac-med">—</div><div class="kpi-lbl">CAC Médio</div></div>
+      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">📊</span><div class="kpi-val" id="kpi-total-gasto">—</div><div class="kpi-lbl">Total Gasto no Mês</div></div>
+      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">📡</span><div class="kpi-val" id="kpi-ont">—</div><div class="kpi-lbl">ONTs em Estoque</div></div>
+      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-drop">—</div><div class="kpi-lbl">DROP em Estoque (m)</div></div>
+      <div class="kpi-card" style="--kpi-c:#eab308"><span class="kpi-icon">🔗</span><div class="kpi-val" id="kpi-con">—</div><div class="kpi-lbl">Conectores em Estoque</div></div>
+    </div>
+
+    <div class="sec-head"><div><h2>Últimas Ativações</h2><p>Ativações registradas pelos técnicos este mês</p></div></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="8" class="tbl-empty">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── ABA: ESTOQUE ───────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-estoque">
+    <div class="sec-head">
+      <div><h2>Estoque de Insumos</h2><p>Quantidades disponíveis · atualizadas a cada ativação dos técnicos</p></div>
+    </div>
+    <div class="stock-grid" id="stock-grid">
+      <!-- renderizado pelo JS -->
+    </div>
+
+    <div class="sec-head" style="margin-top:8px">
+      <div><h2>Histórico de Entradas</h2><p>Lotes e compras registradas</p></div>
+      <button class="btn-primary" onclick="openEntradaModal()">+ Registrar Entrada</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Insumo</th><th>Qtd / Metros</th><th>Preço Total</th><th>Preço Unit.</th><th>Observação</th></tr></thead>
+        <tbody id="entrada-tbody"><tr><td colspan="6" class="tbl-empty">Nenhuma entrada registrada.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── ABA: HISTÓRICO ─────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-historico">
+    <div class="sec-head">
+      <div><h2>Histórico de Ativações</h2><p>Todas as ativações registradas pelos técnicos</p></div>
+    </div>
+    <div class="filter-bar">
+      <select class="filter-sel" id="hist-mes" onchange="renderHistorico()"><!-- meses gerados --></select>
+      <select class="filter-sel" id="hist-tec" onchange="renderHistorico()"><option value="">Todos os técnicos</option></select>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>Contrato</th><th>Técnico</th><th>ONT (un)</th><th>DROP (m)</th><th>Conector (un)</th><th>CAC Total</th></tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="8" class="tbl-empty">Carregando…</td></tr></tbody>
+        <tfoot><tr class="tbl-footer"><td colspan="7" style="text-align:right">Total do período:</td><td id="hist-total">—</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── ABA: TÉCNICOS ──────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-tecnicos">
+    <div class="sec-head">
+      <div><h2>Técnicos</h2><p>Gerencie os PINs de acesso para registro de ativações</p></div>
+      <button class="btn-primary" onclick="openTecModal()">+ Adicionar Técnico</button>
+    </div>
+    <div class="tec-grid" id="tec-grid">
+      <div style="color:var(--muted);font-size:13px;padding:20px 0">Carregando…</div>
+    </div>
+
+    <div class="sec-head" style="margin-top:8px">
+      <div><h2>🔗 Link para os Técnicos</h2><p>Compartilhe este link para que os técnicos registrem ativações no celular</p></div>
+    </div>
+    <div class="link-box">
+      <span class="link-url" id="ativ-link">—</span>
+      <button class="btn-primary" onclick="copyLink()">📋 Copiar</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── MODAL: Entrada de Estoque ────────────────────────────────────────── -->
+<div class="modal-overlay" id="entrada-modal">
+  <div class="modal-box">
+    <div class="modal-title">📦 Registrar Entrada de Estoque</div>
+    <div class="mf">
+      <label>Insumo</label>
+      <select id="en-tipo" onchange="calcEntrada()">
+        <option value="ont">📡 ONT</option>
+        <option value="drop">🔌 DROP (cabo)</option>
+        <option value="conector">🔗 Conector</option>
+      </select>
+    </div>
+    <div class="mf-row">
+      <div class="mf">
+        <label id="en-qtd-lbl">Quantidade (unidades)</label>
+        <input type="number" id="en-qtd" min="1" placeholder="Ex: 20" oninput="calcEntrada()"/>
+      </div>
+      <div class="mf">
+        <label>Preço Total do Lote (R$)</label>
+        <input type="number" id="en-preco-total" min="0" step="0.01" placeholder="Ex: 2200.00" oninput="calcEntrada()"/>
+      </div>
+    </div>
+    <div class="calc-preview" id="en-preview" style="display:none"></div>
+    <div class="mf">
+      <label>Data da Compra</label>
+      <input type="date" id="en-data"/>
+    </div>
+    <div class="mf">
+      <label>Observação (opcional)</label>
+      <textarea id="en-obs" placeholder="Ex: Compra Intelbras maio · NF 12345"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeEntradaModal()">Cancelar</button>
+      <button class="btn-msave" onclick="saveEntrada()">Salvar Entrada</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Editar Preço ───────────────────────────────────────────────── -->
+<div class="modal-overlay" id="preco-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="preco-modal-title">Editar Preço</div>
+    <div class="mf">
+      <label id="preco-lbl">Preço (R$)</label>
+      <input type="number" id="preco-val" min="0" step="0.01" placeholder="0.00"/>
+    </div>
+    <div class="mf">
+      <label>Alerta de Estoque Mínimo</label>
+      <input type="number" id="preco-alerta" min="0" placeholder="Ex: 5"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closePrecoModal()">Cancelar</button>
+      <button class="btn-msave" onclick="savePreco()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Técnico ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="tec-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="tec-modal-title">+ Novo Técnico</div>
+    <div class="mf">
+      <label>Nome *</label>
+      <input type="text" id="tec-nome" placeholder="Ex: Carlos" autocapitalize="words"/>
+    </div>
+    <div class="mf">
+      <label>PIN (4 dígitos) *</label>
+      <input type="text" id="tec-pin" placeholder="Ex: 1234" maxlength="4" inputmode="numeric"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeTecModal()">Cancelar</button>
+      <button class="btn-msave" onclick="saveTec()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+if (window.self === window.top) { window.location.href = '../'; }
+
+// ── FIREBASE ──────────────────────────────────────────────────────────────
+const FB = {
+  apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:"ibnet-platform.firebaseapp.com",
+  databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:"ibnet-platform",
+  storageBucket:"ibnet-platform.firebasestorage.app",
+  messagingSenderId:"468380845527",
+  appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+firebase.initializeApp(FB);
+const db = firebase.database();
+
+// ── ESTADO ────────────────────────────────────────────────────────────────
+let viewYear  = new Date().getFullYear();
+let viewMonth = new Date().getMonth();
+const MONTHS  = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+let allAtivacoes = [];
+let allEntradas  = [];
+let allTecnicos  = {};
+let estoque      = { ont:{qtd:0}, drop:{metros:0}, conector:{qtd:0} };
+let config       = {
+  ont:     { precoUnit: 120, alertaMin: 3 },
+  drop:    { precoPorMetro: 0.30, alertaMin: 200 },
+  conector:{ precoUnit: 5, qtdPadrao: 2, alertaMin: 20 }
+};
+
+let _editPrecoTipo = null;
+let _editTecId     = null;
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+async function init() {
+  // Sincronizar theme com parent
+  try {
+    const p = window.parent.document.body;
+    if (p.classList.contains('light')) document.body.classList.add('light');
+  } catch(e){}
+
+  // Carregar config
+  const cfgSnap = await db.ref('cac/config').once('value');
+  const cfgVal  = cfgSnap.val() || {};
+  if (cfgVal.ont)      config.ont      = { ...config.ont,      ...cfgVal.ont };
+  if (cfgVal.drop)     config.drop     = { ...config.drop,     ...cfgVal.drop };
+  if (cfgVal.conector) config.conector = { ...config.conector, ...cfgVal.conector };
+
+  // Listeners realtime
+  db.ref('cac/estoque').on('value', s => {
+    const v = s.val() || {};
+    estoque.ont      = v.ont      || { qtd: 0 };
+    estoque.drop     = v.drop     || { metros: 0 };
+    estoque.conector = v.conector || { qtd: 0 };
+    renderStockCards();
+    renderKPIs();
+  });
+  db.ref('cac/ativacoes').on('value', s => {
+    const v = s.val() || {};
+    allAtivacoes = Object.entries(v).map(([id,a])=>({...a,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
+    renderKPIs();
+    renderVisaoRecentes();
+    renderHistorico();
+    populateTecFilter();
+  });
+  db.ref('cac/entradas').on('value', s => {
+    const v = s.val() || {};
+    allEntradas = Object.entries(v).map(([id,e])=>({...e,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
+    renderEntradas();
+  });
+  db.ref('cac/tecnicos').on('value', s => {
+    allTecnicos = s.val() || {};
+    renderTecnicos();
+    populateTecFilter();
+  });
+
+  // Link técnico
+  const host = window.location.origin + window.location.pathname.replace('index.html','') ;
+  document.getElementById('ativ-link').textContent = host + 'ativacao.html';
+
+  updateMonthLabel();
+}
+init();
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+function fmt(v) {
+  return 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return iso.slice(0,10).split('-').reverse().join('/');
+}
+function mesAtual() {
+  return `${viewYear}-${String(viewMonth+1).padStart(2,'0')}`;
+}
+function ativacoesDoMes() {
+  const pref = mesAtual();
+  return allAtivacoes.filter(a => a.data && a.data.startsWith(pref));
+}
+
+// ── MÊS NAV ───────────────────────────────────────────────────────────────
+function changeMonth(d) {
+  viewMonth += d;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
+  updateMonthLabel();
+  renderKPIs();
+  renderVisaoRecentes();
+}
+function updateMonthLabel() {
+  document.getElementById('month-lbl').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+}
+
+// ── TAB NAV ───────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  document.getElementById('month-nav').style.display = (id==='visao') ? '' : 'none';
+  if (id === 'historico') buildHistMesSelect();
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────
+function renderKPIs() {
+  const lista = ativacoesDoMes();
+  const total = lista.reduce((s,a)=>s+(a.totalCAC||0),0);
+  const med   = lista.length ? total/lista.length : 0;
+
+  document.getElementById('kpi-ativ').textContent       = lista.length;
+  document.getElementById('kpi-cac-med').textContent    = lista.length ? fmt(med) : '—';
+  document.getElementById('kpi-total-gasto').textContent= lista.length ? fmt(total) : '—';
+  document.getElementById('kpi-ont').textContent  = estoque.ont.qtd  ?? 0;
+  document.getElementById('kpi-drop').textContent = (estoque.drop.metros ?? 0).toLocaleString('pt-BR');
+  document.getElementById('kpi-con').textContent  = estoque.conector.qtd ?? 0;
+}
+
+// ── VISÃO GERAL — RECENTES ────────────────────────────────────────────────
+function renderVisaoRecentes() {
+  const lista = ativacoesDoMes().slice(0,10);
+  const tbody = document.getElementById('visao-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">Nenhuma ativação neste mês.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(a => `
+    <tr>
+      <td>${fmtDate(a.data)}</td>
+      <td style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="color:var(--muted)">${a.contrato||'—'}</td>
+      <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
+      <td>${a.ont?.qtd ?? 0} un</td>
+      <td>${(a.drop?.metros||0).toLocaleString('pt-BR')} m</td>
+      <td>${a.conector?.qtd ?? 0} un</td>
+      <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
+    </tr>`).join('');
+}
+
+// ── ESTOQUE CARDS ─────────────────────────────────────────────────────────
+function renderStockCards() {
+  const items = [
+    { tipo:'ont',      icon:'📡', nome:'ONT',         qty: estoque.ont.qtd ?? 0,          unit:'unidades',
+      price: fmt(config.ont.precoUnit)+'/un',         min: config.ont.alertaMin ?? 3 },
+    { tipo:'drop',     icon:'🔌', nome:'DROP (cabo)', qty: estoque.drop.metros ?? 0,       unit:'metros',
+      price: fmt(config.drop.precoPorMetro)+'/metro', min: config.drop.alertaMin ?? 200 },
+    { tipo:'conector', icon:'🔗', nome:'Conector',    qty: estoque.conector.qtd ?? 0,      unit:'unidades',
+      price: fmt(config.conector.precoUnit)+'/un',    min: config.conector.alertaMin ?? 20 },
+  ];
+  document.getElementById('stock-grid').innerHTML = items.map(i => {
+    const pct   = i.min > 0 ? i.qty / i.min : 1;
+    const state = pct <= 0 ? 'critical' : pct <= 1.5 ? 'low' : '';
+    const badge = pct <= 0 ? 'CRÍTICO' : pct <= 1.5 ? 'BAIXO' : 'OK';
+    return `<div class="stock-card ${state}">
+      <div class="sc-top">
+        <div class="sc-icon">${i.icon}</div>
+        <div class="sc-badge ${state}">${badge}</div>
+      </div>
+      <div class="sc-qty">${Number.isInteger(i.qty) ? i.qty : i.qty.toLocaleString('pt-BR')}</div>
+      <div class="sc-unit">${i.nome} · ${i.unit}</div>
+      <div class="sc-price">Preço vigente: <strong>${i.price}</strong></div>
+      <div class="sc-actions">
+        <button class="btn-primary" onclick="openEntradaModal('${i.tipo}')">+ Entrada</button>
+        <button class="btn-secondary" onclick="openPrecoModal('${i.tipo}')">✎ Preço</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── ENTRADAS TABLE ────────────────────────────────────────────────────────
+function renderEntradas() {
+  const tbody = document.getElementById('entrada-tbody');
+  if (!allEntradas.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">Nenhuma entrada registrada.</td></tr>`;
+    return;
+  }
+  const TAG = { ont:'tag-ont', drop:'tag-drop', conector:'tag-con' };
+  const NOM = { ont:'📡 ONT', drop:'🔌 DROP', conector:'🔗 Conector' };
+  tbody.innerHTML = allEntradas.map(e => {
+    const qtdStr = e.tipo==='drop' ? `${e.metros?.toLocaleString('pt-BR')||0} m` : `${e.qtd||0} un`;
+    const uStr   = e.tipo==='drop'
+      ? fmt(e.precoUnit) + '/m'
+      : fmt(e.precoUnit) + '/un';
+    return `<tr>
+      <td>${fmtDate(e.data)}</td>
+      <td><span class="tag ${TAG[e.tipo]||''}">${NOM[e.tipo]||e.tipo}</span></td>
+      <td style="font-weight:600">${qtdStr}</td>
+      <td>${fmt(e.precoTotal)}</td>
+      <td style="color:var(--green);font-weight:600">${uStr}</td>
+      <td style="color:var(--muted)">${e.obs||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── HISTÓRICO ─────────────────────────────────────────────────────────────
+function buildHistMesSelect() {
+  const meses = new Set();
+  allAtivacoes.forEach(a => { if (a.data) meses.add(a.data.slice(0,7)); });
+  const curr = mesAtual();
+  if (!meses.has(curr)) meses.add(curr);
+  const sorted = [...meses].sort().reverse();
+  const sel = document.getElementById('hist-mes');
+  const cur = sel.value || curr;
+  sel.innerHTML = sorted.map(m => {
+    const [y,mo] = m.split('-');
+    return `<option value="${m}"${m===cur?' selected':''}>${MONTHS[parseInt(mo)-1]} ${y}</option>`;
+  }).join('');
+}
+function populateTecFilter() {
+  const sel = document.getElementById('hist-tec');
+  const cur = sel.value;
+  const tecs = [...new Set(allAtivacoes.map(a=>a.tecnico).filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">Todos os técnicos</option>` +
+    tecs.map(t=>`<option value="${t}"${t===cur?' selected':''}>${t}</option>`).join('');
+}
+function renderHistorico() {
+  const mes = document.getElementById('hist-mes')?.value || mesAtual();
+  const tec = document.getElementById('hist-tec')?.value || '';
+  const lista = allAtivacoes.filter(a =>
+    a.data?.startsWith(mes) && (!tec || a.tecnico===tec)
+  );
+  const tbody = document.getElementById('hist-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">Nenhuma ativação neste período.</td></tr>`;
+    document.getElementById('hist-total').textContent = '—';
+    return;
+  }
+  let tot = 0;
+  tbody.innerHTML = lista.map(a => {
+    tot += a.totalCAC||0;
+    return `<tr>
+      <td>${fmtDate(a.data)}</td>
+      <td style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="color:var(--muted)">${a.contrato||'—'}</td>
+      <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
+      <td style="text-align:center">${a.ont?.qtd??0}</td>
+      <td style="text-align:center">${a.drop?.metros??0}</td>
+      <td style="text-align:center">${a.conector?.qtd??0}</td>
+      <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('hist-total').textContent = fmt(tot);
+}
+
+// ── TÉCNICOS ──────────────────────────────────────────────────────────────
+function renderTecnicos() {
+  const list = Object.entries(allTecnicos);
+  const grid = document.getElementById('tec-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum técnico cadastrado. Clique em "+ Adicionar Técnico".</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(([id,t]) => {
+    const ativo = t.ativo !== false;
+    const ini   = (t.nome||'?').charAt(0).toUpperCase();
+    return `<div class="tec-card">
+      <div class="tec-avatar">${ini}</div>
+      <div class="tec-info">
+        <div class="tec-nome">${t.nome}</div>
+        <div class="tec-pin">PIN: ••••</div>
+        <div class="tec-status ${ativo?'tec-ativo':'tec-inativo'}">${ativo?'✅ Ativo':'⏸ Inativo'}</div>
+      </div>
+      <div class="tec-actions">
+        <button class="icon-btn" onclick="openTecModal('${id}')" title="Editar">✎</button>
+        <button class="icon-btn" onclick="toggleTec('${id}',${ativo})" title="${ativo?'Desativar':'Ativar'}">
+          ${ativo?'⏸':'▶'}
+        </button>
+        <button class="icon-btn del" onclick="deleteTec('${id}')" title="Excluir">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function copyLink() {
+  const url = document.getElementById('ativ-link').textContent;
+  navigator.clipboard.writeText(url).then(()=>alert('✅ Link copiado!\n\n'+url));
+}
+
+// ── MODAL: ENTRADA ────────────────────────────────────────────────────────
+function openEntradaModal(tipo='ont') {
+  document.getElementById('en-tipo').value = tipo;
+  document.getElementById('en-qtd').value  = '';
+  document.getElementById('en-preco-total').value = '';
+  document.getElementById('en-obs').value  = '';
+  document.getElementById('en-data').value = new Date().toISOString().slice(0,10);
+  document.getElementById('en-preview').style.display = 'none';
+  updateEntradaLabel();
+  document.getElementById('entrada-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('en-qtd').focus(),100);
+}
+function closeEntradaModal() { document.getElementById('entrada-modal').classList.remove('show'); }
+
+function updateEntradaLabel() {
+  const tipo = document.getElementById('en-tipo').value;
+  document.getElementById('en-qtd-lbl').textContent = tipo==='drop' ? 'Quantidade (metros)' : 'Quantidade (unidades)';
+}
+document.getElementById('en-tipo').addEventListener('change', updateEntradaLabel);
+
+function calcEntrada() {
+  const qtd  = parseFloat(document.getElementById('en-qtd').value) || 0;
+  const pTot = parseFloat(document.getElementById('en-preco-total').value) || 0;
+  const prev = document.getElementById('en-preview');
+  if (qtd > 0 && pTot > 0) {
+    const unit = pTot / qtd;
+    const tipo = document.getElementById('en-tipo').value;
+    const su   = tipo==='drop' ? '/metro' : '/unidade';
+    prev.style.display='';
+    prev.textContent = `💡 Preço unitário: ${fmt(unit)}${su}  ·  Este preço passará a ser o vigente para novas ativações.`;
+  } else {
+    prev.style.display='none';
+  }
+}
+
+async function saveEntrada() {
+  const tipo  = document.getElementById('en-tipo').value;
+  const qtd   = parseFloat(document.getElementById('en-qtd').value);
+  const pTot  = parseFloat(document.getElementById('en-preco-total').value);
+  const data  = document.getElementById('en-data').value;
+  if (!qtd || qtd <= 0 || !pTot || pTot <= 0 || !data) { alert('Preencha quantidade, preço e data.'); return; }
+
+  const precoUnit = pTot / qtd;
+  const id  = Date.now().toString();
+  const obs = document.getElementById('en-obs').value.trim();
+
+  const entrada = {
+    tipo, data, obs,
+    precoTotal: pTot,
+    precoUnit,
+    criadoEm: new Date().toISOString(),
+    ...(tipo==='drop' ? { metros: qtd } : { qtd }),
+  };
+
+  // Salvar entrada
+  await db.ref(`cac/entradas/${id}`).set(entrada);
+
+  // Adicionar ao estoque
+  if (tipo==='drop') await db.ref('cac/estoque/drop/metros').transaction(v=>(v||0)+qtd);
+  else if (tipo==='ont') await db.ref('cac/estoque/ont/qtd').transaction(v=>(v||0)+qtd);
+  else await db.ref('cac/estoque/conector/qtd').transaction(v=>(v||0)+qtd);
+
+  // Atualizar preço vigente
+  const cfgKey = tipo==='drop' ? 'precoPorMetro' : 'precoUnit';
+  await db.ref(`cac/config/${tipo}/${cfgKey}`).set(precoUnit);
+  config[tipo][cfgKey] = precoUnit;
+
+  closeEntradaModal();
+  alert(`✅ Entrada salva!\n${tipo.toUpperCase()} · ${qtd} ${tipo==='drop'?'metros':'un'} por ${fmt(pTot)}\nNovo preço unitário: ${fmt(precoUnit)}`);
+}
+
+// ── MODAL: PREÇO ──────────────────────────────────────────────────────────
+function openPrecoModal(tipo) {
+  _editPrecoTipo = tipo;
+  const labels = { ont:'Preço por unidade (R$)', drop:'Preço por metro (R$)', conector:'Preço por unidade (R$)' };
+  const nomes  = { ont:'📡 ONT', drop:'🔌 DROP', conector:'🔗 Conector' };
+  document.getElementById('preco-modal-title').textContent = `✎ Preço — ${nomes[tipo]}`;
+  document.getElementById('preco-lbl').textContent = labels[tipo];
+  const cfgKey = tipo==='drop' ? 'precoPorMetro' : 'precoUnit';
+  document.getElementById('preco-val').value   = config[tipo][cfgKey] || '';
+  document.getElementById('preco-alerta').value = config[tipo].alertaMin || '';
+  document.getElementById('preco-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('preco-val').focus(),100);
+}
+function closePrecoModal() { document.getElementById('preco-modal').classList.remove('show'); _editPrecoTipo=null; }
+async function savePreco() {
+  const tipo   = _editPrecoTipo;
+  const val    = parseFloat(document.getElementById('preco-val').value);
+  const alerta = parseInt(document.getElementById('preco-alerta').value) || 0;
+  if (!val || val <= 0) { alert('Informe um preço válido.'); return; }
+  const cfgKey = tipo==='drop' ? 'precoPorMetro' : 'precoUnit';
+  await db.ref(`cac/config/${tipo}/${cfgKey}`).set(val);
+  await db.ref(`cac/config/${tipo}/alertaMin`).set(alerta);
+  config[tipo][cfgKey] = val;
+  config[tipo].alertaMin = alerta;
+  renderStockCards();
+  closePrecoModal();
+}
+
+// ── MODAL: TÉCNICO ────────────────────────────────────────────────────────
+function openTecModal(id=null) {
+  _editTecId = id;
+  const t = id ? allTecnicos[id] : null;
+  document.getElementById('tec-modal-title').textContent = id ? '✎ Editar Técnico' : '+ Novo Técnico';
+  document.getElementById('tec-nome').value = t?.nome || '';
+  document.getElementById('tec-pin').value  = t?.pin  || '';
+  document.getElementById('tec-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('tec-nome').focus(),100);
+}
+function closeTecModal() { document.getElementById('tec-modal').classList.remove('show'); _editTecId=null; }
+async function saveTec() {
+  const nome = document.getElementById('tec-nome').value.trim();
+  const pin  = document.getElementById('tec-pin').value.trim();
+  if (!nome) { document.getElementById('tec-nome').focus(); return; }
+  if (!/^\d{4}$/.test(pin)) { alert('O PIN deve ter exatamente 4 dígitos numéricos.'); return; }
+  const id = _editTecId || Date.now().toString();
+  const exist = Object.entries(allTecnicos).find(([tid,t])=>t.pin===pin && tid!==id);
+  if (exist) { alert(`PIN ${pin} já está em uso por ${exist[1].nome}.`); return; }
+  await db.ref(`cac/tecnicos/${id}`).set({ nome, pin, ativo: allTecnicos[id]?.ativo ?? true });
+  closeTecModal();
+}
+async function toggleTec(id, ativo) {
+  await db.ref(`cac/tecnicos/${id}/ativo`).set(!ativo);
+}
+async function deleteTec(id) {
+  const t = allTecnicos[id];
+  if (!confirm(`Excluir o técnico "${t?.nome}"?\nEsta ação não pode ser desfeita.`)) return;
+  await db.ref(`cac/tecnicos/${id}`).remove();
+}
+
+// ── FECHAR MODAIS AO CLICAR FORA ─────────────────────────────────────────
+['entrada-modal','preco-modal','tec-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('show');
+  });
+});
+
+// ── SYNC THEME ────────────────────────────────────────────────────────────
+window.addEventListener('message', e => {
+  if (e.data?.type === 'theme') document.body.classList.toggle('light', e.data.light);
+});
+</script>
+</body>
+</html>
