@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Dashboard Comercial</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -157,6 +159,13 @@ tr:hover td{background:rgba(59,130,246,.05)}
 .badge-equip-sim{background:rgba(34,197,94,.15);color:#22c55e}
 .badge-equip-nao{background:rgba(239,68,68,.15);color:#ef4444}
 .motivo-churn{font-size:11px;color:var(--muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cac-badge{display:flex;flex-direction:column;gap:2px;min-width:90px}
+.cac-badge-val{font-size:11px;font-weight:700;color:#E8390E}
+.cac-badge-pb{display:inline-flex;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap}
+.cac-pb-ok{background:rgba(34,197,94,.12);color:#22c55e}
+.cac-pb-warn{background:rgba(234,179,8,.12);color:#eab308}
+.cac-pb-slow{background:rgba(239,68,68,.12);color:#ef4444}
+.cac-pb-wait{background:rgba(100,116,139,.1);color:#94a3b8;font-style:italic}
 
 .table-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border)}
 .table-footer span{font-size:12px;color:var(--muted)}
@@ -367,6 +376,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
           <th onclick="sortBy('churn')">Churn ↕</th>
           <th onclick="sortBy('equip')">Equip. Recolhido ↕</th>
           <th onclick="sortBy('motivo')">Motivo Churn ↕</th>
+          <th>CAC / Payback</th>
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
@@ -395,6 +405,45 @@ const ROWS_PER_PAGE = 20;
 let allData = [], filteredData = [], currentPage = 1;
 let sortKey = 'mes', sortDir = 1;
 let charts = {};
+// CAC — dados do Firebase (carregados uma vez ao iniciar)
+let cacLookup   = {};   // { "nome normalizado" -> { totalCAC, payback, plano } }
+let cacVinculos = {};   // { ativId -> { nomeComercial } }
+
+function normNome(s){ return (s||'').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' '); }
+
+async function loadCACData() {
+  try {
+    const [ativSnap, vincSnap] = await Promise.all([
+      firebase.database().ref('cac/ativacoes').once('value'),
+      firebase.database().ref('cac/vinculos').once('value'),
+    ]);
+    cacVinculos = vincSnap.val() || {};
+    const ativs = ativSnap.val() || {};
+    cacLookup = {};
+    Object.entries(ativs).forEach(([id, a]) => {
+      // Determinar nome chave: vínculo manual tem prioridade
+      const vinc     = cacVinculos[id];
+      const nomeChave = normNome(vinc?.nomeComercial || a.cliente);
+      if (!cacLookup[nomeChave] || a.totalCAC > cacLookup[nomeChave].totalCAC) {
+        cacLookup[nomeChave] = { totalCAC: a.totalCAC || 0, id };
+      }
+    });
+  } catch(e) { /* Firebase indisponível — continua sem CAC */ }
+}
+
+function cacBadgeHTML(nomeCliente, valorMensal) {
+  const key  = normNome(nomeCliente);
+  const cac  = cacLookup[key];
+  if (!cac) return `<span class="cac-pb-wait" style="font-size:11px;color:var(--muted);font-style:italic">Sem CAC</span>`;
+  const val  = cac.totalCAC;
+  const meses = valorMensal > 0 ? val / valorMensal : null;
+  const pbLabel = meses === null ? '—' : meses < 1 ? `${Math.round(meses*30)}d` : `${meses.toFixed(1)}m`;
+  const pbCls   = meses === null ? 'cac-pb-wait' : meses <= 3 ? 'cac-pb-ok' : meses <= 6 ? 'cac-pb-warn' : 'cac-pb-slow';
+  return `<div class="cac-badge">
+    <span class="cac-badge-val">R$ ${val.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+    <span class="cac-badge-pb ${pbCls}">⏱ ${pbLabel}</span>
+  </div>`;
+}
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
@@ -696,6 +745,7 @@ function renderTable() {
     <td>${churnBadge(churn)}</td>
     <td>${equipBadge(equip, churn)}</td>
     <td><span class="motivo-churn" title="${motivo}">${motivo||'—'}</span></td>
+    <td>${cacBadgeHTML(r['Nome do Cliente'], parseFloat((r['Valor mensal num']||'0').toString().replace(/[^0-9,.]/g,'').replace(',','.')) || 0)}</td>
   </tr>`;
   }).join('');
   // pagination
@@ -722,7 +772,19 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
 ['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { applyFilters(); syncQfBar(); });
 });
-loadData(false);
+// Inicializa Firebase e carrega CAC
+try {
+  firebase.initializeApp({
+    apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+    authDomain:"ibnet-platform.firebaseapp.com",
+    databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+    projectId:"ibnet-platform",
+    storageBucket:"ibnet-platform.firebasestorage.app",
+    messagingSenderId:"468380845527",
+    appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+  });
+} catch(e) {}
+loadCACData().then(() => loadData(false));
 
 // ── AUTO-REFRESH SILENCIOSO ───────────────────────────────────────────────
 const AUTO_REFRESH_MS = 15 * 60 * 1000; // 15 minutos

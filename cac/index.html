@@ -135,6 +135,19 @@ body.light thead tr{background:#f8fafc}
 body.light .stock-card,.body.light .tec-card,.body.light .kpi-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
 body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light .mf textarea{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
 
+/* ── PAYBACK / VÍNCULO ───────────────────────────────────────────────────── */
+.pb-pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.pb-ok{background:rgba(34,197,94,.12);color:#22c55e}
+.pb-warn{background:rgba(234,179,8,.12);color:#eab308}
+.pb-slow{background:rgba(239,68,68,.12);color:#ef4444}
+.pb-wait{background:rgba(100,116,139,.1);color:#94a3b8;font-style:italic}
+.btn-vincular{background:transparent;border:1px dashed var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.btn-vincular:hover{border-color:var(--blue);color:var(--blue)}
+.btn-vinculado{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+/* Autocomplete datalist input */
+.vincular-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
+.vincular-input:focus{outline:none;border-color:var(--accent)}
+
 @media(max-width:700px){
   main{padding:14px 12px}
   .mini-header{padding:8px 12px;gap:8px}
@@ -178,8 +191,8 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <div class="sec-head"><div><h2>Últimas Ativações</h2><p>Ativações registradas pelos técnicos este mês</p></div></div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th></tr></thead>
-        <tbody id="visao-tbody"><tr><td colspan="9" class="tbl-empty">Carregando…</td></tr></tbody>
+        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="11" class="tbl-empty">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -216,9 +229,9 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT (un)</th><th>DROP (m)</th><th>Conector (un)</th><th>CAC Total</th></tr></thead>
-        <tbody id="hist-tbody"><tr><td colspan="9" class="tbl-empty">Carregando…</td></tr></tbody>
-        <tfoot><tr class="tbl-footer"><td colspan="8" style="text-align:right">Total do período:</td><td id="hist-total">—</td></tr></tfoot>
+        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano Comercial</th><th>R$/mês</th><th>Payback</th><th>Vínculo</th></tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="13" class="tbl-empty">Carregando…</td></tr></tbody>
+        <tfoot><tr class="tbl-footer"><td colspan="8" style="text-align:right">Total do período:</td><td id="hist-total">—</td><td colspan="4"></td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -301,6 +314,29 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Vincular ao Comercial ─────────────────────────────────────── -->
+<div class="modal-overlay" id="vincular-modal">
+  <div class="modal-box">
+    <div class="modal-title">🔗 Vincular ao Comercial</div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.5">
+      Selecione o nome <strong>exato</strong> do cliente no Comercial para calcular o payback.
+      A busca é automática — use isso apenas quando o nome no CAC for diferente do cadastrado na planilha.
+    </p>
+    <div class="mf">
+      <label>Nome do cliente no Comercial</label>
+      <input type="text" id="vincular-input" class="vincular-input"
+             list="comercial-datalist" placeholder="Digite para buscar…" autocomplete="off"/>
+      <datalist id="comercial-datalist"></datalist>
+    </div>
+    <div id="vincular-preview" style="display:none;font-size:12px;padding:10px 14px;border-radius:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green)"></div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeVincularModal()">Cancelar</button>
+      <button class="btn-mcancel" onclick="removerVinculo()" style="border-color:var(--red);color:var(--red)" id="btn-remover-vinculo">Remover vínculo</button>
+      <button class="btn-msave" onclick="salvarVinculo()">Confirmar Vínculo</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL: Técnico ────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="tec-modal">
   <div class="modal-box">
@@ -351,8 +387,14 @@ let config       = {
   conector:{ precoUnit: 5, qtdPadrao: 2, alertaMin: 20 }
 };
 
-let _editPrecoTipo = null;
-let _editTecId     = null;
+let _editPrecoTipo  = null;
+let _editTecId      = null;
+let _vincularAtivId = null;
+
+// Dados do Comercial (Google Sheet)
+const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
+let comercialData = [];   // [{nome, plano, valor}, ...]
+let cacVinculos   = {};   // { ativId: { nomeComercial } }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 async function init() {
@@ -395,6 +437,14 @@ async function init() {
     allTecnicos = s.val() || {};
     renderTecnicos();
     populateTecFilter();
+  });
+
+  // Carregar dados do Comercial (para payback) e vínculos manuais
+  loadComercialSheet();
+  db.ref('cac/vinculos').on('value', s => {
+    cacVinculos = s.val() || {};
+    renderVisaoRecentes();
+    renderHistorico();
   });
 
   // Link técnico
@@ -466,10 +516,11 @@ function renderVisaoRecentes() {
     tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">Nenhuma ativação neste mês.</td></tr>`;
     return;
   }
-  tbody.innerHTML = lista.map(a => `
-    <tr>
+  tbody.innerHTML = lista.map(a => {
+    const com = findComercial(a);
+    return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
@@ -477,7 +528,10 @@ function renderVisaoRecentes() {
       <td>${(a.drop?.metros||0).toLocaleString('pt-BR')} m</td>
       <td>${a.conector?.qtd ?? 0} un</td>
       <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
-    </tr>`).join('');
+      <td style="font-size:11px;color:var(--muted)">${com?.plano||'—'}</td>
+      <td>${paybackPill(a.totalCAC, com?.valor)}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── ESTOQUE CARDS ─────────────────────────────────────────────────────────
@@ -571,9 +625,10 @@ function renderHistorico() {
   let tot = 0;
   tbody.innerHTML = lista.map(a => {
     tot += a.totalCAC||0;
+    const com = findComercial(a);
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
@@ -581,10 +636,120 @@ function renderHistorico() {
       <td style="text-align:center">${a.drop?.metros??0}</td>
       <td style="text-align:center">${a.conector?.qtd??0}</td>
       <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
+      <td style="font-size:11px;color:var(--muted)">${com?.plano||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${com?.valor ? fmt(com.valor) : '—'}</td>
+      <td>${paybackPill(a.totalCAC, com?.valor)}</td>
+      <td>${vinculoBtnHTML(a, com)}</td>
     </tr>`;
   }).join('');
   document.getElementById('hist-total').textContent = fmt(tot);
 }
+
+// ── COMERCIAL SHEET + PAYBACK ─────────────────────────────────────────────
+async function loadComercialSheet() {
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&t=${Date.now()}`;
+    const res  = await fetch(url, { cache:'no-store' });
+    const text = await res.text();
+    const rows = parseCSV(text);
+    comercialData = rows
+      .filter(r => r['Nome do Cliente'])
+      .map(r => ({
+        nome:  r['Nome do Cliente'].trim(),
+        plano: r['Plano Contratado'] || '',
+        valor: parseFloat((r['Valor mensal num']||r['Valor Mensal (R$)']||'0').toString().replace(/[^0-9,.]/g,'').replace(',','.')) || 0,
+      }));
+    // Popula datalist do modal de vinculação
+    const dl = document.getElementById('comercial-datalist');
+    const nomes = [...new Set(comercialData.map(c=>c.nome))].sort();
+    dl.innerHTML = nomes.map(n=>`<option value="${n}">`).join('');
+    renderVisaoRecentes();
+    renderHistorico();
+  } catch(e) { /* sheet indisponível — continua sem payback */ }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = splitCSVRow(lines[0]);
+  return lines.slice(1).map(line => {
+    const vals = splitCSVRow(line);
+    const obj  = {};
+    headers.forEach((h,i) => obj[h.trim().replace(/^"|"$/g,'')] = (vals[i]||'').replace(/^"|"$/g,'').trim());
+    return obj;
+  });
+}
+function splitCSVRow(row) {
+  const res=[]; let cur='', inQ=false;
+  for(const ch of row){ if(ch==='"'){inQ=!inQ}else if(ch===','&&!inQ){res.push(cur);cur=''}else{cur+=ch} }
+  res.push(cur); return res;
+}
+
+function normNome(s) { return (s||'').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' '); }
+
+function findComercial(ativ) {
+  // 1. Vínculo manual salvo
+  const vinc = cacVinculos[ativ.id];
+  if (vinc?.nomeComercial) {
+    return comercialData.find(c => normNome(c.nome) === normNome(vinc.nomeComercial)) || null;
+  }
+  // 2. Match automático pelo nome
+  const norm = normNome(ativ.cliente);
+  return comercialData.find(c => normNome(c.nome) === norm) || null;
+}
+
+function paybackPill(cac, valorMensal) {
+  if (!valorMensal || valorMensal <= 0) return `<span class="pb-pill pb-wait">Aguardando</span>`;
+  const meses = cac / valorMensal;
+  const label = meses < 1 ? `${Math.round(meses*30)} dias` : `${meses.toFixed(1)} meses`;
+  const cls   = meses <= 3 ? 'pb-ok' : meses <= 6 ? 'pb-warn' : 'pb-slow';
+  return `<span class="pb-pill ${cls}" title="CAC ÷ R$${valorMensal}/mês">⏱ ${label}</span>`;
+}
+
+function vinculoBtnHTML(ativ, comercial) {
+  const temVinc = !!cacVinculos[ativ.id];
+  if (comercial) {
+    return `<button class="btn-vinculado" onclick="openVincularModal('${ativ.id}')" title="Vinculado a: ${comercial.nome}">✅ ${temVinc ? 'Manual' : 'Auto'}</button>`;
+  }
+  return `<button class="btn-vincular" onclick="openVincularModal('${ativ.id}')">🔗 Vincular</button>`;
+}
+
+// ── MODAL VÍNCULO ─────────────────────────────────────────────────────────
+function openVincularModal(ativId) {
+  _vincularAtivId = ativId;
+  const vinc = cacVinculos[ativId];
+  document.getElementById('vincular-input').value = vinc?.nomeComercial || '';
+  document.getElementById('vincular-preview').style.display = 'none';
+  document.getElementById('btn-remover-vinculo').style.display = vinc ? '' : 'none';
+  document.getElementById('vincular-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('vincular-input').focus(), 100);
+}
+function closeVincularModal() { document.getElementById('vincular-modal').classList.remove('show'); _vincularAtivId=null; }
+async function salvarVinculo() {
+  const nome = document.getElementById('vincular-input').value.trim();
+  if (!nome) { alert('Selecione um cliente da lista.'); return; }
+  await db.ref(`cac/vinculos/${_vincularAtivId}`).set({ nomeComercial: nome, vinculadoEm: new Date().toISOString() });
+  closeVincularModal();
+}
+async function removerVinculo() {
+  if (!confirm('Remover vínculo manual? O sistema tentará casar pelo nome automaticamente.')) return;
+  await db.ref(`cac/vinculos/${_vincularAtivId}`).remove();
+  closeVincularModal();
+}
+document.getElementById('vincular-input').addEventListener('input', function() {
+  const nome = this.value.trim();
+  const c    = comercialData.find(x => normNome(x.nome) === normNome(nome));
+  const prev = document.getElementById('vincular-preview');
+  if (c && c.valor > 0) {
+    prev.style.display='';
+    prev.textContent = `✅ Encontrado! Plano: ${c.plano||'—'} · R$${c.valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}/mês`;
+  } else if (nome) {
+    prev.style.display='';
+    prev.style.background='rgba(239,68,68,.08)'; prev.style.borderColor='rgba(239,68,68,.2)'; prev.style.color='var(--red)';
+    prev.textContent = nome.length > 2 ? '⚠️ Nome não encontrado na planilha Comercial.' : '';
+  } else { prev.style.display='none'; }
+});
+document.getElementById('vincular-modal').addEventListener('click', function(e){ if(e.target===this) closeVincularModal(); });
 
 // ── TÉCNICOS ──────────────────────────────────────────────────────────────
 function renderTecnicos() {
