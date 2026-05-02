@@ -178,8 +178,8 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <div class="sec-head"><div><h2>Últimas Ativações</h2><p>Ativações registradas pelos técnicos este mês</p></div></div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th></tr></thead>
-        <tbody id="visao-tbody"><tr><td colspan="8" class="tbl-empty">Carregando…</td></tr></tbody>
+        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="9" class="tbl-empty">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -216,9 +216,9 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>Contrato</th><th>Técnico</th><th>ONT (un)</th><th>DROP (m)</th><th>Conector (un)</th><th>CAC Total</th></tr></thead>
-        <tbody id="hist-tbody"><tr><td colspan="8" class="tbl-empty">Carregando…</td></tr></tbody>
-        <tfoot><tr class="tbl-footer"><td colspan="7" style="text-align:right">Total do período:</td><td id="hist-total">—</td></tr></tfoot>
+        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT (un)</th><th>DROP (m)</th><th>Conector (un)</th><th>CAC Total</th></tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="9" class="tbl-empty">Carregando…</td></tr></tbody>
+        <tfoot><tr class="tbl-footer"><td colspan="8" style="text-align:right">Total do período:</td><td id="hist-total">—</td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -469,7 +469,8 @@ function renderVisaoRecentes() {
   tbody.innerHTML = lista.map(a => `
     <tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td>${a.ont?.qtd ?? 0} un</td>
@@ -572,7 +573,8 @@ function renderHistorico() {
     tot += a.totalCAC||0;
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td style="text-align:center">${a.ont?.qtd??0}</td>

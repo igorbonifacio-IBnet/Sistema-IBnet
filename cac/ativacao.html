@@ -121,6 +121,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
       <input type="text" id="f-cliente" placeholder="Nome completo do cliente" autocapitalize="words" autocomplete="off"/>
     </div>
     <div class="ff">
+      <label>PPPoE do Cliente *</label>
+      <input type="text" id="f-pppoe" placeholder="Ex: cliente@ibnet" autocomplete="off" autocapitalize="none" spellcheck="false"/>
+    </div>
+    <div class="ff">
       <label>Nº Contrato <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(opcional)</span></label>
       <input type="text" id="f-contrato" placeholder="Ex: 12345" inputmode="numeric"/>
     </div>
@@ -129,46 +133,37 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
     <div class="icard">
       <div class="icard-head">
         <div class="icard-name">📡 ONT</div>
-        <div class="icard-pinfo" id="pinfo-ont">—/un</div>
       </div>
       <div class="icard-row">
         <button class="qty-btn" onclick="adj('ont',-1)">−</button>
         <input type="number" id="f-ont" value="1" min="0" max="10" inputmode="numeric" oninput="calc()"/>
         <button class="qty-btn" onclick="adj('ont',1)">+</button>
       </div>
-      <div class="icard-sub">Total: <strong id="tot-ont">R$ 0,00</strong></div>
+      <div class="icard-sub" style="color:var(--muted)">quantidade utilizada</div>
     </div>
 
     <!-- DROP -->
     <div class="icard">
       <div class="icard-head">
         <div class="icard-name">🔌 DROP (cabo)</div>
-        <div class="icard-pinfo" id="pinfo-drop">—/metro</div>
       </div>
       <div class="icard-row">
-        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="metros" oninput="calc()" style="font-size:22px;font-weight:700"/>
+        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="0" oninput="calc()" style="font-size:22px;font-weight:700"/>
       </div>
-      <div class="icard-sub">metros utilizados · Total: <strong id="tot-drop">R$ 0,00</strong></div>
+      <div class="icard-sub" style="color:var(--muted)">metros utilizados</div>
     </div>
 
     <!-- Conector -->
     <div class="icard">
       <div class="icard-head">
         <div class="icard-name">🔗 Conector SC/APC</div>
-        <div class="icard-pinfo" id="pinfo-con">—/un</div>
       </div>
       <div class="icard-row">
         <button class="qty-btn" onclick="adj('con',-1)">−</button>
         <input type="number" id="f-con" value="2" min="0" max="20" inputmode="numeric" oninput="calc()"/>
         <button class="qty-btn" onclick="adj('con',1)">+</button>
       </div>
-      <div class="icard-sub">Total: <strong id="tot-con">R$ 0,00</strong></div>
-    </div>
-
-    <!-- CAC Total -->
-    <div class="cac-card">
-      <div class="cac-lbl">💰 CAC desta ativação</div>
-      <div class="cac-val" id="cac-total">R$ 0,00</div>
+      <div class="icard-sub" style="color:var(--muted)">quantidade utilizada</div>
     </div>
 
     <button class="btn-submit" id="btn-submit" onclick="submitAtiv()">✅ Registrar Ativação</button>
@@ -225,9 +220,7 @@ function fmt(v) {
   return 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function updateInfos() {
-  document.getElementById('pinfo-ont').textContent  = fmt(cfg.ont.precoUnit) + '/un';
-  document.getElementById('pinfo-drop').textContent = fmt(cfg.drop.precoPorMetro) + '/m';
-  document.getElementById('pinfo-con').textContent  = fmt(cfg.conector.precoUnit) + '/un';
+  // preços não exibidos para o técnico — apenas carregados internamente
   calc();
 }
 
@@ -277,6 +270,7 @@ function showForm() {
   document.getElementById('form-date').textContent =
     now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('f-cliente').value  = '';
+  document.getElementById('f-pppoe').value    = '';
   document.getElementById('f-contrato').value = '';
   document.getElementById('f-ont').value  = '1';
   document.getElementById('f-drop').value = '';
@@ -297,24 +291,14 @@ function adj(item, delta) {
 }
 
 function calc() {
-  const ontQtd = parseInt(document.getElementById('f-ont').value)  || 0;
-  const dropM  = parseFloat(document.getElementById('f-drop').value)|| 0;
-  const conQtd = parseInt(document.getElementById('f-con').value)   || 0;
-
-  const tOnt = ontQtd * cfg.ont.precoUnit;
-  const tDrp = dropM  * cfg.drop.precoPorMetro;
-  const tCon = conQtd * cfg.conector.precoUnit;
-  const tot  = tOnt + tDrp + tCon;
-
-  document.getElementById('tot-ont').textContent  = fmt(tOnt);
-  document.getElementById('tot-drop').textContent = fmt(tDrp);
-  document.getElementById('tot-con').textContent  = fmt(tCon);
-  document.getElementById('cac-total').textContent = fmt(tot);
+  // cálculo interno — valores não exibidos ao técnico
 }
 
 async function submitAtiv() {
   const cliente = document.getElementById('f-cliente').value.trim();
   if (!cliente) { document.getElementById('f-cliente').focus(); return; }
+  const pppoe = document.getElementById('f-pppoe').value.trim();
+  if (!pppoe) { document.getElementById('f-pppoe').focus(); return; }
 
   const ontQtd = parseInt(document.getElementById('f-ont').value)  || 0;
   const dropM  = parseFloat(document.getElementById('f-drop').value)|| 0;
@@ -334,6 +318,7 @@ async function submitAtiv() {
 
   const ativ = {
     cliente,
+    pppoe,
     contrato:  document.getElementById('f-contrato').value.trim(),
     tecnicoId: tecnico.id,
     tecnico:   tecnico.nome,
