@@ -162,6 +162,13 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .fotos-dl{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center}
 .fotos-dl:hover{background:rgba(255,255,255,.15)}
 .btn-vinculado{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);color:var(--green);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+/* Tipo edit */
+.tag-editable{cursor:pointer;transition:opacity .15s}
+.tag-editable:hover{opacity:.72}
+.tipo-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tipo-modal-btn{background:var(--bg);border:2px solid var(--border);color:var(--muted);padding:14px 10px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center}
+.tipo-modal-btn:hover{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.06)}
+.tipo-modal-btn.active{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.1)}
 /* Autocomplete datalist input */
 .vincular-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
 .vincular-input:focus{outline:none;border-color:var(--accent)}
@@ -381,6 +388,25 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Editar Tipo ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="tipo-modal">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-title">✏️ Alterar Tipo de Atividade</div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:-4px">
+      Selecione o tipo correto. Somente <strong>Instalação</strong> calcula o CAC.
+    </p>
+    <div class="tipo-modal-grid" id="tipo-modal-grid">
+      <button class="tipo-modal-btn" onclick="saveTipoAtiv('instalacao')">🔌 Instalação</button>
+      <button class="tipo-modal-btn" onclick="saveTipoAtiv('manutencao')">🔧 Manutenção</button>
+      <button class="tipo-modal-btn" onclick="saveTipoAtiv('migracao')">🔄 Migração Fibra</button>
+      <button class="tipo-modal-btn" onclick="saveTipoAtiv('infra')">🏗 Infra</button>
+    </div>
+    <div class="modal-actions" style="margin-top:4px">
+      <button class="btn-mcancel" onclick="closeTipoModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── LIGHTBOX: Fotos Instalação ──────────────────────────────────────── -->
 <div class="fotos-overlay" id="fotos-overlay" onclick="if(event.target===this)closeFotosViewer()">
   <button class="fotos-close" onclick="closeFotosViewer()">×</button>
@@ -573,7 +599,7 @@ function renderVisaoRecentes() {
     const isInst = tipo === 'instalacao';
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td><span class="tag ${TIPO_CLS[tipo]||'tag-inst'}">${TIPO_LABEL[tipo]||tipo}</span></td>
+      <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar o tipo">${TIPO_LABEL[tipo]||tipo} ✎</span></td>
       <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
@@ -981,6 +1007,33 @@ async function deleteTec(id) {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
   });
+});
+
+// ── MODAL: EDITAR TIPO ────────────────────────────────────────────────────
+let _editTipoAtivId = null;
+
+function openTipoModal(ativId) {
+  _editTipoAtivId = ativId;
+  const ativ = allAtivacoes.find(a => a.id === ativId);
+  const tipoAtual = ativ?.tipo || 'instalacao';
+  // Highlight botão atual
+  document.querySelectorAll('.tipo-modal-btn').forEach(b => {
+    const bTipo = b.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+    b.classList.toggle('active', bTipo === tipoAtual);
+  });
+  document.getElementById('tipo-modal').classList.add('show');
+}
+function closeTipoModal() {
+  document.getElementById('tipo-modal').classList.remove('show');
+  _editTipoAtivId = null;
+}
+async function saveTipoAtiv(novoTipo) {
+  if (!_editTipoAtivId) return;
+  await db.ref(`cac/ativacoes/${_editTipoAtivId}/tipo`).set(novoTipo);
+  closeTipoModal();
+}
+document.getElementById('tipo-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeTipoModal();
 });
 
 // ── FOTOS LIGHTBOX ────────────────────────────────────────────────────────
