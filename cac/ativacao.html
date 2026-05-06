@@ -86,6 +86,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 .foto-progress-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .3s}
 .foto-progress-lbl{font-size:10px;color:var(--muted);margin-top:4px;text-align:center}
 
+/* ── TIPO DE ATIVIDADE ───────────────────────────────────────────────────── */
+.tipo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tipo-btn{background:var(--card);border:2px solid var(--border);color:var(--muted);padding:14px 8px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none;line-height:1.4}
+.tipo-btn.active{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.09)}
+.tipo-btn:active{transform:scale(.93)}
+
 /* ── SUCESSO ─────────────────────────────────────────────────────────────── */
 .suc-icon{font-size:80px;margin-bottom:18px;animation:pop .45s cubic-bezier(.175,.885,.32,1.275)}
 @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
@@ -132,6 +138,16 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
     <div>
       <div class="form-greeting" id="form-greeting">Olá! 👋</div>
       <div class="form-datestr" id="form-date"></div>
+    </div>
+
+    <div class="ff">
+      <label>Tipo de Atividade *</label>
+      <div class="tipo-grid" id="tipo-grid">
+        <button class="tipo-btn active" onclick="setTipo(this,'instalacao')">🔌 Instalação</button>
+        <button class="tipo-btn" onclick="setTipo(this,'manutencao')">🔧 Manutenção</button>
+        <button class="tipo-btn" onclick="setTipo(this,'migracao')">🔄 Migração Fibra</button>
+        <button class="tipo-btn" onclick="setTipo(this,'infra')">🏗 Infra</button>
+      </div>
     </div>
 
     <div class="ff">
@@ -187,7 +203,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
     <!-- FOTOS -->
     <div class="foto-card">
       <div class="foto-card-head">
-        <div class="foto-card-name">📷 Fotos da instalação</div>
+        <div class="foto-card-name" id="foto-card-name">📷 Fotos da instalação</div>
         <div class="foto-card-count" id="foto-count">0 / 5</div>
       </div>
       <input type="file" id="foto-input" accept="image/*" multiple style="display:none" onchange="handleFotoSelect(this)"/>
@@ -237,6 +253,7 @@ const storage = firebase.storage();
 // ── ESTADO ────────────────────────────────────────────────────────────────
 let pin = '';
 let tecnico = null;
+let tipoAtiv = 'instalacao';
 let pendingFotos = [];   // Array de File objects selecionados
 let cfg = {
   ont:     { precoUnit: 120 },
@@ -281,23 +298,32 @@ function renderDots(mode) {
   }
 }
 async function verifyPin() {
-  document.getElementById('pin-err').textContent = '';
+  document.getElementById('pin-err').textContent = 'Verificando…';
+  // Desabilita teclado durante verificação
+  document.querySelectorAll('.pk').forEach(b => b.disabled = true);
   try {
     const snap = await db.ref('cac/tecnicos').once('value');
     const data = snap.val() || {};
-    const found = Object.entries(data).find(([,t]) => t.pin === pin && t.ativo !== false);
+    // String() garante comparação correta mesmo se PIN foi salvo como número
+    const found = Object.entries(data).find(([,t]) => String(t.pin) === String(pin) && t.ativo !== false);
     if (found) {
       tecnico = { id: found[0], ...found[1] };
+      document.getElementById('pin-err').textContent = '';
       showForm();
     } else {
       renderDots('err');
       document.getElementById('pin-err').textContent = 'PIN incorreto. Tente novamente.';
-      setTimeout(() => { pin = ''; renderDots(); }, 1400);
+      setTimeout(() => { pin = ''; renderDots(); document.querySelectorAll('.pk').forEach(b => b.disabled = false); }, 1400);
+      return;
     }
   } catch(e) {
+    renderDots('err');
     document.getElementById('pin-err').textContent = 'Erro de conexão. Verifique a internet.';
-    setTimeout(() => { pin = ''; renderDots(); }, 2000);
+    console.error('verifyPin error:', e);
+    setTimeout(() => { pin = ''; renderDots(); document.querySelectorAll('.pk').forEach(b => b.disabled = false); }, 2000);
+    return;
   }
+  document.querySelectorAll('.pk').forEach(b => b.disabled = false);
 }
 
 // ── FORM ──────────────────────────────────────────────────────────────────
@@ -329,6 +355,20 @@ function adj(item, delta) {
 
 function calc() {
   // cálculo interno — valores não exibidos ao técnico
+}
+
+// ── TIPO DE ATIVIDADE ─────────────────────────────────────────────────────
+const FOTO_LABELS = {
+  instalacao: '📷 Fotos da instalação',
+  manutencao: '📷 Fotos da manutenção',
+  migracao:   '📷 Fotos da migração',
+  infra:      '📷 Fotos da construção',
+};
+function setTipo(btn, tipo) {
+  tipoAtiv = tipo;
+  document.querySelectorAll('.tipo-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('foto-card-name').textContent = FOTO_LABELS[tipo] || '📷 Fotos da atividade';
 }
 
 // ── FOTOS ─────────────────────────────────────────────────────────────────
@@ -412,13 +452,15 @@ async function submitAtiv() {
   const pppoe = document.getElementById('f-pppoe').value.trim();
   if (!pppoe) { document.getElementById('f-pppoe').focus(); return; }
 
-  const ontQtd = parseInt(document.getElementById('f-ont').value)  || 0;
-  const dropM  = parseFloat(document.getElementById('f-drop').value)|| 0;
-  const conQtd = parseInt(document.getElementById('f-con').value)   || 0;
+  const ontQtd = parseInt(document.getElementById('f-ont').value)   || 0;
+  const dropM  = parseFloat(document.getElementById('f-drop').value) || 0;
+  const conQtd = parseInt(document.getElementById('f-con').value)    || 0;
 
-  const tOnt = ontQtd * cfg.ont.precoUnit;
-  const tDrp = dropM  * cfg.drop.precoPorMetro;
-  const tCon = conQtd * cfg.conector.precoUnit;
+  // CAC só é calculado para Instalação
+  const isInstalacao = tipoAtiv === 'instalacao';
+  const tOnt = isInstalacao ? ontQtd * cfg.ont.precoUnit          : 0;
+  const tDrp = isInstalacao ? dropM  * cfg.drop.precoPorMetro     : 0;
+  const tCon = isInstalacao ? conQtd * cfg.conector.precoUnit      : 0;
   const totalCAC = tOnt + tDrp + tCon;
 
   const btn = document.getElementById('btn-submit');
@@ -429,6 +471,7 @@ async function submitAtiv() {
   const id    = Date.now().toString();
 
   const ativ = {
+    tipo:      tipoAtiv,
     cliente,
     pppoe,
     contrato:  document.getElementById('f-contrato').value.trim(),
@@ -436,10 +479,10 @@ async function submitAtiv() {
     tecnico:   tecnico.nome,
     data:      agora.toISOString().slice(0,10),
     criadoEm:  agora.toISOString(),
-    ont:      { qtd: ontQtd, precoUnit: cfg.ont.precoUnit,      total: tOnt },
-    drop:     { metros: dropM, precoPorMetro: cfg.drop.precoPorMetro, total: tDrp },
-    conector: { qtd: conQtd, precoUnit: cfg.conector.precoUnit, total: tCon },
-    totalCAC,
+    ont:      { qtd: ontQtd, ...(isInstalacao && { precoUnit: cfg.ont.precoUnit,          total: tOnt }) },
+    drop:     { metros: dropM, ...(isInstalacao && { precoPorMetro: cfg.drop.precoPorMetro, total: tDrp }) },
+    conector: { qtd: conQtd, ...(isInstalacao && { precoUnit: cfg.conector.precoUnit,      total: tCon }) },
+    ...(isInstalacao && { totalCAC }),
   };
 
   try {
@@ -448,17 +491,24 @@ async function submitAtiv() {
     const fotoUrls = await uploadFotos(id);
     if (fotoUrls.length) ativ.fotos = fotoUrls;
 
-    // 2. Salvar ativação com URLs das fotos
+    // 2. Salvar ativação
     btn.textContent = 'Salvando…';
     await db.ref(`cac/ativacoes/${id}`).set(ativ);
 
-    // 3. Débito no estoque
+    // 3. Débito no estoque (todos os tipos)
     if (ontQtd > 0) await db.ref('cac/estoque/ont/qtd').transaction(v => (v||0) - ontQtd);
     if (dropM  > 0) await db.ref('cac/estoque/drop/metros').transaction(v => (v||0) - dropM);
     if (conQtd > 0) await db.ref('cac/estoque/conector/qtd').transaction(v => (v||0) - conQtd);
 
+    const TIPO_OK_LABEL = {
+      instalacao: '✅ Ativação registrada!',
+      manutencao: '✅ Manutenção registrada!',
+      migracao:   '✅ Migração registrada!',
+      infra:      '✅ Infra registrada!',
+    };
+    document.querySelector('.suc-title').textContent = TIPO_OK_LABEL[tipoAtiv] || '✅ Registrado!';
     document.getElementById('suc-cliente').textContent = cliente;
-    document.getElementById('suc-cac').textContent     = '';   // valor não exibido ao técnico
+    document.getElementById('suc-cac').textContent     = '';
     document.getElementById('suc-note').innerHTML =
       (fotoUrls.length ? `📷 ${fotoUrls.length} foto(s) enviada(s).<br>` : '') +
       `📦 Estoque atualizado automaticamente.<br>O Igor já consegue ver no painel.`;
@@ -471,6 +521,11 @@ async function submitAtiv() {
 }
 
 function resetForm() {
+  // Reset tipo
+  tipoAtiv = 'instalacao';
+  document.querySelectorAll('.tipo-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.getElementById('foto-card-name').textContent = '📷 Fotos da instalação';
+  // Reset fotos
   pendingFotos = [];
   document.getElementById('foto-input').value = '';
   document.getElementById('foto-grid').innerHTML = '';

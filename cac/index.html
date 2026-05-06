@@ -84,6 +84,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .tag-drop{background:rgba(34,197,94,.12);color:#22c55e}
 .tag-con{background:rgba(234,179,8,.12);color:#eab308}
 .tag-tec{background:rgba(100,116,139,.12);color:#94a3b8}
+.tag-inst{background:rgba(232,57,14,.12);color:#E8390E}
+.tag-manu{background:rgba(59,130,246,.12);color:#3b82f6}
+.tag-migr{background:rgba(234,179,8,.12);color:#eab308}
+.tag-infra{background:rgba(100,116,139,.12);color:#94a3b8}
 .tbl-footer td{font-weight:700;color:var(--text);background:rgba(255,255,255,.03);border-top:2px solid var(--border)!important;border-bottom:none!important}
 
 /* ── TÉCNICOS ────────────────────────────────────────────────────────────── */
@@ -194,9 +198,9 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   <!-- ── ABA: VISÃO GERAL ───────────────────────────────────────────────── -->
   <div class="tab-section active" id="tab-visao">
     <div class="kpi-grid">
-      <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Ativações no mês</div></div>
-      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">💰</span><div class="kpi-val" id="kpi-cac-med">—</div><div class="kpi-lbl">CAC Médio</div></div>
-      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">📊</span><div class="kpi-val" id="kpi-total-gasto">—</div><div class="kpi-lbl">Total Gasto no Mês</div></div>
+      <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Atividades no mês</div></div>
+      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">💰</span><div class="kpi-val" id="kpi-cac-med">—</div><div class="kpi-lbl">CAC Médio (Instalação)</div></div>
+      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">📊</span><div class="kpi-val" id="kpi-total-gasto">—</div><div class="kpi-lbl">Total CAC no Mês</div></div>
       <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">📡</span><div class="kpi-val" id="kpi-ont">—</div><div class="kpi-lbl">ONTs em Estoque</div></div>
       <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-drop">—</div><div class="kpi-lbl">DROP em Estoque (m)</div></div>
       <div class="kpi-card" style="--kpi-c:#eab308"><span class="kpi-icon">🔗</span><div class="kpi-val" id="kpi-con">—</div><div class="kpi-lbl">Conectores em Estoque</div></div>
@@ -205,8 +209,8 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <div class="sec-head"><div><h2>Últimas Ativações</h2><p>Ativações registradas pelos técnicos este mês</p></div></div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
-        <tbody id="visao-tbody"><tr><td colspan="12" class="tbl-empty">Carregando…</td></tr></tbody>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="13" class="tbl-empty">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -240,12 +244,19 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <div class="filter-bar">
       <select class="filter-sel" id="hist-mes" onchange="renderHistorico()"><!-- meses gerados --></select>
       <select class="filter-sel" id="hist-tec" onchange="renderHistorico()"><option value="">Todos os técnicos</option></select>
+      <select class="filter-sel" id="hist-tipo" onchange="renderHistorico()">
+        <option value="">Todos os tipos</option>
+        <option value="instalacao">🔌 Instalação</option>
+        <option value="manutencao">🔧 Manutenção</option>
+        <option value="migracao">🔄 Migração Fibra</option>
+        <option value="infra">🏗 Infra</option>
+      </select>
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano Comercial</th><th>R$/mês</th><th>Payback</th><th>Vínculo</th><th>Fotos</th></tr></thead>
-        <tbody id="hist-tbody"><tr><td colspan="14" class="tbl-empty">Carregando…</td></tr></tbody>
-        <tfoot><tr class="tbl-footer"><td colspan="8" style="text-align:right">Total do período:</td><td id="hist-total">—</td><td colspan="5"></td></tr></tfoot>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano Comercial</th><th>R$/mês</th><th>Payback</th><th>Vínculo</th><th>Fotos</th></tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="15" class="tbl-empty">Carregando…</td></tr></tbody>
+        <tfoot><tr class="tbl-footer"><td colspan="9" style="text-align:right">Total CAC (Instalações):</td><td id="hist-total">—</td><td colspan="5"></td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -417,6 +428,19 @@ let _editPrecoTipo  = null;
 let _editTecId      = null;
 let _vincularAtivId = null;
 
+const TIPO_LABEL = {
+  instalacao: '🔌 Instalação',
+  manutencao: '🔧 Manutenção',
+  migracao:   '🔄 Migração Fibra',
+  infra:      '🏗 Infra',
+};
+const TIPO_CLS = {
+  instalacao: 'tag-inst',
+  manutencao: 'tag-manu',
+  migracao:   'tag-migr',
+  infra:      'tag-infra',
+};
+
 // Dados do Comercial (Google Sheet)
 const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
 let comercialData = [];   // [{nome, plano, valor}, ...]
@@ -522,13 +546,14 @@ function showTab(id) {
 
 // ── KPIs ──────────────────────────────────────────────────────────────────
 function renderKPIs() {
-  const lista = ativacoesDoMes();
-  const total = lista.reduce((s,a)=>s+(a.totalCAC||0),0);
-  const med   = lista.length ? total/lista.length : 0;
+  const lista     = ativacoesDoMes();
+  const instLista = lista.filter(a => (a.tipo || 'instalacao') === 'instalacao');
+  const total     = instLista.reduce((s,a)=>s+(a.totalCAC||0),0);
+  const med       = instLista.length ? total/instLista.length : 0;
 
   document.getElementById('kpi-ativ').textContent       = lista.length;
-  document.getElementById('kpi-cac-med').textContent    = lista.length ? fmt(med) : '—';
-  document.getElementById('kpi-total-gasto').textContent= lista.length ? fmt(total) : '—';
+  document.getElementById('kpi-cac-med').textContent    = instLista.length ? fmt(med) : '—';
+  document.getElementById('kpi-total-gasto').textContent= instLista.length ? fmt(total) : '—';
   document.getElementById('kpi-ont').textContent  = estoque.ont.qtd  ?? 0;
   document.getElementById('kpi-drop').textContent = (estoque.drop.metros ?? 0).toLocaleString('pt-BR');
   document.getElementById('kpi-con').textContent  = estoque.conector.qtd ?? 0;
@@ -543,19 +568,22 @@ function renderVisaoRecentes() {
     return;
   }
   tbody.innerHTML = lista.map(a => {
-    const com = findComercial(a);
+    const com  = findComercial(a);
+    const tipo = a.tipo || 'instalacao';
+    const isInst = tipo === 'instalacao';
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:130px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td><span class="tag ${TIPO_CLS[tipo]||'tag-inst'}">${TIPO_LABEL[tipo]||tipo}</span></td>
+      <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td>${a.ont?.qtd ?? 0} un</td>
       <td>${(a.drop?.metros||0).toLocaleString('pt-BR')} m</td>
       <td>${a.conector?.qtd ?? 0} un</td>
-      <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
-      <td style="font-size:11px;color:var(--muted)">${com?.plano||'—'}</td>
-      <td>${paybackPill(a.totalCAC, com?.valor)}</td>
+      <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-size:11px;color:var(--muted)">${isInst ? (com?.plano||'—') : '—'}</td>
+      <td>${isInst ? paybackPill(a.totalCAC, com?.valor) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${fotoBadgeHTML(a)}</td>
     </tr>`;
   }).join('');
@@ -638,35 +666,41 @@ function populateTecFilter() {
     tecs.map(t=>`<option value="${t}"${t===cur?' selected':''}>${t}</option>`).join('');
 }
 function renderHistorico() {
-  const mes = document.getElementById('hist-mes')?.value || mesAtual();
-  const tec = document.getElementById('hist-tec')?.value || '';
+  const mes  = document.getElementById('hist-mes')?.value  || mesAtual();
+  const tec  = document.getElementById('hist-tec')?.value  || '';
+  const tipo = document.getElementById('hist-tipo')?.value || '';
   const lista = allAtivacoes.filter(a =>
-    a.data?.startsWith(mes) && (!tec || a.tecnico===tec)
+    a.data?.startsWith(mes) &&
+    (!tec  || a.tecnico===tec) &&
+    (!tipo || (a.tipo||'instalacao')===tipo)
   );
   const tbody = document.getElementById('hist-tbody');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">Nenhuma ativação neste período.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" class="tbl-empty">Nenhuma ativação neste período.</td></tr>`;
     document.getElementById('hist-total').textContent = '—';
     return;
   }
   let tot = 0;
   tbody.innerHTML = lista.map(a => {
-    tot += a.totalCAC||0;
-    const com = findComercial(a);
+    const tipoA  = a.tipo || 'instalacao';
+    const isInst = tipoA === 'instalacao';
+    if (isInst) tot += a.totalCAC||0;
+    const com = isInst ? findComercial(a) : null;
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
+      <td><span class="tag ${TIPO_CLS[tipoA]||'tag-inst'}">${TIPO_LABEL[tipoA]||tipoA}</span></td>
+      <td style="font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td style="text-align:center">${a.ont?.qtd??0}</td>
       <td style="text-align:center">${a.drop?.metros??0}</td>
       <td style="text-align:center">${a.conector?.qtd??0}</td>
-      <td style="font-weight:700;color:var(--accent)">${fmt(a.totalCAC)}</td>
-      <td style="font-size:11px;color:var(--muted)">${com?.plano||'—'}</td>
-      <td style="font-size:11px;color:var(--muted)">${com?.valor ? fmt(com.valor) : '—'}</td>
-      <td>${paybackPill(a.totalCAC, com?.valor)}</td>
-      <td>${vinculoBtnHTML(a, com)}</td>
+      <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-size:11px;color:var(--muted)">${isInst ? (com?.plano||'—') : '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${isInst && com?.valor ? fmt(com.valor) : '—'}</td>
+      <td>${isInst ? paybackPill(a.totalCAC, com?.valor) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${isInst ? vinculoBtnHTML(a, com) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${fotoBadgeHTML(a)}</td>
     </tr>`;
   }).join('');
