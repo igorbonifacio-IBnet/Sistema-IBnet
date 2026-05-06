@@ -6,6 +6,7 @@
 <title>Registro de Ativação — IBNET</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -67,6 +68,23 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 .btn-submit:disabled{opacity:.45;cursor:default}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;width:100%;transition:all .15s}
 .btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+
+/* ── FOTOS ───────────────────────────────────────────────────────────────── */
+.foto-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.foto-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.foto-card-name{font-size:15px;font-weight:700}
+.foto-card-count{font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:3px 9px;border-radius:20px}
+.foto-add-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;border:2px dashed var(--border);border-radius:10px;background:transparent;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;-webkit-user-select:none;user-select:none}
+.foto-add-btn:active{border-color:var(--accent);color:var(--accent);background:rgba(232,57,14,.06)}
+.foto-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.foto-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#000}
+.foto-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.foto-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.75);border:none;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;-webkit-user-select:none;user-select:none;line-height:1}
+.foto-remove:active{background:var(--red)}
+.foto-progress{margin-top:8px;display:none}
+.foto-progress-bar{height:4px;background:var(--border);border-radius:4px;overflow:hidden}
+.foto-progress-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .3s}
+.foto-progress-lbl{font-size:10px;color:var(--muted);margin-top:4px;text-align:center}
 
 /* ── SUCESSO ─────────────────────────────────────────────────────────────── */
 .suc-icon{font-size:80px;margin-bottom:18px;animation:pop .45s cubic-bezier(.175,.885,.32,1.275)}
@@ -166,6 +184,23 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
       <div class="icard-sub" style="color:var(--muted)">quantidade utilizada</div>
     </div>
 
+    <!-- FOTOS -->
+    <div class="foto-card">
+      <div class="foto-card-head">
+        <div class="foto-card-name">📷 Fotos da instalação</div>
+        <div class="foto-card-count" id="foto-count">0 / 5</div>
+      </div>
+      <input type="file" id="foto-input" accept="image/*" multiple style="display:none" onchange="handleFotoSelect(this)"/>
+      <button class="foto-add-btn" id="foto-add-btn" onclick="document.getElementById('foto-input').click()">
+        📷 Adicionar foto
+      </button>
+      <div class="foto-grid" id="foto-grid"></div>
+      <div class="foto-progress" id="foto-progress">
+        <div class="foto-progress-bar"><div class="foto-progress-fill" id="foto-progress-fill" style="width:0%"></div></div>
+        <div class="foto-progress-lbl" id="foto-progress-lbl">Enviando…</div>
+      </div>
+    </div>
+
     <button class="btn-submit" id="btn-submit" onclick="submitAtiv()">✅ Registrar Ativação</button>
     <button class="btn-ghost" onclick="logout()">↩ Trocar técnico</button>
   </div>
@@ -177,7 +212,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
   <div class="suc-title">Ativação registrada!</div>
   <div class="suc-cliente" id="suc-cliente"></div>
   <div class="suc-cac" id="suc-cac"></div>
-  <div class="suc-note">📦 Estoque atualizado automaticamente.<br>O Igor já consegue ver no painel.</div>
+  <div class="suc-note" id="suc-note">📦 Estoque atualizado automaticamente.<br>O Igor já consegue ver no painel.</div>
   <div class="suc-actions">
     <button class="btn-submit" onclick="resetForm()">+ Registrar outra</button>
     <button class="btn-ghost" onclick="logout()">↩ Sair</button>
@@ -196,11 +231,13 @@ const FB = {
   appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
 };
 firebase.initializeApp(FB);
-const db = firebase.database();
+const db      = firebase.database();
+const storage = firebase.storage();
 
 // ── ESTADO ────────────────────────────────────────────────────────────────
 let pin = '';
 let tecnico = null;
+let pendingFotos = [];   // Array de File objects selecionados
 let cfg = {
   ont:     { precoUnit: 120 },
   drop:    { precoPorMetro: 0.30 },
@@ -294,6 +331,81 @@ function calc() {
   // cálculo interno — valores não exibidos ao técnico
 }
 
+// ── FOTOS ─────────────────────────────────────────────────────────────────
+function handleFotoSelect(input) {
+  const files = Array.from(input.files);
+  const space = 5 - pendingFotos.length;
+  files.slice(0, space).forEach(f => {
+    if (f.size > 15 * 1024 * 1024) { alert(`"${f.name}" é muito grande (máx 15 MB).`); return; }
+    pendingFotos.push(f);
+  });
+  input.value = '';
+  renderFotoGrid();
+}
+
+function removeFoto(i) {
+  pendingFotos.splice(i, 1);
+  renderFotoGrid();
+}
+
+function renderFotoGrid() {
+  const grid = document.getElementById('foto-grid');
+  const count = document.getElementById('foto-count');
+  const addBtn = document.getElementById('foto-add-btn');
+  count.textContent = `${pendingFotos.length} / 5`;
+  addBtn.style.display = pendingFotos.length >= 5 ? 'none' : '';
+  grid.innerHTML = pendingFotos.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    return `<div class="foto-thumb">
+      <img src="${url}" loading="lazy"/>
+      <button class="foto-remove" onclick="removeFoto(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function compressImage(file, maxW = 1400, quality = 0.80) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const blobUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(blobUrl);
+      canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(file); };
+    img.src = blobUrl;
+  });
+}
+
+async function uploadFotos(ativId) {
+  if (!pendingFotos.length) return [];
+  const progEl   = document.getElementById('foto-progress');
+  const fillEl   = document.getElementById('foto-progress-fill');
+  const lblEl    = document.getElementById('foto-progress-lbl');
+  progEl.style.display = '';
+  const urls = [];
+  for (let i = 0; i < pendingFotos.length; i++) {
+    lblEl.textContent = `Enviando foto ${i+1} de ${pendingFotos.length}…`;
+    fillEl.style.width = `${Math.round((i / pendingFotos.length) * 100)}%`;
+    try {
+      const compressed = await compressImage(pendingFotos[i]);
+      const ref = storage.ref(`cac/ativacoes/${ativId}/foto_${i+1}_${Date.now()}.jpg`);
+      const snap = await ref.put(compressed, { contentType:'image/jpeg' });
+      const url  = await snap.ref.getDownloadURL();
+      urls.push(url);
+    } catch(e) {
+      console.warn('Erro ao enviar foto', i+1, e);
+    }
+  }
+  fillEl.style.width = '100%';
+  lblEl.textContent  = `✅ ${urls.length} foto(s) enviada(s)`;
+  return urls;
+}
+
 async function submitAtiv() {
   const cliente = document.getElementById('f-cliente').value.trim();
   if (!cliente) { document.getElementById('f-cliente').focus(); return; }
@@ -331,14 +443,25 @@ async function submitAtiv() {
   };
 
   try {
+    // 1. Upload das fotos primeiro (usa o ID da ativação)
+    btn.textContent = pendingFotos.length ? `📷 Enviando ${pendingFotos.length} foto(s)…` : 'Salvando…';
+    const fotoUrls = await uploadFotos(id);
+    if (fotoUrls.length) ativ.fotos = fotoUrls;
+
+    // 2. Salvar ativação com URLs das fotos
+    btn.textContent = 'Salvando…';
     await db.ref(`cac/ativacoes/${id}`).set(ativ);
-    // Débito no estoque
+
+    // 3. Débito no estoque
     if (ontQtd > 0) await db.ref('cac/estoque/ont/qtd').transaction(v => (v||0) - ontQtd);
     if (dropM  > 0) await db.ref('cac/estoque/drop/metros').transaction(v => (v||0) - dropM);
     if (conQtd > 0) await db.ref('cac/estoque/conector/qtd').transaction(v => (v||0) - conQtd);
 
     document.getElementById('suc-cliente').textContent = cliente;
-    document.getElementById('suc-cac').textContent     = fmt(totalCAC);
+    document.getElementById('suc-cac').textContent     = '';   // valor não exibido ao técnico
+    document.getElementById('suc-note').innerHTML =
+      (fotoUrls.length ? `📷 ${fotoUrls.length} foto(s) enviada(s).<br>` : '') +
+      `📦 Estoque atualizado automaticamente.<br>O Igor já consegue ver no painel.`;
     setScreen('sc-ok');
   } catch(e) {
     alert('Erro ao salvar.\nVerifique a conexão e tente novamente.\n\n' + e.message);
@@ -347,7 +470,15 @@ async function submitAtiv() {
   }
 }
 
-function resetForm() { showForm(); }
+function resetForm() {
+  pendingFotos = [];
+  document.getElementById('foto-input').value = '';
+  document.getElementById('foto-grid').innerHTML = '';
+  document.getElementById('foto-count').textContent = '0 / 5';
+  document.getElementById('foto-add-btn').style.display = '';
+  document.getElementById('foto-progress').style.display = 'none';
+  showForm();
+}
 function logout()    { tecnico=null; pin=''; renderDots(); setScreen('sc-pin'); }
 function setScreen(id) {
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
