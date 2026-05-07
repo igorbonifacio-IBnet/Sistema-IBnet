@@ -1041,13 +1041,25 @@ let _fotosArr = [];
 let _fotosIdx = 0;
 
 function fotoBadgeHTML(ativ) {
-  const fotos = ativ.fotos;
-  if (!fotos || !fotos.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
-  return `<button class="foto-badge" onclick="openFotosByAtivId('${ativ.id}')">📷 ${fotos.length}</button>`;
+  // temFotos = contagem (novo formato base64 no RTDB)
+  // fotos = array de URLs (formato antigo Firebase Storage)
+  const count = ativ.temFotos || ativ.fotos?.length || 0;
+  if (!count) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  return `<button class="foto-badge" onclick="openFotosByAtivId('${ativ.id}')">📷 ${count}</button>`;
 }
-function openFotosByAtivId(ativId) {
+async function openFotosByAtivId(ativId) {
   const ativ = allAtivacoes.find(a => a.id === ativId);
-  if (ativ?.fotos?.length) openFotosViewer(ativ.fotos);
+  if (!ativ) return;
+  // Formato antigo: URLs do Firebase Storage já salvas na ativação
+  if (ativ.fotos?.length) { openFotosViewer(ativ.fotos); return; }
+  // Formato novo: base64 salvo separadamente em cac/fotos/{id}
+  if (ativ.temFotos) {
+    try {
+      const snap = await db.ref(`cac/fotos/${ativId}`).once('value');
+      const fotos = snap.val();
+      if (Array.isArray(fotos) && fotos.length) { openFotosViewer(fotos); return; }
+    } catch(e) { console.error('Erro ao carregar fotos:', e); }
+  }
 }
 function openFotosViewer(fotos) {
   if (!fotos || !fotos.length) return;
