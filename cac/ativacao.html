@@ -247,8 +247,16 @@ const FB = {
   appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
 };
 firebase.initializeApp(FB);
-const db      = firebase.database();
-const storage = firebase.storage();
+const db = firebase.database();
+
+// Storage inicializado com segurança — se não estiver habilitado no Firebase,
+// o app continua funcionando sem upload de fotos
+let storage = null;
+try {
+  storage = firebase.storage();
+} catch(e) {
+  console.warn('Firebase Storage indisponível. Fotos desabilitadas.', e);
+}
 
 // ── ESTADO ────────────────────────────────────────────────────────────────
 let pin = '';
@@ -338,6 +346,9 @@ function showForm() {
   document.getElementById('f-ont').value  = '1';
   document.getElementById('f-drop').value = '';
   document.getElementById('f-con').value  = String(cfg.conector.qtdPadrao ?? 2);
+  // Esconder zona de fotos se Storage indisponível
+  const fotoCard = document.querySelector('.foto-card');
+  if (fotoCard) fotoCard.style.display = storage ? '' : 'none';
   const btn = document.getElementById('btn-submit');
   btn.disabled = false;
   btn.textContent = '✅ Registrar Ativação';
@@ -403,18 +414,30 @@ function renderFotoGrid() {
   }).join('');
 }
 
-function compressImage(file, maxW = 1400, quality = 0.80) {
+function compressImage(file, maxW = 1024, quality = 0.78) {
   return new Promise(resolve => {
     const img = new Image();
     const blobUrl = URL.createObjectURL(file);
     img.onload = () => {
-      let w = img.width, h = img.height;
-      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(blobUrl);
-      canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', quality);
+      try {
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        // Limite absoluto de área para não explodir memória no mobile
+        const maxArea = 1024 * 1024; // ~1 megapixel
+        if (w * h > maxArea) {
+          const scale = Math.sqrt(maxArea / (w * h));
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(blobUrl);
+        canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', quality);
+      } catch(err) {
+        URL.revokeObjectURL(blobUrl);
+        resolve(file); // fallback: envia original
+      }
     };
     img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(file); };
     img.src = blobUrl;
@@ -423,9 +446,15 @@ function compressImage(file, maxW = 1400, quality = 0.80) {
 
 async function uploadFotos(ativId) {
   if (!pendingFotos.length) return [];
-  const progEl   = document.getElementById('foto-progress');
-  const fillEl   = document.getElementById('foto-progress-fill');
-  const lblEl    = document.getElementById('foto-progress-lbl');
+  // Storage não disponível — salvar ativação sem fotos
+  if (!storage) {
+    document.getElementById('foto-progress-lbl').textContent = '⚠️ Upload indisponível — ativação salva sem fotos.';
+    document.getElementById('foto-progress').style.display = '';
+    return [];
+  }
+  const progEl = document.getElementById('foto-progress');
+  const fillEl = document.getElementById('foto-progress-fill');
+  const lblEl  = document.getElementById('foto-progress-lbl');
   progEl.style.display = '';
   const urls = [];
   for (let i = 0; i < pendingFotos.length; i++) {
@@ -433,8 +462,8 @@ async function uploadFotos(ativId) {
     fillEl.style.width = `${Math.round((i / pendingFotos.length) * 100)}%`;
     try {
       const compressed = await compressImage(pendingFotos[i]);
-      const ref = storage.ref(`cac/ativacoes/${ativId}/foto_${i+1}_${Date.now()}.jpg`);
-      const snap = await ref.put(compressed, { contentType:'image/jpeg' });
+      const ref  = storage.ref(`cac/ativacoes/${ativId}/foto_${i+1}_${Date.now()}.jpg`);
+      const snap = await ref.put(compressed, { contentType: 'image/jpeg' });
       const url  = await snap.ref.getDownloadURL();
       urls.push(url);
     } catch(e) {
@@ -442,7 +471,9 @@ async function uploadFotos(ativId) {
     }
   }
   fillEl.style.width = '100%';
-  lblEl.textContent  = `✅ ${urls.length} foto(s) enviada(s)`;
+  lblEl.textContent = urls.length
+    ? `✅ ${urls.length} foto(s) enviada(s)`
+    : '⚠️ Não foi possível enviar as fotos. Ativação salva sem elas.';
   return urls;
 }
 
@@ -479,10 +510,10 @@ async function submitAtiv() {
     tecnico:   tecnico.nome,
     data:      agora.toISOString().slice(0,10),
     criadoEm:  agora.toISOString(),
-    ont:      { qtd: ontQtd, ...(isInstalacao && { precoUnit: cfg.ont.precoUnit,          total: tOnt }) },
-    drop:     { metros: dropM, ...(isInstalacao && { precoPorMetro: cfg.drop.precoPorMetro, total: tDrp }) },
-    conector: { qtd: conQtd, ...(isInstalacao && { precoUnit: cfg.conector.precoUnit,      total: tCon }) },
-    ...(isInstalacao && { totalCAC }),
+    ont:      Object.assign({ qtd: ontQtd }, isInstalacao ? { precoUnit: cfg.ont.precoUnit,           total: tOnt } : {}),
+    drop:     Object.assign({ metros: dropM }, isInstalacao ? { precoPorMetro: cfg.drop.precoPorMetro, total: tDrp } : {}),
+    conector: Object.assign({ qtd: conQtd }, isInstalacao ? { precoUnit: cfg.conector.precoUnit,       total: tCon } : {}),
+    ...(isInstalacao ? { totalCAC } : {}),
   };
 
   try {
