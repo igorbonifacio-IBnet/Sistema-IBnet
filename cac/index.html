@@ -388,6 +388,33 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Editar Insumos ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="insumos-modal">
+  <div class="modal-box" style="max-width:400px">
+    <div class="modal-title">✎ Editar Insumos Utilizados</div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:-4px" id="insumos-modal-cliente"></p>
+    <div class="mf-row">
+      <div class="mf">
+        <label>📡 ONT (unidades)</label>
+        <input type="number" id="ei-ont" min="0" max="20" inputmode="numeric" oninput="calcInsumoDiff()"/>
+      </div>
+      <div class="mf">
+        <label>🔗 Conector (unidades)</label>
+        <input type="number" id="ei-con" min="0" max="50" inputmode="numeric" oninput="calcInsumoDiff()"/>
+      </div>
+    </div>
+    <div class="mf">
+      <label>🔌 DROP (metros)</label>
+      <input type="number" id="ei-drop" min="0" step="1" inputmode="numeric" oninput="calcInsumoDiff()"/>
+    </div>
+    <div id="ei-diff-preview" style="display:none;font-size:12px;padding:10px 14px;border-radius:8px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:var(--blue);line-height:1.8"></div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeInsumosModal()">Cancelar</button>
+      <button class="btn-msave" onclick="saveInsumos()">Salvar e ajustar estoque</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL: Editar Tipo ─────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="tipo-modal">
   <div class="modal-box" style="max-width:360px">
@@ -610,7 +637,7 @@ function renderVisaoRecentes() {
       <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-size:11px;color:var(--muted)">${isInst ? (com?.plano||'—') : '—'}</td>
       <td>${isInst ? paybackPill(a.totalCAC, com?.valor) : '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${fotoBadgeHTML(a)}</td>
+      <td style="display:flex;gap:4px;align-items:center">${fotoBadgeHTML(a)}<button class="icon-btn" onclick="openInsumosModal('${a.id}')" title="Editar insumos" style="flex-shrink:0">✎</button></td>
     </tr>`;
   }).join('');
 }
@@ -727,7 +754,7 @@ function renderHistorico() {
       <td style="font-size:11px;color:var(--muted)">${isInst && com?.valor ? fmt(com.valor) : '—'}</td>
       <td>${isInst ? paybackPill(a.totalCAC, com?.valor) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${isInst ? vinculoBtnHTML(a, com) : '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${fotoBadgeHTML(a)}</td>
+      <td style="display:flex;gap:4px;align-items:center">${fotoBadgeHTML(a)}<button class="icon-btn" onclick="openInsumosModal('${a.id}')" title="Editar insumos" style="flex-shrink:0">✎</button></td>
     </tr>`;
   }).join('');
   document.getElementById('hist-total').textContent = fmt(tot);
@@ -1007,6 +1034,109 @@ async function deleteTec(id) {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
   });
+});
+
+// ── MODAL: EDITAR INSUMOS ─────────────────────────────────────────────────
+let _editInsumosAtivId = null;
+let _editInsumosOld    = { ont: 0, drop: 0, con: 0 };
+
+function openInsumosModal(ativId) {
+  const ativ = allAtivacoes.find(a => a.id === ativId);
+  if (!ativ) return;
+  _editInsumosAtivId = ativId;
+  _editInsumosOld = {
+    ont:  ativ.ont?.qtd    ?? 0,
+    drop: ativ.drop?.metros ?? 0,
+    con:  ativ.conector?.qtd ?? 0,
+  };
+  document.getElementById('insumos-modal-cliente').textContent =
+    `Cliente: ${ativ.cliente} · ${ativ.data ? ativ.data.split('-').reverse().join('/') : ''}`;
+  document.getElementById('ei-ont').value  = _editInsumosOld.ont;
+  document.getElementById('ei-drop').value = _editInsumosOld.drop;
+  document.getElementById('ei-con').value  = _editInsumosOld.con;
+  document.getElementById('ei-diff-preview').style.display = 'none';
+  document.getElementById('insumos-modal').classList.add('show');
+  setTimeout(() => document.getElementById('ei-drop').focus(), 100);
+}
+function closeInsumosModal() {
+  document.getElementById('insumos-modal').classList.remove('show');
+  _editInsumosAtivId = null;
+}
+
+function calcInsumoDiff() {
+  const novoOnt  = parseInt(document.getElementById('ei-ont').value)   || 0;
+  const novoDrop = parseFloat(document.getElementById('ei-drop').value) || 0;
+  const novoCon  = parseInt(document.getElementById('ei-con').value)    || 0;
+  const dOnt  = novoOnt  - _editInsumosOld.ont;
+  const dDrop = novoDrop - _editInsumosOld.drop;
+  const dCon  = novoCon  - _editInsumosOld.con;
+
+  const linhas = [];
+  if (dOnt  !== 0) linhas.push(`📡 ONT: ${dOnt > 0 ? '+' : ''}${dOnt} un no estoque ${dOnt > 0 ? '⬇️' : '⬆️'}`);
+  if (dDrop !== 0) linhas.push(`🔌 DROP: ${dDrop > 0 ? '+' : ''}${dDrop} m no estoque ${dDrop > 0 ? '⬇️' : '⬆️'}`);
+  if (dCon  !== 0) linhas.push(`🔗 Conector: ${dCon > 0 ? '+' : ''}${dCon} un no estoque ${dCon > 0 ? '⬇️' : '⬆️'}`);
+
+  const prev = document.getElementById('ei-diff-preview');
+  if (linhas.length) {
+    prev.style.display = '';
+    prev.innerHTML = '<strong>Impacto no estoque:</strong><br>' + linhas.join('<br>');
+  } else {
+    prev.style.display = 'none';
+  }
+}
+
+async function saveInsumos() {
+  if (!_editInsumosAtivId) return;
+  const ativ = allAtivacoes.find(a => a.id === _editInsumosAtivId);
+  if (!ativ) return;
+
+  const novoOnt  = parseInt(document.getElementById('ei-ont').value)   || 0;
+  const novoDrop = parseFloat(document.getElementById('ei-drop').value) || 0;
+  const novoCon  = parseInt(document.getElementById('ei-con').value)    || 0;
+
+  const dOnt  = novoOnt  - _editInsumosOld.ont;
+  const dDrop = novoDrop - _editInsumosOld.drop;
+  const dCon  = novoCon  - _editInsumosOld.con;
+
+  const btn = document.querySelector('#insumos-modal .btn-msave');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+
+  try {
+    const isInst = (ativ.tipo || 'instalacao') === 'instalacao';
+
+    // Atualiza campos da ativação
+    const updates = {};
+    updates[`cac/ativacoes/${_editInsumosAtivId}/ont/qtd`]       = novoOnt;
+    updates[`cac/ativacoes/${_editInsumosAtivId}/drop/metros`]    = novoDrop;
+    updates[`cac/ativacoes/${_editInsumosAtivId}/conector/qtd`]   = novoCon;
+
+    // Recalcula CAC se for Instalação
+    if (isInst) {
+      const tOnt = novoOnt  * (config.ont.precoUnit          || 0);
+      const tDrp = novoDrop * (config.drop.precoPorMetro      || 0);
+      const tCon = novoCon  * (config.conector.precoUnit      || 0);
+      updates[`cac/ativacoes/${_editInsumosAtivId}/ont/total`]      = tOnt;
+      updates[`cac/ativacoes/${_editInsumosAtivId}/drop/total`]      = tDrp;
+      updates[`cac/ativacoes/${_editInsumosAtivId}/conector/total`]  = tCon;
+      updates[`cac/ativacoes/${_editInsumosAtivId}/totalCAC`]        = tOnt + tDrp + tCon;
+    }
+
+    await db.ref().update(updates);
+
+    // Ajusta estoque pela diferença (negativo = mais consumo = debita)
+    if (dOnt  !== 0) await db.ref('cac/estoque/ont/qtd').transaction(v      => (v||0) - dOnt);
+    if (dDrop !== 0) await db.ref('cac/estoque/drop/metros').transaction(v  => (v||0) - dDrop);
+    if (dCon  !== 0) await db.ref('cac/estoque/conector/qtd').transaction(v => (v||0) - dCon);
+
+    closeInsumosModal();
+  } catch(e) {
+    alert('Erro ao salvar: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar e ajustar estoque';
+  }
+}
+document.getElementById('insumos-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeInsumosModal();
 });
 
 // ── MODAL: EDITAR TIPO ────────────────────────────────────────────────────
