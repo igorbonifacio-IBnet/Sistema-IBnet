@@ -169,6 +169,16 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .tipo-modal-btn{background:var(--bg);border:2px solid var(--border);color:var(--muted);padding:14px 10px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center}
 .tipo-modal-btn:hover{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.06)}
 .tipo-modal-btn.active{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.1)}
+/* Lotes por produto */
+.lotes-wrap{margin-top:12px;display:flex;flex-direction:column;gap:4px}
+.lotes-hdr{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
+.lote-row{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:7px;border:1px solid transparent}
+.lote-row.lote-atual{border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.06)}
+.lote-idx{font-weight:700;color:var(--muted);min-width:20px}
+.lote-qtd{font-weight:700;color:var(--text)}
+.lote-preco{color:var(--muted);text-align:right}
+.lote-atual-tag{font-size:9px;background:rgba(34,197,94,.15);color:var(--green);padding:2px 6px;border-radius:10px;font-weight:700;white-space:nowrap}
+.lote-zerado{opacity:.35;font-style:italic}
 /* Autocomplete datalist input */
 .vincular-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
 .vincular-input:focus{outline:none;border-color:var(--accent)}
@@ -480,6 +490,7 @@ let config       = {
 let _editPrecoTipo  = null;
 let _editTecId      = null;
 let _vincularAtivId = null;
+let allLotes        = { ont: {}, drop: {}, conector: {} };
 
 const TIPO_LABEL = {
   instalacao: '🔌 Instalação',
@@ -535,6 +546,13 @@ async function init() {
     const v = s.val() || {};
     allEntradas = Object.entries(v).map(([id,e])=>({...e,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
     renderEntradas();
+  });
+  db.ref('cac/lotes').on('value', s => {
+    const v = s.val() || {};
+    allLotes.ont      = v.ont      || {};
+    allLotes.drop     = v.drop     || {};
+    allLotes.conector = v.conector || {};
+    renderStockCards();
   });
   db.ref('cac/tecnicos').on('value', s => {
     allTecnicos = s.val() || {};
@@ -643,30 +661,66 @@ function renderVisaoRecentes() {
 }
 
 // ── ESTOQUE CARDS ─────────────────────────────────────────────────────────
+function getLotesAtivos(tipo) {
+  const restField = tipo === 'drop' ? 'metrosRestante' : 'qtdRestante';
+  return Object.entries(allLotes[tipo] || {})
+    .map(([id, l]) => ({ id, ...l }))
+    .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+}
+
 function renderStockCards() {
   const items = [
-    { tipo:'ont',      icon:'📡', nome:'ONT',         qty: estoque.ont.qtd ?? 0,          unit:'unidades',
-      price: fmt(config.ont.precoUnit)+'/un',         min: config.ont.alertaMin ?? 3 },
-    { tipo:'drop',     icon:'🔌', nome:'DROP (cabo)', qty: estoque.drop.metros ?? 0,       unit:'metros',
-      price: fmt(config.drop.precoPorMetro)+'/metro', min: config.drop.alertaMin ?? 200 },
-    { tipo:'conector', icon:'🔗', nome:'Conector',    qty: estoque.conector.qtd ?? 0,      unit:'unidades',
-      price: fmt(config.conector.precoUnit)+'/un',    min: config.conector.alertaMin ?? 20 },
+    { tipo:'ont',      icon:'📡', nome:'ONT',         qty: estoque.ont.qtd ?? 0,    unit:'un',
+      unitFull:'unidades', min: config.ont.alertaMin ?? 3 },
+    { tipo:'drop',     icon:'🔌', nome:'DROP (cabo)', qty: estoque.drop.metros ?? 0, unit:'m',
+      unitFull:'metros',   min: config.drop.alertaMin ?? 200 },
+    { tipo:'conector', icon:'🔗', nome:'Conector',    qty: estoque.conector.qtd ?? 0, unit:'un',
+      unitFull:'unidades', min: config.conector.alertaMin ?? 20 },
   ];
   document.getElementById('stock-grid').innerHTML = items.map(i => {
     const pct   = i.min > 0 ? i.qty / i.min : 1;
     const state = pct <= 0 ? 'critical' : pct <= 1.5 ? 'low' : '';
     const badge = pct <= 0 ? 'CRÍTICO' : pct <= 1.5 ? 'BAIXO' : 'OK';
+    const isMetro  = i.tipo === 'drop';
+    const restField  = isMetro ? 'metrosRestante'  : 'qtdRestante';
+    const precoField = isMetro ? 'precoPorMetro'   : 'precoUnit';
+    const unSuffix   = isMetro ? '/m' : '/un';
+
+    // Lotes ativos (ordenados do mais antigo para o mais novo)
+    const lotes = getLotesAtivos(i.tipo);
+    const primeiroAtivo = lotes.find(l => (l[restField] || 0) > 0);
+    const precoVigente  = primeiroAtivo
+      ? fmt(primeiroAtivo[precoField]) + unSuffix
+      : (isMetro ? fmt(config.drop.precoPorMetro)+'/m' : fmt(config[i.tipo]?.precoUnit||0)+'/un');
+
+    const lotesHTML = lotes.length ? `
+      <div class="lotes-wrap">
+        <div class="lotes-hdr">Lotes (FIFO)</div>
+        ${lotes.map((l, idx) => {
+          const restante = l[restField] || 0;
+          const preco    = l[precoField] || 0;
+          const eAtual   = restante > 0 && !lotes.slice(0, idx).some(x => (x[restField]||0) > 0);
+          const zerado   = restante <= 0;
+          return `<div class="lote-row ${eAtual?'lote-atual':''} ${zerado?'lote-zerado':''}">
+            <span class="lote-idx">#${idx+1}</span>
+            <span class="lote-qtd">${isMetro ? (restante||0).toLocaleString('pt-BR') : (restante||0)} ${i.unit}</span>
+            <span class="lote-preco">${fmt(preco)}${unSuffix}</span>
+            ${eAtual ? '<span class="lote-atual-tag">atual</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
     return `<div class="stock-card ${state}">
       <div class="sc-top">
         <div class="sc-icon">${i.icon}</div>
         <div class="sc-badge ${state}">${badge}</div>
       </div>
       <div class="sc-qty">${Number.isInteger(i.qty) ? i.qty : i.qty.toLocaleString('pt-BR')}</div>
-      <div class="sc-unit">${i.nome} · ${i.unit}</div>
-      <div class="sc-price">Preço vigente: <strong>${i.price}</strong></div>
-      <div class="sc-actions">
+      <div class="sc-unit">${i.nome} · ${i.unitFull}</div>
+      <div class="sc-price">Próx. lote a usar: <strong>${precoVigente}</strong></div>
+      ${lotesHTML}
+      <div class="sc-actions" style="margin-top:12px">
         <button class="btn-primary" onclick="openEntradaModal('${i.tipo}')">+ Entrada</button>
-        <button class="btn-secondary" onclick="openPrecoModal('${i.tipo}')">✎ Preço</button>
       </div>
     </div>`;
   }).join('');
@@ -928,7 +982,7 @@ function calcEntrada() {
     const tipo = document.getElementById('en-tipo').value;
     const su   = tipo==='drop' ? '/metro' : '/unidade';
     prev.style.display='';
-    prev.textContent = `💡 Preço unitário: ${fmt(unit)}${su}  ·  Este preço passará a ser o vigente para novas ativações.`;
+    prev.textContent = `💡 Preço unitário: ${fmt(unit)}${su}  ·  Será criado um novo lote FIFO com este preço.`;
   } else {
     prev.style.display='none';
   }
@@ -953,21 +1007,38 @@ async function saveEntrada() {
     ...(tipo==='drop' ? { metros: qtd } : { qtd }),
   };
 
-  // Salvar entrada
+  // Salvar entrada (histórico)
   await db.ref(`cac/entradas/${id}`).set(entrada);
 
-  // Adicionar ao estoque
+  // Criar lote FIFO
+  const lote = {
+    tipo, data, obs,
+    criadoEm: new Date().toISOString(),
+    entradaId: id,
+  };
+  if (tipo === 'drop') {
+    lote.metrosOriginal = qtd;
+    lote.metrosRestante = qtd;
+    lote.precoPorMetro  = precoUnit;
+  } else {
+    lote.qtdOriginal  = qtd;
+    lote.qtdRestante  = qtd;
+    lote.precoUnit    = precoUnit;
+  }
+  await db.ref(`cac/lotes/${tipo}/${id}`).set(lote);
+
+  // Adicionar ao estoque total
   if (tipo==='drop') await db.ref('cac/estoque/drop/metros').transaction(v=>(v||0)+qtd);
   else if (tipo==='ont') await db.ref('cac/estoque/ont/qtd').transaction(v=>(v||0)+qtd);
   else await db.ref('cac/estoque/conector/qtd').transaction(v=>(v||0)+qtd);
 
-  // Atualizar preço vigente
+  // Manter config atualizado com preço do lote mais recente (usado como fallback)
   const cfgKey = tipo==='drop' ? 'precoPorMetro' : 'precoUnit';
   await db.ref(`cac/config/${tipo}/${cfgKey}`).set(precoUnit);
   config[tipo][cfgKey] = precoUnit;
 
   closeEntradaModal();
-  alert(`✅ Entrada salva!\n${tipo.toUpperCase()} · ${qtd} ${tipo==='drop'?'metros':'un'} por ${fmt(pTot)}\nNovo preço unitário: ${fmt(precoUnit)}`);
+  alert(`✅ Lote criado!\n${tipo.toUpperCase()} · ${qtd} ${tipo==='drop'?'metros':'un'} por ${fmt(pTot)}\nPreço: ${fmt(precoUnit)}${tipo==='drop'?'/m':'/un'}\n\nEste lote será usado pelo FIFO nas próximas ativações.`);
 }
 
 // ── MODAL: PREÇO ──────────────────────────────────────────────────────────

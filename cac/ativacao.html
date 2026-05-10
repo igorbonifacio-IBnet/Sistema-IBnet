@@ -253,6 +253,7 @@ let pin = '';
 let tecnico = null;
 let tipoAtiv = 'instalacao';
 let pendingFotos = [];   // Array de File objects selecionados
+let lotes = { ont: [], drop: [], conector: [] }; // Lotes FIFO carregados no login
 let cfg = {
   ont:     { precoUnit: 120 },
   drop:    { precoPorMetro: 0.30 },
@@ -341,7 +342,76 @@ function showForm() {
   btn.textContent = '✅ Registrar Ativação';
   calc();
   setScreen('sc-form');
+  loadLotes(); // carrega lotes FIFO em background, prontos para o submit
   setTimeout(()=>document.getElementById('f-cliente').focus(), 350);
+}
+
+// ── LOTES FIFO ────────────────────────────────────────────────────────────
+async function loadLotes() {
+  try {
+    const snap = await db.ref('cac/lotes').once('value');
+    const v = snap.val() || {};
+    ['ont', 'drop', 'conector'].forEach(tipo => {
+      const restField = tipo === 'drop' ? 'metrosRestante' : 'qtdRestante';
+      lotes[tipo] = Object.entries(v[tipo] || {})
+        .map(([id, l]) => ({ id, ...l }))
+        .filter(l => (l[restField] || 0) > 0)
+        .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+    });
+  } catch(e) {
+    console.warn('Lotes FIFO indisponíveis, usando preço de config:', e);
+    lotes = { ont: [], drop: [], conector: [] };
+  }
+}
+
+// Consome FIFO, retorna custo real. Também debita estoque total e cada lote.
+async function consumirFIFO(tipo, quantidade) {
+  if (quantidade <= 0) return 0;
+  const isMetro    = tipo === 'drop';
+  const restField  = isMetro ? 'metrosRestante' : 'qtdRestante';
+  const precoField = isMetro ? 'precoPorMetro'  : 'precoUnit';
+  const estoqField = isMetro ? 'metros'          : 'qtd';
+
+  // Busca lotes frescos do Firebase para evitar conflito entre técnicos simultâneos
+  let listaMaisAtual = [];
+  try {
+    const snap = await db.ref(`cac/lotes/${tipo}`).orderByChild('criadoEm').once('value');
+    snap.forEach(child => {
+      const l = child.val();
+      if ((l[restField] || 0) > 0) listaMaisAtual.push({ id: child.key, ...l });
+    });
+  } catch(e) {
+    listaMaisAtual = lotes[tipo] || []; // fallback para lotes carregados no login
+  }
+
+  let restante   = quantidade;
+  let custoTotal = 0;
+
+  for (const lote of listaMaisAtual) {
+    if (restante <= 0) break;
+    const disponivel = lote[restField] || 0;
+    if (disponivel <= 0) continue;
+    const consumir = Math.min(disponivel, restante);
+    const preco    = lote[precoField] || 0;
+    custoTotal += consumir * preco;
+    restante   -= consumir;
+    // Débito atômico no lote
+    await db.ref(`cac/lotes/${tipo}/${lote.id}/${restField}`)
+      .transaction(v => Math.max(0, (v || 0) - consumir));
+  }
+
+  // Se não havia lotes suficientes → usa preço de config como fallback
+  if (restante > 0) {
+    const cfgPreco = isMetro ? cfg.drop.precoPorMetro
+                   : tipo === 'ont' ? cfg.ont.precoUnit : cfg.conector.precoUnit;
+    custoTotal += restante * (cfgPreco || 0);
+  }
+
+  // Débito no estoque total
+  await db.ref(`cac/estoque/${tipo}/${estoqField}`)
+    .transaction(v => (v || 0) - quantidade);
+
+  return custoTotal;
 }
 
 function adj(item, delta) {
@@ -477,52 +547,47 @@ async function submitAtiv() {
   const ontQtd = parseInt(document.getElementById('f-ont').value)   || 0;
   const dropM  = parseFloat(document.getElementById('f-drop').value) || 0;
   const conQtd = parseInt(document.getElementById('f-con').value)    || 0;
-
-  // CAC só é calculado para Instalação
   const isInstalacao = tipoAtiv === 'instalacao';
-  const tOnt = isInstalacao ? ontQtd * cfg.ont.precoUnit          : 0;
-  const tDrp = isInstalacao ? dropM  * cfg.drop.precoPorMetro     : 0;
-  const tCon = isInstalacao ? conQtd * cfg.conector.precoUnit      : 0;
-  const totalCAC = tOnt + tDrp + tCon;
 
   const btn = document.getElementById('btn-submit');
   btn.disabled = true;
-  btn.textContent = 'Salvando…';
+  btn.textContent = 'Calculando insumos…';
 
   const agora = new Date();
   const id    = Date.now().toString();
 
-  const ativ = {
-    tipo:      tipoAtiv,
-    cliente,
-    pppoe,
-    contrato:  document.getElementById('f-contrato').value.trim(),
-    tecnicoId: tecnico.id,
-    tecnico:   tecnico.nome,
-    data:      agora.toISOString().slice(0,10),
-    criadoEm:  agora.toISOString(),
-    ont:      Object.assign({ qtd: ontQtd }, isInstalacao ? { precoUnit: cfg.ont.precoUnit,           total: tOnt } : {}),
-    drop:     Object.assign({ metros: dropM }, isInstalacao ? { precoPorMetro: cfg.drop.precoPorMetro, total: tDrp } : {}),
-    conector: Object.assign({ qtd: conQtd }, isInstalacao ? { precoUnit: cfg.conector.precoUnit,       total: tCon } : {}),
-    ...(isInstalacao ? { totalCAC } : {}),
-  };
-
   try {
-    // 1. Processar e salvar fotos no RTDB (sem Firebase Storage)
+    // 1. FIFO: consume lotes reais e obtém custo por produto (débita lotes + estoque)
+    const tOnt = await consumirFIFO('ont',      ontQtd);
+    const tDrp = await consumirFIFO('drop',     dropM);
+    const tCon = await consumirFIFO('conector', conQtd);
+    const totalCAC = tOnt + tDrp + tCon;
+
+    const ativ = {
+      tipo:      tipoAtiv,
+      cliente,
+      pppoe,
+      contrato:  document.getElementById('f-contrato').value.trim(),
+      tecnicoId: tecnico.id,
+      tecnico:   tecnico.nome,
+      data:      agora.toISOString().slice(0,10),
+      criadoEm:  agora.toISOString(),
+      ont:      Object.assign({ qtd: ontQtd },    isInstalacao ? { total: tOnt } : {}),
+      drop:     Object.assign({ metros: dropM },  isInstalacao ? { total: tDrp } : {}),
+      conector: Object.assign({ qtd: conQtd },    isInstalacao ? { total: tCon } : {}),
+      ...(isInstalacao ? { totalCAC } : {}),
+    };
+
+    // 2. Processar e salvar fotos no RTDB
     if (pendingFotos.length) {
       btn.textContent = `📷 Processando ${pendingFotos.length} foto(s)…`;
       const qtdFotos = await processarFotos(id);
-      if (qtdFotos > 0) ativ.temFotos = qtdFotos; // contagem salva na ativação
+      if (qtdFotos > 0) ativ.temFotos = qtdFotos;
     }
 
-    // 2. Salvar ativação
+    // 3. Salvar ativação (estoque já debitado pelo FIFO acima)
     btn.textContent = 'Salvando…';
     await db.ref(`cac/ativacoes/${id}`).set(ativ);
-
-    // 3. Débito no estoque (todos os tipos)
-    if (ontQtd > 0) await db.ref('cac/estoque/ont/qtd').transaction(v => (v||0) - ontQtd);
-    if (dropM  > 0) await db.ref('cac/estoque/drop/metros').transaction(v => (v||0) - dropM);
-    if (conQtd > 0) await db.ref('cac/estoque/conector/qtd').transaction(v => (v||0) - conQtd);
 
     const TIPO_OK_LABEL = {
       instalacao: '✅ Ativação registrada!',
