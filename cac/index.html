@@ -183,6 +183,22 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .vincular-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
 .vincular-input:focus{outline:none;border-color:var(--accent)}
 
+/* ── CONFIG ──────────────────────────────────────────────────────────────── */
+.cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:28px}
+.cfg-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+.cfg-card-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.cfg-card-icon{font-size:22px;line-height:1}
+.cfg-card-title{font-size:14px;font-weight:700}
+.cfg-card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.cfg-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.cfg-field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.cfg-field input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
+.cfg-field input:focus{outline:none;border-color:var(--accent)}
+.cfg-save-btn{width:100%;background:var(--accent);border:none;color:#fff;padding:9px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;margin-top:4px}
+.cfg-save-btn:hover{opacity:.85}
+.cfg-save-btn:disabled{opacity:.5;cursor:not-allowed}
+.cfg-sep{border:none;border-top:1px solid var(--border);margin:28px 0}
+
 @media(max-width:700px){
   main{padding:14px 12px}
   .mini-header{padding:8px 12px;gap:8px}
@@ -207,6 +223,7 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <button class="tab-btn" onclick="showTab('estoque')">📦 Estoque</button>
     <button class="tab-btn" onclick="showTab('historico')">📋 Histórico</button>
     <button class="tab-btn" onclick="showTab('tecnicos')">👥 Técnicos</button>
+    <button class="tab-btn" onclick="showTab('config')">⚙️ Config</button>
   </div>
 </div>
 
@@ -295,6 +312,96 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <span class="link-url" id="ativ-link">—</span>
       <button class="btn-primary" onclick="copyLink()">📋 Copiar</button>
     </div>
+  </div>
+
+  <!-- ── ABA: CONFIG ────────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-config">
+
+    <!-- Insumos -->
+    <div class="sec-head">
+      <div><h2>⚙️ Configurações de Insumos</h2><p>Preço vigente, alerta de estoque mínimo e padrões por produto</p></div>
+    </div>
+    <div class="cfg-grid">
+
+      <!-- ONT -->
+      <div class="cfg-card">
+        <div class="cfg-card-head">
+          <span class="cfg-card-icon">📡</span>
+          <div><div class="cfg-card-title">ONT</div><div class="cfg-card-sub">Unidade · usado em instalações</div></div>
+        </div>
+        <div class="cfg-field">
+          <label>Preço por unidade (R$)</label>
+          <input type="number" id="cfg-ont-preco" min="0" step="0.01" placeholder="Ex: 120.00"/>
+        </div>
+        <div class="cfg-field">
+          <label>Alerta — estoque mínimo (un)</label>
+          <input type="number" id="cfg-ont-alerta" min="0" placeholder="Ex: 3"/>
+        </div>
+        <button class="cfg-save-btn" id="cfg-ont-save" onclick="saveConfigInsumo('ont')">Salvar</button>
+      </div>
+
+      <!-- DROP -->
+      <div class="cfg-card">
+        <div class="cfg-card-head">
+          <span class="cfg-card-icon">🔌</span>
+          <div><div class="cfg-card-title">DROP (cabo)</div><div class="cfg-card-sub">Metros · consumo por instalação</div></div>
+        </div>
+        <div class="cfg-field">
+          <label>Preço de referência por metro (R$)</label>
+          <input type="number" id="cfg-drop-preco" min="0" step="0.001" placeholder="Ex: 0.30"/>
+        </div>
+        <div class="cfg-field">
+          <label>Alerta — estoque mínimo (metros)</label>
+          <input type="number" id="cfg-drop-alerta" min="0" placeholder="Ex: 200"/>
+        </div>
+        <button class="cfg-save-btn" id="cfg-drop-save" onclick="saveConfigInsumo('drop')">Salvar</button>
+      </div>
+
+      <!-- Conector -->
+      <div class="cfg-card">
+        <div class="cfg-card-head">
+          <span class="cfg-card-icon">🔗</span>
+          <div><div class="cfg-card-title">Conector</div><div class="cfg-card-sub">Unidade · quantidade padrão por instalação</div></div>
+        </div>
+        <div class="cfg-field">
+          <label>Preço por unidade (R$)</label>
+          <input type="number" id="cfg-con-preco" min="0" step="0.01" placeholder="Ex: 5.00"/>
+        </div>
+        <div class="cfg-field">
+          <label>Alerta — estoque mínimo (un)</label>
+          <input type="number" id="cfg-con-alerta" min="0" placeholder="Ex: 20"/>
+        </div>
+        <div class="cfg-field">
+          <label>Qtd padrão por instalação (un)</label>
+          <input type="number" id="cfg-con-padrao" min="1" placeholder="Ex: 2"/>
+        </div>
+        <button class="cfg-save-btn" id="cfg-con-save" onclick="saveConfigInsumo('con')">Salvar</button>
+      </div>
+
+    </div>
+
+    <hr class="cfg-sep"/>
+
+    <!-- Técnicos -->
+    <div class="sec-head">
+      <div><h2>👥 Técnicos</h2><p>Gerencie os PINs de acesso para registro de ativações</p></div>
+      <button class="btn-primary" onclick="openTecModal()">+ Adicionar Técnico</button>
+    </div>
+    <div class="tec-grid" id="tec-grid-cfg">
+      <div style="color:var(--muted);font-size:13px;padding:20px 0">Carregando…</div>
+    </div>
+
+    <hr class="cfg-sep"/>
+
+    <!-- Link -->
+    <div class="sec-head">
+      <div><h2>🔗 Link do Formulário</h2><p>Compartilhe com os técnicos para registro de ativações no celular</p></div>
+    </div>
+    <div class="link-box">
+      <span class="link-url" id="ativ-link-cfg">—</span>
+      <button class="btn-primary" onclick="copyLinkCfg()">📋 Copiar</button>
+    </div>
+
   </div>
 
 </main>
@@ -570,8 +677,11 @@ async function init() {
 
   // Link técnico
   const host = window.location.origin + window.location.pathname.replace('index.html','') ;
-  document.getElementById('ativ-link').textContent = host + 'ativacao.html';
+  const linkUrl = host + 'ativacao.html';
+  document.getElementById('ativ-link').textContent     = linkUrl;
+  document.getElementById('ativ-link-cfg').textContent = linkUrl;
 
+  fillConfigFields();
   updateMonthLabel();
 }
 init();
@@ -613,6 +723,7 @@ function showTab(id) {
   event.currentTarget.classList.add('active');
   document.getElementById('month-nav').style.display = (id==='visao') ? '' : 'none';
   if (id === 'historico') buildHistMesSelect();
+  if (id === 'config')    fillConfigFields();
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────
@@ -921,36 +1032,88 @@ document.getElementById('vincular-input').addEventListener('input', function() {
 document.getElementById('vincular-modal').addEventListener('click', function(e){ if(e.target===this) closeVincularModal(); });
 
 // ── TÉCNICOS ──────────────────────────────────────────────────────────────
+function buildTecCard(id, t) {
+  const ativo = t.ativo !== false;
+  const ini   = (t.nome||'?').charAt(0).toUpperCase();
+  return `<div class="tec-card">
+    <div class="tec-avatar">${ini}</div>
+    <div class="tec-info">
+      <div class="tec-nome">${t.nome}</div>
+      <div class="tec-pin">PIN: ••••</div>
+      <div class="tec-status ${ativo?'tec-ativo':'tec-inativo'}">${ativo?'✅ Ativo':'⏸ Inativo'}</div>
+    </div>
+    <div class="tec-actions">
+      <button class="icon-btn" onclick="openTecModal('${id}')" title="Editar">✎</button>
+      <button class="icon-btn" onclick="toggleTec('${id}',${ativo})" title="${ativo?'Desativar':'Ativar'}">
+        ${ativo?'⏸':'▶'}
+      </button>
+      <button class="icon-btn del" onclick="deleteTec('${id}')" title="Excluir">✕</button>
+    </div>
+  </div>`;
+}
 function renderTecnicos() {
-  const list = Object.entries(allTecnicos);
-  const grid = document.getElementById('tec-grid');
-  if (!list.length) {
-    grid.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum técnico cadastrado. Clique em "+ Adicionar Técnico".</div>`;
-    return;
-  }
-  grid.innerHTML = list.map(([id,t]) => {
-    const ativo = t.ativo !== false;
-    const ini   = (t.nome||'?').charAt(0).toUpperCase();
-    return `<div class="tec-card">
-      <div class="tec-avatar">${ini}</div>
-      <div class="tec-info">
-        <div class="tec-nome">${t.nome}</div>
-        <div class="tec-pin">PIN: ••••</div>
-        <div class="tec-status ${ativo?'tec-ativo':'tec-inativo'}">${ativo?'✅ Ativo':'⏸ Inativo'}</div>
-      </div>
-      <div class="tec-actions">
-        <button class="icon-btn" onclick="openTecModal('${id}')" title="Editar">✎</button>
-        <button class="icon-btn" onclick="toggleTec('${id}',${ativo})" title="${ativo?'Desativar':'Ativar'}">
-          ${ativo?'⏸':'▶'}
-        </button>
-        <button class="icon-btn del" onclick="deleteTec('${id}')" title="Excluir">✕</button>
-      </div>
-    </div>`;
-  }).join('');
+  const list  = Object.entries(allTecnicos);
+  const empty = `<div style="color:var(--muted);font-size:13px;padding:20px 0">Nenhum técnico cadastrado. Clique em "+ Adicionar Técnico".</div>`;
+  const html  = list.length ? list.map(([id,t]) => buildTecCard(id, t)).join('') : empty;
+  document.getElementById('tec-grid').innerHTML     = html;
+  document.getElementById('tec-grid-cfg').innerHTML = html;
 }
 function copyLink() {
   const url = document.getElementById('ativ-link').textContent;
   navigator.clipboard.writeText(url).then(()=>alert('✅ Link copiado!\n\n'+url));
+}
+function copyLinkCfg() {
+  const url = document.getElementById('ativ-link-cfg').textContent;
+  navigator.clipboard.writeText(url).then(()=>alert('✅ Link copiado!\n\n'+url));
+}
+
+// ── CONFIG INSUMOS ────────────────────────────────────────────────────────
+function fillConfigFields() {
+  document.getElementById('cfg-ont-preco').value   = config.ont.precoUnit     || '';
+  document.getElementById('cfg-ont-alerta').value  = config.ont.alertaMin     || '';
+  document.getElementById('cfg-drop-preco').value  = config.drop.precoPorMetro || '';
+  document.getElementById('cfg-drop-alerta').value = config.drop.alertaMin    || '';
+  document.getElementById('cfg-con-preco').value   = config.conector.precoUnit || '';
+  document.getElementById('cfg-con-alerta').value  = config.conector.alertaMin || '';
+  document.getElementById('cfg-con-padrao').value  = config.conector.qtdPadrao || '';
+}
+
+async function saveConfigInsumo(tipo) {
+  const btn = document.getElementById(`cfg-${tipo}-save`);
+  const orig = btn.textContent;
+  btn.textContent = 'Salvando…'; btn.disabled = true;
+  try {
+    if (tipo === 'ont') {
+      const preco  = parseFloat(document.getElementById('cfg-ont-preco').value);
+      const alerta = parseInt(document.getElementById('cfg-ont-alerta').value) || 0;
+      if (!preco || preco <= 0) { alert('Informe um preço válido.'); return; }
+      await db.ref('cac/config/ont').update({ precoUnit: preco, alertaMin: alerta });
+      config.ont.precoUnit  = preco;
+      config.ont.alertaMin  = alerta;
+    } else if (tipo === 'drop') {
+      const preco  = parseFloat(document.getElementById('cfg-drop-preco').value);
+      const alerta = parseInt(document.getElementById('cfg-drop-alerta').value) || 0;
+      if (!preco || preco <= 0) { alert('Informe um preço válido.'); return; }
+      await db.ref('cac/config/drop').update({ precoPorMetro: preco, alertaMin: alerta });
+      config.drop.precoPorMetro = preco;
+      config.drop.alertaMin     = alerta;
+    } else if (tipo === 'con') {
+      const preco  = parseFloat(document.getElementById('cfg-con-preco').value);
+      const alerta = parseInt(document.getElementById('cfg-con-alerta').value) || 0;
+      const padrao = parseInt(document.getElementById('cfg-con-padrao').value) || 2;
+      if (!preco || preco <= 0) { alert('Informe um preço válido.'); return; }
+      await db.ref('cac/config/conector').update({ precoUnit: preco, alertaMin: alerta, qtdPadrao: padrao });
+      config.conector.precoUnit  = preco;
+      config.conector.alertaMin  = alerta;
+      config.conector.qtdPadrao  = padrao;
+    }
+    renderStockCards();
+    btn.textContent = '✅ Salvo!';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
+  } catch(e) {
+    alert('Erro ao salvar: ' + e.message);
+    btn.textContent = orig; btn.disabled = false;
+  }
 }
 
 // ── MODAL: ENTRADA ────────────────────────────────────────────────────────
