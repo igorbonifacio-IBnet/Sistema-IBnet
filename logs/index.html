@@ -4,6 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Log de Atividades — IBNET</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -43,6 +45,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 }
 .hdr-btn:hover{border-color:var(--accent);color:var(--text)}
 .hdr-btn-danger:hover{border-color:var(--red)!important;color:var(--red)!important}
+.hdr-btn-warn:hover{border-color:var(--yellow)!important;color:var(--yellow)!important}
 .auto-refresh-badge{
   font-size:10px;background:rgba(34,197,94,.12);color:var(--green);
   padding:2px 8px;border-radius:10px;font-weight:600
@@ -189,9 +192,9 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
   <header class="log-header">
     <h1><span>📋</span> Log de Atividades</h1>
     <div class="header-right">
-      <span class="auto-refresh-badge" id="refresh-badge">● Atualizando em <span id="refresh-countdown">30</span>s</span>
-      <button class="hdr-btn" onclick="refreshNow()">↺ Atualizar</button>
-      <button class="hdr-btn hdr-btn-danger" id="btn-clear-log" onclick="openClearModal()">🗑 Limpar Log</button>
+      <span class="auto-refresh-badge" id="refresh-badge">● Tempo real</span>
+      <button class="hdr-btn hdr-btn-warn" onclick="openPurgeModal()">🧹 Purgar antigos</button>
+      <button class="hdr-btn hdr-btn-danger" onclick="openClearModal()">🗑 Limpar tudo</button>
     </div>
   </header>
 
@@ -220,6 +223,11 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
     <div class="filter-bar">
       <label>Filtros</label>
       <input type="text" class="filter-input" id="f-search" placeholder="Buscar ação ou detalhes…" oninput="applyFilters()"/>
+      <select class="filter-select" id="f-periodo" onchange="applyFilters()" style="min-width:130px">
+        <option value="30">Últimos 30 dias</option>
+        <option value="7">Últimos 7 dias</option>
+        <option value="1">Hoje</option>
+      </select>
       <select class="filter-select" id="f-user" onchange="applyFilters()">
         <option value="">Todos os usuários</option>
       </select>
@@ -260,8 +268,8 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
 <!-- CLEAR CONFIRM MODAL -->
 <div class="modal-overlay" id="clear-modal">
   <div class="modal-box">
-    <div class="modal-title">⚠️ Limpar Log</div>
-    <div class="modal-desc">Todos os <strong id="clear-count">0</strong> registros serão apagados permanentemente. Esta ação não pode ser desfeita.</div>
+    <div class="modal-title">⚠️ Limpar todos os logs</div>
+    <div class="modal-desc">Os <strong id="clear-count">0</strong> registros visíveis serão apagados permanentemente do servidor. Esta ação não pode ser desfeita.</div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeClearModal()">Cancelar</button>
       <button class="btn-confirm" onclick="confirmClear()">Limpar tudo</button>
@@ -269,24 +277,52 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
   </div>
 </div>
 
+<!-- PURGE CONFIRM MODAL -->
+<div class="modal-overlay" id="purge-modal">
+  <div class="modal-box">
+    <div class="modal-title">🧹 Purgar logs antigos</div>
+    <div class="modal-desc">Remove permanentemente todos os registros com <strong>mais de 30 dias</strong>. Os logs recentes não serão afetados.</div>
+    <div id="purge-count-info" style="font-size:13px;color:var(--yellow);padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:7px">Calculando…</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closePurgeModal()">Cancelar</button>
+      <button class="btn-confirm" id="btn-confirm-purge" onclick="confirmPurge()" style="background:var(--yellow);color:#000">Purgar</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── GUARD: only inside iframe + admin ────────────────────────────────────────
+// ── GUARD ────────────────────────────────────────────────────────────────────
 if (window.self === window.top) { window.location.href = '../'; }
 
-const LOG_KEY = 'ibnet_activity_log';
-const PAGE_SIZE = 25;
+// ── FIREBASE ─────────────────────────────────────────────────────────────────
+const FB = {
+  apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:"ibnet-platform.firebaseapp.com",
+  databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:"ibnet-platform",
+  storageBucket:"ibnet-platform.firebasestorage.app",
+  messagingSenderId:"468380845527",
+  appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+let _app, db;
+try { _app = firebase.app('logs-viewer'); } catch(e) {
+  _app = firebase.initializeApp(FB, 'logs-viewer');
+}
+db = firebase.database(_app);
 
-let allLogs    = [];
-let filtered   = [];
+const PAGE_SIZE     = 25;
+const RETENTION_MS  = 30 * 24 * 60 * 60 * 1000; // 30 dias em ms
+
+let allLogs     = [];
+let filtered    = [];
 let currentPage = 1;
-let countdownVal = 30;
-let countdownTimer = null;
 
-// ── SESSION CHECK ────────────────────────────────────────────────────────────
+// ── SESSION CHECK ─────────────────────────────────────────────────────────────
 function getSession() {
   try { return JSON.parse(sessionStorage.getItem('ibnet_session') || 'null'); } catch { return null; }
 }
 
+// ── INIT ──────────────────────────────────────────────────────────────────────
 function init() {
   const session = getSession();
   if (!session || session.role !== 'admin') {
@@ -295,36 +331,35 @@ function init() {
   }
   document.getElementById('access-denied').classList.add('hidden');
   document.getElementById('log-app').style.display = '';
-  refreshNow();
-  startCountdown();
+  loadLogs();
 }
 
-// ── DATA ─────────────────────────────────────────────────────────────────────
-function getLogs() {
-  try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; }
+// ── CARREGAR DO FIREBASE (últimos 30 dias) ────────────────────────────────────
+function loadLogs() {
+  // Usamos a chave numérica (Date.now()) como pivot temporal — sem índice extra
+  const cutoffKey = String(Date.now() - RETENTION_MS);
+  db.ref('logs').orderByKey().startAt(cutoffKey).on('value', snap => {
+    const v = snap.val() || {};
+    allLogs = Object.values(v).sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    populateUserFilter();
+    applyFilters();
+  });
 }
 
-function refreshNow() {
-  allLogs = getLogs();
-  populateUserFilter();
-  applyFilters();
-  resetCountdown();
-}
-
-// ── USER FILTER OPTIONS ──────────────────────────────────────────────────────
+// ── USER FILTER OPTIONS ───────────────────────────────────────────────────────
 function populateUserFilter() {
-  const sel   = document.getElementById('f-user');
-  const prev  = sel.value;
-  const users = [...new Set(allLogs.map(l => l.usuario))].sort();
+  const sel  = document.getElementById('f-user');
+  const prev = sel.value;
+  const users = [...new Set(allLogs.map(l => l.usuario).filter(Boolean))].sort();
   sel.innerHTML = '<option value="">Todos os usuários</option>' +
     users.map(u => `<option value="${u}"${u===prev?' selected':''}>${u}</option>`).join('');
 }
 
-// ── STATS ────────────────────────────────────────────────────────────────────
+// ── STATS ─────────────────────────────────────────────────────────────────────
 function updateStats() {
-  const today = new Date().toISOString().slice(0, 10);
-  const todayCount = allLogs.filter(l => l.ts && l.ts.slice(0,10) === today).length;
-  const users = new Set(allLogs.map(l => l.usuario)).size;
+  const today     = new Date().toISOString().slice(0, 10);
+  const todayCount= allLogs.filter(l => l.ts && l.ts.slice(0,10) === today).length;
+  const users     = new Set(allLogs.map(l => l.usuario)).size;
 
   document.getElementById('stat-total').textContent    = allLogs.length;
   document.getElementById('stat-today').textContent    = todayCount;
@@ -332,18 +367,21 @@ function updateStats() {
   document.getElementById('stat-users').textContent    = users;
 }
 
-// ── FILTERS ──────────────────────────────────────────────────────────────────
+// ── FILTERS ───────────────────────────────────────────────────────────────────
 function applyFilters() {
-  const search = document.getElementById('f-search').value.trim().toLowerCase();
-  const fUser  = document.getElementById('f-user').value;
-  const fMod   = document.getElementById('f-modulo').value;
+  const search  = document.getElementById('f-search').value.trim().toLowerCase();
+  const fUser   = document.getElementById('f-user').value;
+  const fMod    = document.getElementById('f-modulo').value;
+  const periodo = parseInt(document.getElementById('f-periodo').value) || 30;
+  const cutoffTS= new Date(Date.now() - periodo * 24 * 60 * 60 * 1000).toISOString();
 
   filtered = allLogs.filter(l => {
+    if (l.ts < cutoffTS)              return false;
     if (fUser && l.usuario !== fUser) return false;
     if (fMod  && l.modulo  !== fMod)  return false;
     if (search) {
-      const haystack = ((l.acao||'') + ' ' + (l.detalhes||'') + ' ' + (l.usuario||'')).toLowerCase();
-      if (!haystack.includes(search)) return false;
+      const hay = ((l.acao||'') + ' ' + (l.detalhes||'') + ' ' + (l.usuario||'')).toLowerCase();
+      if (!hay.includes(search)) return false;
     }
     return true;
   });
@@ -354,9 +392,10 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  document.getElementById('f-search').value = '';
-  document.getElementById('f-user').value   = '';
-  document.getElementById('f-modulo').value = '';
+  document.getElementById('f-search').value  = '';
+  document.getElementById('f-user').value    = '';
+  document.getElementById('f-modulo').value  = '';
+  document.getElementById('f-periodo').value = '30';
   applyFilters();
 }
 
@@ -371,7 +410,7 @@ const MOD_CLASS = {
 function fmtTS(ts) {
   if (!ts) return '—';
   try {
-    const d = new Date(ts);
+    const d    = new Date(ts);
     const date = d.toLocaleDateString('pt-BR');
     const time = d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     return `${date} ${time}`;
@@ -458,41 +497,78 @@ function goPage(p) {
   document.querySelector('.log-table-wrap')?.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
-// ── CLEAR LOG ─────────────────────────────────────────────────────────────────
+// ── LIMPAR TODOS OS LOGS ──────────────────────────────────────────────────────
 function openClearModal() {
-  const logs = getLogs();
-  document.getElementById('clear-count').textContent = logs.length;
+  document.getElementById('clear-count').textContent = allLogs.length;
   document.getElementById('clear-modal').classList.add('show');
 }
 function closeClearModal() {
   document.getElementById('clear-modal').classList.remove('show');
 }
-function confirmClear() {
-  localStorage.setItem(LOG_KEY, '[]');
+async function confirmClear() {
+  const btn = document.querySelector('#clear-modal .btn-confirm');
+  btn.textContent = 'Apagando…'; btn.disabled = true;
+  try {
+    // Remove todos os nós de logs carregados
+    const updates = {};
+    const cutoffKey = String(Date.now() - RETENTION_MS);
+    const snap = await db.ref('logs').orderByKey().startAt(cutoffKey).once('value');
+    snap.forEach(child => { updates[child.key] = null; });
+    await db.ref('logs').update(updates);
+  } catch(e) { alert('Erro ao apagar: ' + e.message); }
+  btn.textContent = 'Limpar tudo'; btn.disabled = false;
   closeClearModal();
-  refreshNow();
 }
 document.getElementById('clear-modal').addEventListener('click', function(e) {
   if (e.target === this) closeClearModal();
 });
 
-// ── AUTO-REFRESH COUNTDOWN ────────────────────────────────────────────────────
-function startCountdown() {
-  if (countdownTimer) clearInterval(countdownTimer);
-  countdownVal = 30;
-  document.getElementById('refresh-countdown').textContent = countdownVal;
-  countdownTimer = setInterval(() => {
-    countdownVal--;
-    document.getElementById('refresh-countdown').textContent = Math.max(0, countdownVal);
-    if (countdownVal <= 0) {
-      refreshNow();
+// ── PURGAR LOGS COM +30 DIAS ──────────────────────────────────────────────────
+let _purgeOldKeys = [];
+
+async function openPurgeModal() {
+  _purgeOldKeys = [];
+  const infoEl = document.getElementById('purge-count-info');
+  const btn    = document.getElementById('btn-confirm-purge');
+  infoEl.textContent = 'Verificando…';
+  btn.disabled = true;
+  document.getElementById('purge-modal').classList.add('show');
+  try {
+    const cutoffKey = String(Date.now() - RETENTION_MS);
+    const snap = await db.ref('logs').orderByKey().endBefore(cutoffKey).once('value');
+    snap.forEach(child => _purgeOldKeys.push(child.key));
+    if (_purgeOldKeys.length === 0) {
+      infoEl.style.color = 'var(--green)';
+      infoEl.textContent = '✅ Nenhum log com mais de 30 dias encontrado.';
+    } else {
+      infoEl.style.color = 'var(--yellow)';
+      infoEl.textContent = `⚠ ${_purgeOldKeys.length} registro(s) com mais de 30 dias serão removidos permanentemente.`;
+      btn.disabled = false;
     }
-  }, 1000);
+  } catch(e) {
+    infoEl.textContent = 'Erro ao verificar: ' + e.message;
+  }
 }
-function resetCountdown() {
-  countdownVal = 30;
-  document.getElementById('refresh-countdown').textContent = 30;
+function closePurgeModal() {
+  document.getElementById('purge-modal').classList.remove('show');
+  _purgeOldKeys = [];
 }
+async function confirmPurge() {
+  const btn = document.getElementById('btn-confirm-purge');
+  btn.textContent = 'Purgando…'; btn.disabled = true;
+  try {
+    const updates = {};
+    _purgeOldKeys.forEach(k => { updates[k] = null; });
+    await db.ref('logs').update(updates);
+    closePurgeModal();
+  } catch(e) {
+    alert('Erro ao purgar: ' + e.message);
+    btn.textContent = 'Purgar'; btn.disabled = false;
+  }
+}
+document.getElementById('purge-modal').addEventListener('click', function(e) {
+  if (e.target === this) closePurgeModal();
+});
 
 // ── THEME ─────────────────────────────────────────────────────────────────────
 window.addEventListener('message', function(e) {

@@ -1040,16 +1040,17 @@ function onPortasChange(pid, value) {
 }
 
 // ── LOG ACTION ────────────────────────────────────────────────────────────
-const LOG_KEY = 'ibnet_activity_log';
-const MAX_LOG = 500;
 function logAction(acao, detalhes) {
   try {
     const s = JSON.parse(sessionStorage.getItem('ibnet_session') || 'null');
     const entry = { ts: new Date().toISOString(), usuario: s?.nome||'Sistema', modulo:'Suporte', acao, detalhes: detalhes||'' };
-    const logs = JSON.parse(localStorage.getItem(LOG_KEY)||'[]');
-    logs.unshift(entry);
-    if(logs.length>MAX_LOG) logs.splice(MAX_LOG);
-    localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+    // Salva no Firebase RTDB via parent (que já tem _db2 inicializado)
+    try {
+      window.parent._db2.ref('logs/' + Date.now()).set(entry).catch(()=>{});
+    } catch(_) {
+      // fallback: tenta db local do suporte se disponível
+      if (typeof db !== 'undefined') db.ref('logs/' + Date.now()).set(entry).catch(()=>{});
+    }
   } catch(e){}
 }
 

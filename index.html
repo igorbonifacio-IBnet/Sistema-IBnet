@@ -633,9 +633,6 @@ const TAB_META = {
 };
 
 // ── LOG ───────────────────────────────────────────────────────────────────────
-const LOG_KEY = 'ibnet_activity_log';
-const MAX_LOG = 500;
-
 function logAction(modulo, acao, detalhes) {
   try {
     const session = getSession();
@@ -646,10 +643,10 @@ function logAction(modulo, acao, detalhes) {
       acao,
       detalhes: detalhes || '',
     };
-    const logs = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
-    logs.unshift(entry);
-    if (logs.length > MAX_LOG) logs.splice(MAX_LOG);
-    localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+    // Salva no Firebase RTDB — persiste em qualquer dispositivo por 30 dias
+    if (typeof _db2 !== 'undefined') {
+      _db2.ref('logs/' + Date.now()).set(entry).catch(() => {});
+    }
   } catch(e) {}
 }
 
