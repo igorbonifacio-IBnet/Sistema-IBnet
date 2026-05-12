@@ -551,6 +551,28 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Ajustar Quantidade de Estoque ─────────────────────────────── -->
+<div class="modal-overlay" id="ajuste-modal">
+  <div class="modal-box" style="max-width:380px">
+    <div class="modal-title" id="ajuste-modal-title">✎ Ajustar Estoque</div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6" id="ajuste-modal-desc">
+      Informe a quantidade <strong>atual real</strong> em estoque. Use isso para corrigir contagens incorretas — não para registrar uma compra nova.
+    </p>
+    <div class="mf">
+      <label id="ajuste-lbl">Nova quantidade</label>
+      <input type="number" id="ajuste-val" min="0" step="any" placeholder="0"/>
+    </div>
+    <div class="mf">
+      <label>Motivo do ajuste (opcional)</label>
+      <input type="text" id="ajuste-obs" placeholder="Ex: Contagem física · Quebra · Correção"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeAjusteModal()">Cancelar</button>
+      <button class="btn-msave" onclick="saveAjuste()">Salvar Ajuste</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── LIGHTBOX: Fotos Instalação ──────────────────────────────────────── -->
 <div class="fotos-overlay" id="fotos-overlay" onclick="if(event.target===this)closeFotosViewer()">
   <button class="fotos-close" onclick="closeFotosViewer()">×</button>
@@ -832,6 +854,7 @@ function renderStockCards() {
       ${lotesHTML}
       <div class="sc-actions" style="margin-top:12px">
         <button class="btn-primary" onclick="openEntradaModal('${i.tipo}')">+ Entrada</button>
+        <button class="btn-secondary" onclick="openAjusteModal('${i.tipo}','${i.nome}','${i.unitFull}')">✎ Ajustar Qtd</button>
       </div>
     </div>`;
   }).join('');
@@ -1264,11 +1287,51 @@ async function deleteTec(id) {
 }
 
 // ── FECHAR MODAIS AO CLICAR FORA ─────────────────────────────────────────
-['entrada-modal','preco-modal','tec-modal'].forEach(id => {
+['entrada-modal','preco-modal','tec-modal','ajuste-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
   });
 });
+
+// ── MODAL: AJUSTE DE ESTOQUE ──────────────────────────────────────────────
+let _ajusteTipo = null;
+
+function openAjusteModal(tipo, nome, unitFull) {
+  _ajusteTipo = tipo;
+  const atual = tipo === 'drop' ? (estoque.drop.metros ?? 0) : tipo === 'ont' ? (estoque.ont.qtd ?? 0) : (estoque.conector.qtd ?? 0);
+  document.getElementById('ajuste-modal-title').textContent = `✎ Ajustar Estoque — ${nome}`;
+  document.getElementById('ajuste-lbl').textContent = `Nova quantidade (${unitFull})`;
+  document.getElementById('ajuste-val').value  = atual;
+  document.getElementById('ajuste-obs').value  = '';
+  document.getElementById('ajuste-modal').classList.add('show');
+  setTimeout(() => {
+    const inp = document.getElementById('ajuste-val');
+    inp.focus(); inp.select();
+  }, 100);
+}
+function closeAjusteModal() {
+  document.getElementById('ajuste-modal').classList.remove('show');
+  _ajusteTipo = null;
+}
+async function saveAjuste() {
+  if (!_ajusteTipo) return;
+  const val = parseFloat(document.getElementById('ajuste-val').value);
+  if (isNaN(val) || val < 0) { alert('Informe uma quantidade válida (≥ 0).'); return; }
+  const obs = document.getElementById('ajuste-obs').value.trim();
+
+  const tipo  = _ajusteTipo;
+  const field = tipo === 'drop' ? 'metros' : 'qtd';
+  const path  = `cac/estoque/${tipo}/${field}`;
+
+  // Salva o novo valor direto (não transação — admin corrigindo contagem)
+  await db.ref(path).set(val);
+
+  // Log do ajuste
+  const log = { tipo, [field]: val, obs: obs || 'Ajuste manual', ajustadoEm: new Date().toISOString() };
+  await db.ref(`cac/ajustes/${Date.now()}`).set(log);
+
+  closeAjusteModal();
+}
 
 // ── MODAL: EDITAR INSUMOS ─────────────────────────────────────────────────
 let _editInsumosAtivId = null;
