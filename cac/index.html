@@ -197,10 +197,44 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .sc-stat-bad {color:var(--red)}
 
 /* ── ENTRADA FILTER BAR ──────────────────────────────────────────────────── */
-.ent-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.ent-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
 .ent-search{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;font-family:inherit;flex:1;min-width:140px;transition:border-color .2s}
 .ent-search:focus{outline:none;border-color:var(--accent)}
 .ent-count{font-size:11px;color:var(--muted);white-space:nowrap;padding:0 4px}
+
+/* ── MOVIMENTAÇÃO SUB-NAV ────────────────────────────────────────────────── */
+.mov-nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.mov-tab{background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.mov-tab:hover{border-color:var(--accent);color:var(--text)}
+.mov-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.mov-export{margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 13px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.mov-export:hover{border-color:var(--green);color:var(--green)}
+
+/* ── TIMELINE ────────────────────────────────────────────────────────────── */
+.timeline{display:flex;flex-direction:column}
+.tl-item{display:flex;gap:0;position:relative}
+.tl-left{display:flex;flex-direction:column;align-items:center;width:32px;flex-shrink:0;padding-top:16px}
+.tl-dot{width:13px;height:13px;border-radius:50%;flex-shrink:0;z-index:1}
+.tl-dot-in{background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+.tl-dot-out{background:var(--red);box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+.tl-line{flex:1;width:2px;background:var(--border);margin:5px 0 0}
+.tl-item:last-child .tl-line{display:none}
+.tl-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 15px;margin:8px 0 8px 10px;transition:border-color .2s}
+.tl-card:hover{border-color:rgba(255,255,255,.12)}
+.tl-card-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.tl-date{font-size:11px;color:var(--muted);font-weight:600;flex:1}
+.tl-card-acts{display:flex;gap:5px}
+.tl-card-body{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.tl-qty{font-size:18px;font-weight:700;letter-spacing:-.4px}
+.tl-qty-in{color:var(--green)}
+.tl-qty-out{color:var(--red)}
+.tl-price{font-size:12px;color:var(--muted)}
+.tl-obs{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
+.tl-saida-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;align-items:center}
+.tl-saida-chip{font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.1);color:var(--red)}
+.tl-saida-tec{font-size:11px;color:var(--muted)}
+.tl-saida-cliente{font-size:13px;font-weight:600}
+.tl-empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:13px;font-style:italic}
 
 /* ── CONFIG ──────────────────────────────────────────────────────────────── */
 .cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:28px}
@@ -296,12 +330,21 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     </div>
 
     <div class="sec-head" style="margin-top:8px">
-      <div><h2>Histórico de Entradas</h2><p>Lotes e compras registradas</p></div>
+      <div><h2>Movimentação de Estoque</h2><p>Entradas de compras e saídas por ativação</p></div>
       <button class="btn-primary" onclick="openEntradaModal()">+ Registrar Entrada</button>
     </div>
-    <div class="ent-filter">
-      <input type="text" class="ent-search" id="ent-search" placeholder="🔍 Buscar por observação…" oninput="renderEntradas()"/>
-      <select class="filter-sel" id="ent-tipo" onchange="renderEntradas()">
+
+    <!-- Sub-nav: Entradas | Saídas -->
+    <div class="mov-nav">
+      <button class="mov-tab active" id="mov-tab-in"  onclick="showMovTab('in')">📥 Entradas <span id="mov-count-in" style="opacity:.7"></span></button>
+      <button class="mov-tab"        id="mov-tab-out" onclick="showMovTab('out')">📤 Saídas <span id="mov-count-out" style="opacity:.7"></span></button>
+      <button class="mov-export" onclick="exportMovCSV()">⬇ Exportar CSV</button>
+    </div>
+
+    <!-- Filtro (só visível na aba Entradas) -->
+    <div class="ent-filter" id="ent-filter-bar">
+      <input type="text" class="ent-search" id="ent-search" placeholder="🔍 Buscar por observação…" oninput="renderTimeline()"/>
+      <select class="filter-sel" id="ent-tipo" onchange="renderTimeline()">
         <option value="">Todos os insumos</option>
         <option value="ont">📡 ONT</option>
         <option value="drop">🔌 DROP</option>
@@ -309,12 +352,9 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       </select>
       <span class="ent-count" id="ent-count"></span>
     </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Data</th><th>Insumo</th><th>Qtd / Metros</th><th>Preço Total</th><th>Preço Unit.</th><th>Observação</th></tr></thead>
-        <tbody id="entrada-tbody"><tr><td colspan="6" class="tbl-empty">Nenhuma entrada registrada.</td></tr></tbody>
-      </table>
-    </div>
+
+    <!-- Timeline container -->
+    <div class="timeline" id="mov-timeline"></div>
   </div>
 
   <!-- ── ABA: HISTÓRICO ─────────────────────────────────────────────────── -->
@@ -620,6 +660,44 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Editar Entrada de Estoque ──────────────────────────────────── -->
+<div class="modal-overlay" id="edit-entrada-modal">
+  <div class="modal-box">
+    <div class="modal-title">✎ Editar Entrada de Estoque</div>
+    <div class="mf">
+      <label>Insumo</label>
+      <select id="ee-tipo" disabled style="opacity:.6;cursor:not-allowed">
+        <option value="ont">📡 ONT</option>
+        <option value="drop">🔌 DROP (cabo)</option>
+        <option value="conector">🔗 Conector</option>
+      </select>
+    </div>
+    <div class="mf-row">
+      <div class="mf">
+        <label id="ee-qtd-lbl">Quantidade (unidades)</label>
+        <input type="number" id="ee-qtd" min="1" placeholder="Ex: 20" oninput="calcEditEntrada()"/>
+      </div>
+      <div class="mf">
+        <label>Preço Total do Lote (R$)</label>
+        <input type="number" id="ee-preco-total" min="0" step="0.01" placeholder="Ex: 2200.00" oninput="calcEditEntrada()"/>
+      </div>
+    </div>
+    <div class="calc-preview" id="ee-preview" style="display:none"></div>
+    <div class="mf">
+      <label>Data da Compra</label>
+      <input type="date" id="ee-data"/>
+    </div>
+    <div class="mf">
+      <label>Observação (opcional)</label>
+      <textarea id="ee-obs" placeholder="Ex: Compra Intelbras maio · NF 12345"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-mcancel" onclick="closeEditEntradaModal()">Cancelar</button>
+      <button class="btn-msave" onclick="saveEditEntrada()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── LIGHTBOX: Fotos Instalação ──────────────────────────────────────── -->
 <div class="fotos-overlay" id="fotos-overlay" onclick="if(event.target===this)closeFotosViewer()">
   <button class="fotos-close" onclick="closeFotosViewer()">×</button>
@@ -722,7 +800,7 @@ async function init() {
   db.ref('cac/entradas').on('value', s => {
     const v = s.val() || {};
     allEntradas = Object.entries(v).map(([id,e])=>({...e,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
-    renderEntradas();
+    renderTimeline();
   });
   db.ref('cac/lotes').on('value', s => {
     const v = s.val() || {};
@@ -1005,44 +1083,316 @@ function renderStockCards() {
   }).join('');
 }
 
-// ── ENTRADAS TABLE ────────────────────────────────────────────────────────
-function renderEntradas() {
-  const tbody  = document.getElementById('entrada-tbody');
-  const search = (document.getElementById('ent-search')?.value || '').trim().toLowerCase();
-  const fTipo  = document.getElementById('ent-tipo')?.value || '';
-  const countEl= document.getElementById('ent-count');
+// ── MOV: LABEL MAPS ──────────────────────────────────────────────────────
+const NOM_ENT = { ont:'📡 ONT', drop:'🔌 DROP', conector:'🔗 Conector' };
+const TAG_ENT = { ont:'tag-ont', drop:'tag-drop', conector:'tag-con' };
 
-  const TAG = { ont:'tag-ont', drop:'tag-drop', conector:'tag-con' };
-  const NOM = { ont:'📡 ONT', drop:'🔌 DROP', conector:'🔗 Conector' };
+// ── MOV SUB-NAV ───────────────────────────────────────────────────────────
+let _movTab = 'in';
+
+function showMovTab(tab) {
+  _movTab = tab;
+  document.getElementById('mov-tab-in').classList.toggle('active',  tab === 'in');
+  document.getElementById('mov-tab-out').classList.toggle('active', tab === 'out');
+  document.getElementById('ent-filter-bar').style.display = tab === 'in' ? '' : 'none';
+  renderTimeline();
+}
+
+function renderTimeline() {
+  if (_movTab === 'in') renderEntradaTimeline();
+  else                  renderSaidaTimeline();
+}
+
+// ── TIMELINE: ENTRADAS ────────────────────────────────────────────────────
+function renderEntradaTimeline() {
+  const search  = (document.getElementById('ent-search')?.value || '').trim().toLowerCase();
+  const fTipo   = document.getElementById('ent-tipo')?.value || '';
+  const countEl = document.getElementById('ent-count');
 
   const lista = allEntradas.filter(e => {
-    if (fTipo  && e.tipo !== fTipo)             return false;
+    if (fTipo  && e.tipo !== fTipo) return false;
     if (search && !(e.obs||'').toLowerCase().includes(search) &&
-                  !(NOM[e.tipo]||'').toLowerCase().includes(search)) return false;
+                  !(NOM_ENT[e.tipo]||'').toLowerCase().includes(search)) return false;
     return true;
   });
 
+  document.getElementById('mov-count-in').textContent = `(${allEntradas.length})`;
   if (countEl) countEl.textContent = lista.length !== allEntradas.length
     ? `${lista.length} de ${allEntradas.length}`
     : `${allEntradas.length} registros`;
 
+  const container = document.getElementById('mov-timeline');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">${allEntradas.length ? 'Nenhuma entrada encontrada com esses filtros.' : 'Nenhuma entrada registrada.'}</td></tr>`;
+    container.innerHTML = `<div class="tl-empty">${allEntradas.length ? 'Nenhuma entrada encontrada com esses filtros.' : 'Nenhuma entrada registrada ainda. Clique em "+ Registrar Entrada" para começar.'}</div>`;
     return;
   }
 
-  tbody.innerHTML = lista.map(e => {
-    const qtdStr = e.tipo==='drop' ? `${e.metros?.toLocaleString('pt-BR')||0} m` : `${e.qtd||0} un`;
-    const uStr   = e.tipo==='drop' ? fmt(e.precoUnit)+'/m' : fmt(e.precoUnit)+'/un';
-    return `<tr>
-      <td>${fmtDate(e.data)}</td>
-      <td><span class="tag ${TAG[e.tipo]||''}">${NOM[e.tipo]||e.tipo}</span></td>
-      <td style="font-weight:600">${qtdStr}</td>
-      <td>${fmt(e.precoTotal)}</td>
-      <td style="color:var(--green);font-weight:600">${uStr}</td>
-      <td style="color:var(--muted)">${e.obs||'—'}</td>
-    </tr>`;
+  container.innerHTML = lista.map(e => {
+    const isMetro = e.tipo === 'drop';
+    const qtd     = isMetro ? (e.metros||0) : (e.qtd||0);
+    const qtdStr  = isMetro ? `+${qtd.toLocaleString('pt-BR')} m` : `+${qtd} un`;
+    const uStr    = isMetro ? fmt(e.precoUnit)+'/m' : fmt(e.precoUnit)+'/un';
+
+    return `<div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-dot tl-dot-in"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-card-head">
+          <span class="tl-date">${fmtDate(e.data)}</span>
+          <span class="tag ${TAG_ENT[e.tipo]||''}" style="font-size:10px">${NOM_ENT[e.tipo]||e.tipo}</span>
+          <div class="tl-card-acts">
+            <button class="icon-btn" onclick="openEditEntradaModal('${e.id}')" title="Editar entrada">✎</button>
+            <button class="icon-btn del" onclick="deleteEntrada('${e.id}')" title="Excluir entrada">✕</button>
+          </div>
+        </div>
+        <div class="tl-card-body">
+          <span class="tl-qty tl-qty-in">${qtdStr}</span>
+          <span class="tl-price">${fmt(e.precoTotal)} total · ${uStr}</span>
+        </div>
+        ${e.obs ? `<div class="tl-obs">"${e.obs}"</div>` : ''}
+      </div>
+    </div>`;
   }).join('');
+}
+
+// ── TIMELINE: SAÍDAS ──────────────────────────────────────────────────────
+function renderSaidaTimeline() {
+  const container = document.getElementById('mov-timeline');
+  const lista = allAtivacoes.filter(a =>
+    (a.ont?.qtd||0) > 0 || (a.drop?.metros||0) > 0 || (a.conector?.qtd||0) > 0
+  );
+
+  document.getElementById('mov-count-out').textContent = `(${lista.length})`;
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="tl-empty">Nenhuma saída registrada ainda.</div>`;
+    return;
+  }
+
+  container.innerHTML = lista.map(a => {
+    const chips = [];
+    if ((a.ont?.qtd||0) > 0)
+      chips.push(`<span class="tl-saida-chip">📡 ONT ×${a.ont.qtd}</span>`);
+    if ((a.drop?.metros||0) > 0)
+      chips.push(`<span class="tl-saida-chip">🔌 DROP ${(a.drop.metros).toLocaleString('pt-BR')} m</span>`);
+    if ((a.conector?.qtd||0) > 0)
+      chips.push(`<span class="tl-saida-chip">🔗 Conector ×${a.conector.qtd}</span>`);
+
+    const tipo    = a.tipo || 'instalacao';
+    const isInst  = tipo === 'instalacao';
+    const cacStr  = (isInst && a.totalCAC) ? fmt(a.totalCAC) : '';
+
+    return `<div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-dot tl-dot-out"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-card-head">
+          <span class="tl-date">${fmtDate(a.data)}</span>
+          <span class="tag ${TIPO_CLS[tipo]||'tag-inst'}" style="font-size:10px">${TIPO_LABEL[tipo]||tipo}</span>
+        </div>
+        <div class="tl-saida-row">
+          ${chips.join('')}
+          <span class="tl-saida-tec">👷 ${a.tecnico||'—'}</span>
+        </div>
+        <div class="tl-saida-cliente">${a.cliente||'—'}${cacStr ? `<span style="color:var(--accent);font-size:12px;margin-left:8px">CAC: ${cacStr}</span>` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── CSV EXPORT ────────────────────────────────────────────────────────────
+function exportMovCSV() {
+  let csv, filename;
+
+  if (_movTab === 'in') {
+    const search = (document.getElementById('ent-search')?.value || '').trim().toLowerCase();
+    const fTipo  = document.getElementById('ent-tipo')?.value || '';
+    const lista  = allEntradas.filter(e => {
+      if (fTipo  && e.tipo !== fTipo) return false;
+      if (search && !(e.obs||'').toLowerCase().includes(search) &&
+                    !(NOM_ENT[e.tipo]||'').toLowerCase().includes(search)) return false;
+      return true;
+    });
+    const rows = [['Data','Insumo','Quantidade','Unidade','Preço Total (R$)','Preço Unit. (R$)','Observação']];
+    lista.forEach(e => {
+      const qtd  = e.tipo === 'drop' ? (e.metros||0) : (e.qtd||0);
+      const unit = e.tipo === 'drop' ? 'metros' : 'unidades';
+      rows.push([e.data||'', NOM_ENT[e.tipo]||e.tipo, qtd, unit,
+                 (e.precoTotal||0).toFixed(2), (e.precoUnit||0).toFixed(4), e.obs||'']);
+    });
+    csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    filename = `entradas_estoque_${new Date().toISOString().slice(0,10)}.csv`;
+  } else {
+    const lista = allAtivacoes.filter(a =>
+      (a.ont?.qtd||0)>0 || (a.drop?.metros||0)>0 || (a.conector?.qtd||0)>0
+    );
+    const rows = [['Data','Tipo','Cliente','PPPoE','Técnico','ONT (un)','DROP (m)','Conector (un)','CAC Total (R$)']];
+    lista.forEach(a => {
+      rows.push([
+        a.data||'', TIPO_LABEL[a.tipo||'instalacao']||a.tipo,
+        a.cliente||'', a.pppoe||'', a.tecnico||'',
+        a.ont?.qtd||0, a.drop?.metros||0, a.conector?.qtd||0,
+        (a.totalCAC||0).toFixed(2)
+      ]);
+    });
+    csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    filename = `saidas_estoque_${new Date().toISOString().slice(0,10)}.csv`;
+  }
+
+  const bom  = '﻿'; // BOM para Excel abrir UTF-8 corretamente
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── MODAL: EDITAR ENTRADA ─────────────────────────────────────────────────
+let _editEntradaId = null;
+
+function openEditEntradaModal(id) {
+  const e = allEntradas.find(x => x.id === id);
+  if (!e) return;
+  _editEntradaId = id;
+  const isMetro = e.tipo === 'drop';
+  document.getElementById('ee-tipo').value         = e.tipo;
+  document.getElementById('ee-qtd').value          = isMetro ? (e.metros||0) : (e.qtd||0);
+  document.getElementById('ee-qtd-lbl').textContent= isMetro ? 'Quantidade (metros)' : 'Quantidade (unidades)';
+  document.getElementById('ee-preco-total').value  = e.precoTotal || '';
+  document.getElementById('ee-data').value         = e.data || '';
+  document.getElementById('ee-obs').value          = e.obs || '';
+  calcEditEntrada();
+  document.getElementById('edit-entrada-modal').classList.add('show');
+  setTimeout(() => document.getElementById('ee-qtd').focus(), 100);
+}
+function closeEditEntradaModal() {
+  document.getElementById('edit-entrada-modal').classList.remove('show');
+  _editEntradaId = null;
+}
+
+function calcEditEntrada() {
+  const qtd  = parseFloat(document.getElementById('ee-qtd').value) || 0;
+  const pTot = parseFloat(document.getElementById('ee-preco-total').value) || 0;
+  const prev = document.getElementById('ee-preview');
+  if (qtd > 0 && pTot > 0) {
+    const tipo = document.getElementById('ee-tipo').value;
+    const unit = pTot / qtd;
+    const su   = tipo === 'drop' ? '/metro' : '/unidade';
+    prev.style.display = '';
+    prev.textContent = `💡 Preço unitário: ${fmt(unit)}${su}`;
+  } else {
+    prev.style.display = 'none';
+  }
+}
+
+async function saveEditEntrada() {
+  if (!_editEntradaId) return;
+  const old = allEntradas.find(e => e.id === _editEntradaId);
+  if (!old) return;
+
+  const tipo     = old.tipo;
+  const isMetro  = tipo === 'drop';
+  const novaQtd  = parseFloat(document.getElementById('ee-qtd').value);
+  const novaPTot = parseFloat(document.getElementById('ee-preco-total').value);
+  const novaData = document.getElementById('ee-data').value;
+  const novaObs  = document.getElementById('ee-obs').value.trim();
+
+  if (!novaQtd || novaQtd <= 0 || !novaPTot || novaPTot <= 0 || !novaData) {
+    alert('Preencha quantidade, preço e data.'); return;
+  }
+
+  const novaPrecoUnit = novaPTot / novaQtd;
+  const oldQtd  = isMetro ? (old.metros||0) : (old.qtd||0);
+  const diffQtd = novaQtd - oldQtd;
+
+  const btn = document.querySelector('#edit-entrada-modal .btn-msave');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+
+  try {
+    const updates = {
+      [`cac/entradas/${_editEntradaId}/data`]:       novaData,
+      [`cac/entradas/${_editEntradaId}/obs`]:        novaObs,
+      [`cac/entradas/${_editEntradaId}/precoTotal`]: novaPTot,
+      [`cac/entradas/${_editEntradaId}/precoUnit`]:  novaPrecoUnit,
+    };
+    if (isMetro) {
+      updates[`cac/entradas/${_editEntradaId}/metros`] = novaQtd;
+    } else {
+      updates[`cac/entradas/${_editEntradaId}/qtd`] = novaQtd;
+    }
+
+    // Ajustar lote correspondente
+    const restField = isMetro ? 'metrosRestante' : 'qtdRestante';
+    const origField = isMetro ? 'metrosOriginal' : 'qtdOriginal';
+    const precoKey  = isMetro ? 'precoPorMetro'  : 'precoUnit';
+    const loteSnap  = await db.ref(`cac/lotes/${tipo}/${_editEntradaId}`).once('value');
+    if (loteSnap.exists()) {
+      const lote    = loteSnap.val();
+      const oldRest = lote[restField] || 0;
+      const consumed = (lote[origField] || oldQtd) - oldRest;
+      const novaRest = Math.max(0, novaQtd - consumed);
+      updates[`cac/lotes/${tipo}/${_editEntradaId}/${origField}`] = novaQtd;
+      updates[`cac/lotes/${tipo}/${_editEntradaId}/${restField}`] = novaRest;
+      updates[`cac/lotes/${tipo}/${_editEntradaId}/${precoKey}`]  = novaPrecoUnit;
+      updates[`cac/lotes/${tipo}/${_editEntradaId}/data`]         = novaData;
+      updates[`cac/lotes/${tipo}/${_editEntradaId}/obs`]          = novaObs;
+    }
+
+    await db.ref().update(updates);
+
+    // Ajustar estoque pela diferença de quantidade
+    if (diffQtd !== 0) {
+      const estoqPath = isMetro ? 'cac/estoque/drop/metros'
+                      : tipo === 'ont' ? 'cac/estoque/ont/qtd'
+                      : 'cac/estoque/conector/qtd';
+      await db.ref(estoqPath).transaction(v => (v||0) + diffQtd);
+    }
+
+    closeEditEntradaModal();
+  } catch(err) {
+    alert('Erro ao salvar: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar alterações';
+  }
+}
+
+async function deleteEntrada(id) {
+  const e = allEntradas.find(x => x.id === id);
+  if (!e) return;
+  const tipo   = e.tipo;
+  const isMetro = tipo === 'drop';
+  const qtd    = isMetro ? (e.metros||0) : (e.qtd||0);
+  const qtdStr = isMetro ? `${qtd.toLocaleString('pt-BR')} m` : `${qtd} un`;
+  if (!confirm(`Excluir esta entrada?\n\n${NOM_ENT[tipo]||tipo} · ${qtdStr} · ${fmtDate(e.data)}\n\nO estoque será ajustado automaticamente.`)) return;
+
+  try {
+    // Descobrir quanto do lote ainda não foi consumido
+    const restField = isMetro ? 'metrosRestante' : 'qtdRestante';
+    const loteSnap  = await db.ref(`cac/lotes/${tipo}/${id}`).once('value');
+    let restante = 0;
+    if (loteSnap.exists()) {
+      restante = loteSnap.val()[restField] || 0;
+    }
+
+    await db.ref(`cac/entradas/${id}`).remove();
+    await db.ref(`cac/lotes/${tipo}/${id}`).remove();
+
+    // Subtrair do estoque somente o que ainda não foi consumido
+    if (restante > 0) {
+      const estoqPath = isMetro ? 'cac/estoque/drop/metros'
+                      : tipo === 'ont' ? 'cac/estoque/ont/qtd'
+                      : 'cac/estoque/conector/qtd';
+      await db.ref(estoqPath).transaction(v => Math.max(0, (v||0) - restante));
+    }
+  } catch(err) {
+    alert('Erro ao excluir: ' + err.message);
+  }
 }
 
 // ── HISTÓRICO ─────────────────────────────────────────────────────────────
@@ -1447,7 +1797,7 @@ async function deleteTec(id) {
 }
 
 // ── FECHAR MODAIS AO CLICAR FORA ─────────────────────────────────────────
-['entrada-modal','preco-modal','tec-modal','ajuste-modal'].forEach(id => {
+['entrada-modal','edit-entrada-modal','preco-modal','tec-modal','ajuste-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
   });
