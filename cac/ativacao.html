@@ -85,6 +85,16 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 .foto-progress-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .3s}
 .foto-progress-lbl{font-size:10px;color:var(--muted);margin-top:4px;text-align:center}
 
+/* ── LOTE SELECTOR ───────────────────────────────────────────────────────── */
+.lote-sel-wrap{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.lote-sel-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;display:block}
+.lote-select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;-webkit-appearance:none;appearance:none;cursor:pointer;transition:border-color .2s}
+.lote-select:focus{outline:none;border-color:var(--accent)}
+.lote-select:disabled{opacity:.4;cursor:not-allowed}
+.lote-tip{font-size:10px;color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:4px}
+.lote-tip.ok{color:#22c55e}
+.lote-tip.warn{color:#eab308}
+
 /* ── TIPO DE ATIVIDADE ───────────────────────────────────────────────────── */
 .tipo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tipo-btn{background:var(--card);border:2px solid var(--border);color:var(--muted);padding:14px 8px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none;line-height:1.4}
@@ -169,10 +179,17 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
       </div>
       <div class="icard-row">
         <button class="qty-btn" onclick="adj('ont',-1)">−</button>
-        <input type="number" id="f-ont" value="1" min="0" max="10" inputmode="numeric" oninput="calc()"/>
+        <input type="number" id="f-ont" value="1" min="0" max="10" inputmode="numeric" oninput="calcLoteTip('ont')"/>
         <button class="qty-btn" onclick="adj('ont',1)">+</button>
       </div>
       <div class="icard-sub" style="color:var(--muted)">quantidade utilizada</div>
+      <div class="lote-sel-wrap" id="lote-wrap-ont">
+        <span class="lote-sel-label">📦 Lote utilizado</span>
+        <select class="lote-select" id="sel-lote-ont" onchange="calcLoteTip('ont')">
+          <option value="">— Carregando lotes… —</option>
+        </select>
+        <div class="lote-tip" id="lote-tip-ont"></div>
+      </div>
     </div>
 
     <!-- DROP -->
@@ -181,9 +198,16 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
         <div class="icard-name">🔌 DROP (cabo)</div>
       </div>
       <div class="icard-row">
-        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="0" oninput="calc()" style="font-size:22px;font-weight:700"/>
+        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="0" oninput="calcLoteTip('drop')" style="font-size:22px;font-weight:700"/>
       </div>
       <div class="icard-sub" style="color:var(--muted)">metros utilizados</div>
+      <div class="lote-sel-wrap" id="lote-wrap-drop">
+        <span class="lote-sel-label">📦 Lote utilizado</span>
+        <select class="lote-select" id="sel-lote-drop" onchange="calcLoteTip('drop')">
+          <option value="">— Carregando lotes… —</option>
+        </select>
+        <div class="lote-tip" id="lote-tip-drop"></div>
+      </div>
     </div>
 
     <!-- Conector -->
@@ -193,10 +217,17 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
       </div>
       <div class="icard-row">
         <button class="qty-btn" onclick="adj('con',-1)">−</button>
-        <input type="number" id="f-con" value="2" min="0" max="20" inputmode="numeric" oninput="calc()"/>
+        <input type="number" id="f-con" value="2" min="0" max="20" inputmode="numeric" oninput="calcLoteTip('conector')"/>
         <button class="qty-btn" onclick="adj('con',1)">+</button>
       </div>
       <div class="icard-sub" style="color:var(--muted)">quantidade utilizada</div>
+      <div class="lote-sel-wrap" id="lote-wrap-conector">
+        <span class="lote-sel-label">📦 Lote utilizado</span>
+        <select class="lote-select" id="sel-lote-conector" onchange="calcLoteTip('conector')">
+          <option value="">— Carregando lotes… —</option>
+        </select>
+        <div class="lote-tip" id="lote-tip-conector"></div>
+      </div>
     </div>
 
     <!-- FOTOS -->
@@ -342,7 +373,7 @@ function showForm() {
   btn.textContent = '✅ Registrar Ativação';
   calc();
   setScreen('sc-form');
-  loadLotes(); // carrega lotes FIFO em background, prontos para o submit
+  loadLotes(); // carrega lotes + popula selects (async em background)
   setTimeout(()=>document.getElementById('f-cliente').focus(), 350);
 }
 
@@ -362,10 +393,75 @@ async function loadLotes() {
     console.warn('Lotes FIFO indisponíveis, usando preço de config:', e);
     lotes = { ont: [], drop: [], conector: [] };
   }
+  renderLoteSelects();
 }
 
-// Consome FIFO, retorna custo real. Também debita estoque total e cada lote.
-async function consumirFIFO(tipo, quantidade) {
+function renderLoteSelects() {
+  const SEL_IDS  = { ont: 'sel-lote-ont', drop: 'sel-lote-drop', conector: 'sel-lote-conector' };
+  const WRAP_IDS = { ont: 'lote-wrap-ont', drop: 'lote-wrap-drop', conector: 'lote-wrap-conector' };
+  ['ont', 'drop', 'conector'].forEach(tipo => {
+    const sel  = document.getElementById(SEL_IDS[tipo]);
+    const wrap = document.getElementById(WRAP_IDS[tipo]);
+    if (!sel) return;
+    const lista     = lotes[tipo] || [];
+    const isMetro   = tipo === 'drop';
+    const restField = isMetro ? 'metrosRestante' : 'qtdRestante';
+    const precoField= isMetro ? 'precoPorMetro'  : 'precoUnit';
+    const unitStr   = isMetro ? 'm' : 'un';
+
+    if (!lista.length) {
+      sel.innerHTML = '<option value="">— Sem lotes cadastrados —</option>';
+      sel.disabled  = true;
+      wrap.style.display = 'none'; // sem lotes, oculta o seletor
+      return;
+    }
+
+    wrap.style.display = '';
+    sel.disabled = false;
+    sel.innerHTML = lista.map((l, idx) => {
+      const restante = (l[restField] || 0).toLocaleString('pt-BR');
+      const preco    = (l[precoField] || 0).toLocaleString('pt-BR', { minimumFractionDigits:2 });
+      const data     = l.data ? l.data.split('-').reverse().join('/') : '—';
+      const obsTag   = l.obs ? ` · ${l.obs}` : '';
+      const autoTag  = idx === 0 ? ' ✔ FIFO' : '';
+      return `<option value="${l.id}">${data}${obsTag}${autoTag} — ${restante} ${unitStr} · R$${preco}/un</option>`;
+    }).join('');
+
+    // Pré-seleciona o primeiro lote (FIFO) automaticamente
+    sel.value = lista[0].id;
+    calcLoteTip(tipo);
+  });
+}
+
+// Mostra dica de saldo do lote selecionado
+function calcLoteTip(tipo) {
+  const SEL_IDS  = { ont: 'sel-lote-ont', drop: 'sel-lote-drop', conector: 'sel-lote-conector' };
+  const QTY_IDS  = { ont: 'f-ont',        drop: 'f-drop',        conector: 'f-con' };
+  const TIP_IDS  = { ont: 'lote-tip-ont', drop: 'lote-tip-drop', conector: 'lote-tip-conector' };
+  const sel      = document.getElementById(SEL_IDS[tipo]);
+  const tip      = document.getElementById(TIP_IDS[tipo]);
+  if (!sel || !tip) return;
+  const loteId   = sel.value;
+  const lote     = lotes[tipo]?.find(l => l.id === loteId);
+  const isMetro  = tipo === 'drop';
+  const restField= isMetro ? 'metrosRestante' : 'qtdRestante';
+  const unitStr  = isMetro ? 'm' : 'un';
+  const qtd      = parseFloat(document.getElementById(QTY_IDS[tipo])?.value) || 0;
+  if (!lote) { tip.textContent = ''; return; }
+  const disponivel = lote[restField] || 0;
+  const falta      = qtd - disponivel;
+  if (falta <= 0) {
+    tip.className = 'lote-tip ok';
+    tip.textContent = `✔ Saldo disponível: ${disponivel.toLocaleString('pt-BR')} ${unitStr}`;
+  } else {
+    tip.className = 'lote-tip warn';
+    tip.textContent = `⚠ Lote tem ${disponivel.toLocaleString('pt-BR')} ${unitStr} — faltam ${falta.toLocaleString('pt-BR')} ${unitStr} (FIFO completa o restante)`;
+  }
+  calc();
+}
+
+// Consome lotes, retorna custo real. Lote prioritário vem primeiro, FIFO completa.
+async function consumirFIFO(tipo, quantidade, lotePrioridade = null) {
   if (quantidade <= 0) return 0;
   const isMetro    = tipo === 'drop';
   const restField  = isMetro ? 'metrosRestante' : 'qtdRestante';
@@ -382,6 +478,15 @@ async function consumirFIFO(tipo, quantidade) {
     });
   } catch(e) {
     listaMaisAtual = lotes[tipo] || []; // fallback para lotes carregados no login
+  }
+
+  // Se técnico selecionou um lote específico, coloca ele na frente da fila
+  if (lotePrioridade) {
+    const idx = listaMaisAtual.findIndex(l => l.id === lotePrioridade);
+    if (idx > 0) {
+      const [lote] = listaMaisAtual.splice(idx, 1);
+      listaMaisAtual.unshift(lote);
+    }
   }
 
   let restante   = quantidade;
@@ -415,10 +520,11 @@ async function consumirFIFO(tipo, quantidade) {
 }
 
 function adj(item, delta) {
-  const ids = { ont:'f-ont', con:'f-con' };
-  const el  = document.getElementById(ids[item]);
-  el.value  = Math.max(0, (parseInt(el.value)||0) + delta);
-  calc();
+  const ids   = { ont:'f-ont', con:'f-con' };
+  const tipos = { ont:'ont', con:'conector' };
+  const el    = document.getElementById(ids[item]);
+  el.value    = Math.max(0, (parseInt(el.value)||0) + delta);
+  calcLoteTip(tipos[item]);
 }
 
 function calc() {
@@ -553,14 +659,19 @@ async function submitAtiv() {
   btn.disabled = true;
   btn.textContent = 'Calculando insumos…';
 
+  // Lotes selecionados pelo técnico (prioridade no consumo)
+  const loteOnt = document.getElementById('sel-lote-ont')?.value     || null;
+  const loteDrp = document.getElementById('sel-lote-drop')?.value    || null;
+  const loteCon = document.getElementById('sel-lote-conector')?.value || null;
+
   const agora = new Date();
   const id    = Date.now().toString();
 
   try {
-    // 1. FIFO: consume lotes reais e obtém custo por produto (débita lotes + estoque)
-    const tOnt = await consumirFIFO('ont',      ontQtd);
-    const tDrp = await consumirFIFO('drop',     dropM);
-    const tCon = await consumirFIFO('conector', conQtd);
+    // 1. Consume lotes na ordem: lote selecionado primeiro, FIFO completa o restante
+    const tOnt = await consumirFIFO('ont',      ontQtd, loteOnt);
+    const tDrp = await consumirFIFO('drop',     dropM,  loteDrp);
+    const tCon = await consumirFIFO('conector', conQtd, loteCon);
     const totalCAC = tOnt + tDrp + tCon;
 
     const ativ = {
@@ -572,9 +683,9 @@ async function submitAtiv() {
       tecnico:   tecnico.nome,
       data:      agora.toISOString().slice(0,10),
       criadoEm:  agora.toISOString(),
-      ont:      Object.assign({ qtd: ontQtd },    isInstalacao ? { total: tOnt } : {}),
-      drop:     Object.assign({ metros: dropM },  isInstalacao ? { total: tDrp } : {}),
-      conector: Object.assign({ qtd: conQtd },    isInstalacao ? { total: tCon } : {}),
+      ont:      Object.assign({ qtd: ontQtd },    isInstalacao ? { total: tOnt } : {}, loteOnt ? { loteId: loteOnt } : {}),
+      drop:     Object.assign({ metros: dropM },  isInstalacao ? { total: tDrp } : {}, loteDrp ? { loteId: loteDrp } : {}),
+      conector: Object.assign({ qtd: conQtd },    isInstalacao ? { total: tCon } : {}, loteCon ? { loteId: loteCon } : {}),
       ...(isInstalacao ? { totalCAC } : {}),
     };
 
