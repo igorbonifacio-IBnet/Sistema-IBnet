@@ -259,7 +259,25 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <div class="kpi-card" style="--kpi-c:#eab308"><span class="kpi-icon">🔗</span><div class="kpi-val" id="kpi-con">—</div><div class="kpi-lbl">Conectores em Estoque</div></div>
     </div>
 
-    <div class="sec-head"><div><h2>Últimas Ativações</h2><p>Ativações registradas pelos técnicos este mês</p></div></div>
+    <div class="sec-head">
+      <div><h2>Ativações do Mês</h2><p>Registradas pelos técnicos · use os filtros para refinar</p></div>
+      <span class="ent-count" id="visao-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="filter-bar" style="margin-bottom:10px">
+      <input  type="date"   class="filter-sel" id="visao-data"  onchange="renderVisaoRecentes()" style="min-width:140px"/>
+      <select class="filter-sel" id="visao-tipo"  onchange="renderVisaoRecentes()">
+        <option value="">Todos os tipos</option>
+        <option value="instalacao">🔌 Instalação</option>
+        <option value="manutencao">🔧 Manutenção</option>
+        <option value="migracao">🔄 Migração Fibra</option>
+        <option value="infra">🏗 Infra</option>
+      </select>
+      <select class="filter-sel" id="visao-tec"  onchange="renderVisaoRecentes()">
+        <option value="">Todos os técnicos</option>
+      </select>
+      <input  type="text"   class="filter-sel" id="visao-search" placeholder="🔍 Cliente ou PPPoE…" oninput="renderVisaoRecentes()" style="flex:1;min-width:140px"/>
+      <button class="btn-secondary" onclick="limparFiltrosVisao()" style="white-space:nowrap;padding:7px 12px">✕ Limpar</button>
+    </div>
     <div class="tbl-wrap">
       <table>
         <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
@@ -794,16 +812,59 @@ function renderKPIs() {
 }
 
 // ── VISÃO GERAL — RECENTES ────────────────────────────────────────────────
+function populateVisaoTecFilter() {
+  const sel  = document.getElementById('visao-tec');
+  if (!sel) return;
+  const prev = sel.value;
+  const tecs = [...new Set(ativacoesDoMes().map(a=>a.tecnico).filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">Todos os técnicos</option>` +
+    tecs.map(t=>`<option value="${t}"${t===prev?' selected':''}>${t}</option>`).join('');
+}
+
+function limparFiltrosVisao() {
+  const ids = ['visao-data','visao-tipo','visao-search'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  const sel = document.getElementById('visao-tec');
+  if (sel) sel.value = '';
+  renderVisaoRecentes();
+}
+
 function renderVisaoRecentes() {
-  const lista = ativacoesDoMes().slice(0,10);
+  populateVisaoTecFilter();
+
+  const fData   = document.getElementById('visao-data')?.value   || '';
+  const fTipo   = document.getElementById('visao-tipo')?.value   || '';
+  const fTec    = document.getElementById('visao-tec')?.value    || '';
+  const fSearch = (document.getElementById('visao-search')?.value || '').trim().toLowerCase();
+
+  const base = ativacoesDoMes();
+
+  const lista = base.filter(a => {
+    if (fData   && a.data !== fData)                         return false;
+    if (fTipo   && (a.tipo||'instalacao') !== fTipo)         return false;
+    if (fTec    && a.tecnico !== fTec)                       return false;
+    if (fSearch) {
+      const hay = ((a.cliente||'') + ' ' + (a.pppoe||'')).toLowerCase();
+      if (!hay.includes(fSearch))                            return false;
+    }
+    return true;
+  });
+
+  const countEl = document.getElementById('visao-count');
+  const temFiltro = fData || fTipo || fTec || fSearch;
+  if (countEl) countEl.textContent = temFiltro
+    ? `${lista.length} de ${base.length} ativações`
+    : `${base.length} ativações`;
+
   const tbody = document.getElementById('visao-tbody');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">Nenhuma ativação neste mês.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="tbl-empty">${temFiltro ? 'Nenhuma ativação com esses filtros.' : 'Nenhuma ativação neste mês.'}</td></tr>`;
     return;
   }
+
   tbody.innerHTML = lista.map(a => {
-    const com  = findComercial(a);
-    const tipo = a.tipo || 'instalacao';
+    const com    = findComercial(a);
+    const tipo   = a.tipo || 'instalacao';
     const isInst = tipo === 'instalacao';
     return `<tr>
       <td>${fmtDate(a.data)}</td>
