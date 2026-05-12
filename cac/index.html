@@ -183,6 +183,25 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .vincular-input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;transition:border-color .2s}
 .vincular-input:focus{outline:none;border-color:var(--accent)}
 
+/* ── STOCK PROGRESS BAR ──────────────────────────────────────────────────── */
+.stock-bar-wrap{margin:14px 0 4px;height:7px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden}
+.stock-bar-fill{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* ── STOCK STATS ROW ─────────────────────────────────────────────────────── */
+.sc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:12px 0 10px}
+.sc-stat{background:rgba(255,255,255,.04);border-radius:8px;padding:8px 6px;text-align:center}
+.sc-stat-val{font-size:13px;font-weight:700;line-height:1;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;line-height:1.2}
+.sc-stat-ok  {color:var(--green)}
+.sc-stat-warn{color:var(--yellow)}
+.sc-stat-bad {color:var(--red)}
+
+/* ── ENTRADA FILTER BAR ──────────────────────────────────────────────────── */
+.ent-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.ent-search{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;font-family:inherit;flex:1;min-width:140px;transition:border-color .2s}
+.ent-search:focus{outline:none;border-color:var(--accent)}
+.ent-count{font-size:11px;color:var(--muted);white-space:nowrap;padding:0 4px}
+
 /* ── CONFIG ──────────────────────────────────────────────────────────────── */
 .cfg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:28px}
 .cfg-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
@@ -261,6 +280,16 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <div class="sec-head" style="margin-top:8px">
       <div><h2>Histórico de Entradas</h2><p>Lotes e compras registradas</p></div>
       <button class="btn-primary" onclick="openEntradaModal()">+ Registrar Entrada</button>
+    </div>
+    <div class="ent-filter">
+      <input type="text" class="ent-search" id="ent-search" placeholder="🔍 Buscar por observação…" oninput="renderEntradas()"/>
+      <select class="filter-sel" id="ent-tipo" onchange="renderEntradas()">
+        <option value="">Todos os insumos</option>
+        <option value="ont">📡 ONT</option>
+        <option value="drop">🔌 DROP</option>
+        <option value="conector">🔗 Conector</option>
+      </select>
+      <span class="ent-count" id="ent-count"></span>
     </div>
     <div class="tbl-wrap">
       <table>
@@ -669,6 +698,7 @@ async function init() {
     renderKPIs();
     renderVisaoRecentes();
     renderHistorico();
+    renderStockCards(); // recalcula duração estimada com novo consumo
     populateTecFilter();
   });
   db.ref('cac/entradas').on('value', s => {
@@ -801,30 +831,62 @@ function getLotesAtivos(tipo) {
     .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
 }
 
+// Consumo total dos últimos 30 dias (por tipo de insumo)
+function calcConsumoMensal() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const recentes  = allAtivacoes.filter(a => a.data && a.data >= cutoffStr);
+  return {
+    ont:      recentes.reduce((s,a) => s + (a.ont?.qtd      || 0), 0),
+    drop:     recentes.reduce((s,a) => s + (a.drop?.metros  || 0), 0),
+    conector: recentes.reduce((s,a) => s + (a.conector?.qtd || 0), 0),
+  };
+}
+
 function renderStockCards() {
+  const consumoMes = calcConsumoMensal();
   const items = [
-    { tipo:'ont',      icon:'📡', nome:'ONT',         qty: estoque.ont.qtd ?? 0,    unit:'un',
-      unitFull:'unidades', min: config.ont.alertaMin ?? 3 },
-    { tipo:'drop',     icon:'🔌', nome:'DROP (cabo)', qty: estoque.drop.metros ?? 0, unit:'m',
-      unitFull:'metros',   min: config.drop.alertaMin ?? 200 },
-    { tipo:'conector', icon:'🔗', nome:'Conector',    qty: estoque.conector.qtd ?? 0, unit:'un',
-      unitFull:'unidades', min: config.conector.alertaMin ?? 20 },
+    { tipo:'ont',      icon:'📡', nome:'ONT',         qty: estoque.ont.qtd ?? 0,      unit:'un', unitFull:'unidades', min: config.ont.alertaMin ?? 3 },
+    { tipo:'drop',     icon:'🔌', nome:'DROP (cabo)', qty: estoque.drop.metros ?? 0,   unit:'m',  unitFull:'metros',   min: config.drop.alertaMin ?? 200 },
+    { tipo:'conector', icon:'🔗', nome:'Conector',    qty: estoque.conector.qtd ?? 0,  unit:'un', unitFull:'unidades', min: config.conector.alertaMin ?? 20 },
   ];
   document.getElementById('stock-grid').innerHTML = items.map(i => {
-    const pct   = i.min > 0 ? i.qty / i.min : 1;
-    const state = pct <= 0 ? 'critical' : pct <= 1.5 ? 'low' : '';
-    const badge = pct <= 0 ? 'CRÍTICO' : pct <= 1.5 ? 'BAIXO' : 'OK';
+    const pct      = i.min > 0 ? i.qty / i.min : 1;
+    const state    = pct <= 0 ? 'critical' : pct <= 1.5 ? 'low' : '';
+    const badge    = pct <= 0 ? 'CRÍTICO'  : pct <= 1.5 ? 'BAIXO' : 'OK';
     const isMetro  = i.tipo === 'drop';
-    const restField  = isMetro ? 'metrosRestante'  : 'qtdRestante';
-    const precoField = isMetro ? 'precoPorMetro'   : 'precoUnit';
+    const restField  = isMetro ? 'metrosRestante' : 'qtdRestante';
+    const precoField = isMetro ? 'precoPorMetro'  : 'precoUnit';
     const unSuffix   = isMetro ? '/m' : '/un';
 
-    // Lotes ativos (ordenados do mais antigo para o mais novo)
-    const lotes = getLotesAtivos(i.tipo);
+    const lotes         = getLotesAtivos(i.tipo);
     const primeiroAtivo = lotes.find(l => (l[restField] || 0) > 0);
     const precoVigente  = primeiroAtivo
       ? fmt(primeiroAtivo[precoField]) + unSuffix
       : (isMetro ? fmt(config.drop.precoPorMetro)+'/m' : fmt(config[i.tipo]?.precoUnit||0)+'/un');
+
+    // Preço numérico para cálculo de valor em estoque
+    const precoNum = primeiroAtivo
+      ? (primeiroAtivo[precoField] || 0)
+      : (isMetro ? (config.drop.precoPorMetro || 0) : (config[i.tipo]?.precoUnit || 0));
+    const valorEstoque = i.qty * precoNum;
+
+    // Duração estimada com base no consumo dos últimos 30 dias
+    const cMes = consumoMes[i.tipo] || 0;
+    const diasRestantes = cMes > 0 ? Math.round(i.qty / (cMes / 30)) : null;
+    const diasStr = diasRestantes === null  ? '—'
+                  : diasRestantes > 365     ? '+1 ano'
+                  : diasRestantes > 60      ? `~${Math.round(diasRestantes/30)} meses`
+                  : `~${diasRestantes}d`;
+    const diasCls = diasRestantes === null  ? ''
+                  : diasRestantes < 15      ? 'sc-stat-bad'
+                  : diasRestantes < 45      ? 'sc-stat-warn'
+                  : 'sc-stat-ok';
+
+    // Barra de progresso — 100% visual = 1.5× o mínimo de alerta
+    const barPct   = Math.min(100, i.min > 0 ? (i.qty / (i.min * 1.5)) * 100 : 100);
+    const barColor = state === 'critical' ? 'var(--red)' : state === 'low' ? 'var(--yellow)' : 'var(--green)';
 
     const lotesHTML = lotes.length ? `
       <div class="lotes-wrap">
@@ -848,8 +910,30 @@ function renderStockCards() {
         <div class="sc-icon">${i.icon}</div>
         <div class="sc-badge ${state}">${badge}</div>
       </div>
-      <div class="sc-qty">${Number.isInteger(i.qty) ? i.qty : i.qty.toLocaleString('pt-BR')}</div>
+      <div class="sc-qty">${i.qty.toLocaleString('pt-BR')}</div>
       <div class="sc-unit">${i.nome} · ${i.unitFull}</div>
+
+      <!-- Barra de progresso visual -->
+      <div class="stock-bar-wrap" title="${Math.round(pct*100)}% do mínimo de alerta">
+        <div class="stock-bar-fill" style="width:${barPct}%;background:${barColor}"></div>
+      </div>
+
+      <!-- Stats: valor · consumo · duração -->
+      <div class="sc-stats">
+        <div class="sc-stat">
+          <div class="sc-stat-val">${fmt(valorEstoque)}</div>
+          <div class="sc-stat-lbl">Em estoque</div>
+        </div>
+        <div class="sc-stat">
+          <div class="sc-stat-val">${cMes > 0 ? cMes.toLocaleString('pt-BR') : '—'}</div>
+          <div class="sc-stat-lbl">Consumo/30d</div>
+        </div>
+        <div class="sc-stat">
+          <div class="sc-stat-val ${diasCls}">${diasStr}</div>
+          <div class="sc-stat-lbl">Duração</div>
+        </div>
+      </div>
+
       <div class="sc-price">Próx. lote a usar: <strong>${precoVigente}</strong></div>
       ${lotesHTML}
       <div class="sc-actions" style="margin-top:12px">
@@ -862,18 +946,33 @@ function renderStockCards() {
 
 // ── ENTRADAS TABLE ────────────────────────────────────────────────────────
 function renderEntradas() {
-  const tbody = document.getElementById('entrada-tbody');
-  if (!allEntradas.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">Nenhuma entrada registrada.</td></tr>`;
-    return;
-  }
+  const tbody  = document.getElementById('entrada-tbody');
+  const search = (document.getElementById('ent-search')?.value || '').trim().toLowerCase();
+  const fTipo  = document.getElementById('ent-tipo')?.value || '';
+  const countEl= document.getElementById('ent-count');
+
   const TAG = { ont:'tag-ont', drop:'tag-drop', conector:'tag-con' };
   const NOM = { ont:'📡 ONT', drop:'🔌 DROP', conector:'🔗 Conector' };
-  tbody.innerHTML = allEntradas.map(e => {
+
+  const lista = allEntradas.filter(e => {
+    if (fTipo  && e.tipo !== fTipo)             return false;
+    if (search && !(e.obs||'').toLowerCase().includes(search) &&
+                  !(NOM[e.tipo]||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (countEl) countEl.textContent = lista.length !== allEntradas.length
+    ? `${lista.length} de ${allEntradas.length}`
+    : `${allEntradas.length} registros`;
+
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">${allEntradas.length ? 'Nenhuma entrada encontrada com esses filtros.' : 'Nenhuma entrada registrada.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lista.map(e => {
     const qtdStr = e.tipo==='drop' ? `${e.metros?.toLocaleString('pt-BR')||0} m` : `${e.qtd||0} un`;
-    const uStr   = e.tipo==='drop'
-      ? fmt(e.precoUnit) + '/m'
-      : fmt(e.precoUnit) + '/un';
+    const uStr   = e.tipo==='drop' ? fmt(e.precoUnit)+'/m' : fmt(e.precoUnit)+'/un';
     return `<tr>
       <td>${fmtDate(e.data)}</td>
       <td><span class="tag ${TAG[e.tipo]||''}">${NOM[e.tipo]||e.tipo}</span></td>
