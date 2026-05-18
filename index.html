@@ -371,6 +371,49 @@ body.light .notif-item:hover{background:rgba(0,0,0,.03)}
 body.light .search-panel,.body.light .search-result-item{border-bottom-color:rgba(0,0,0,.06)}
 body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
 
+/* ── HOME PANEL ─────────────────────────────────────────────────────────── */
+.home-wrap{padding:24px;max-width:1100px;margin:0 auto;overflow-y:auto;flex:1;height:100%}
+.home-greeting{margin-bottom:24px}
+.home-greeting h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.home-greeting p{font-size:13px;color:var(--muted)}
+.home-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:28px}
+.home-kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 18px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s}
+.home-kpi:hover{transform:translateY(-2px);border-color:var(--hkpi-c,var(--accent))}
+.home-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--hkpi-c,var(--accent))}
+.home-kpi-icon{font-size:22px;margin-bottom:8px}
+.home-kpi-val{font-size:28px;font-weight:700;color:var(--hkpi-c,var(--text));line-height:1;margin-bottom:4px;letter-spacing:-.5px}
+.home-kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+.home-kpi-sub{font-size:11px;color:var(--muted);margin-top:5px}
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.home-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.home-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.home-card-title{font-size:13px;font-weight:700}
+.home-card-link{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;font-family:var(--font);padding:0}
+.home-card-link:hover{opacity:.75}
+.home-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:default}
+.home-item:last-child{border-bottom:none}
+.home-item-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.home-item-body{flex:1;min-width:0}
+.home-item-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.home-badge{display:inline-block;padding:1px 8px;border-radius:5px;font-size:10px;font-weight:700;flex-shrink:0}
+.home-empty{text-align:center;color:var(--muted);font-size:12px;padding:24px;font-style:italic}
+.home-stock-item{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.home-stock-item:last-child{border-bottom:none}
+.home-stock-icon{font-size:18px;width:26px;text-align:center;flex-shrink:0}
+.home-stock-name{font-size:12px;font-weight:600;min-width:70px}
+.home-stock-qty{font-size:13px;font-weight:700;white-space:nowrap}
+.home-stock-pill{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;flex-shrink:0}
+.hsp-ok{background:rgba(34,197,94,.12);color:#22c55e}
+.hsp-low{background:rgba(234,179,8,.12);color:#eab308}
+.hsp-crit{background:rgba(239,68,68,.12);color:#ef4444}
+body.light .home-kpi,body.light .home-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+body.light .home-item{border-bottom-color:rgba(0,0,0,.05)}
+body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
+
+/* ── SEARCH SECTION HEADER ─────────────────────────────────────────────── */
+.sr-section-hdr{padding:7px 18px 3px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;background:rgba(255,255,255,.02)}
+
 /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width:768px){
   .hamburger-btn{display:flex}
@@ -386,6 +429,8 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
   .tb-btn span,.tb-btn-text{display:none}
   .notif-panel{width:calc(100vw - 24px);right:-80px}
   .search-panel{top:56px}
+  .home-grid{grid-template-columns:1fr}
+  .home-wrap{padding:16px 12px}
 }
 @media (max-width:480px){
   #topbar-right>span{display:none}
@@ -486,9 +531,15 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
       <img src="logo.jpeg" alt="IBnet Telecom"/>
     </div>
 
+    <button class="sb-item" data-tab="home" id="sb-home" style="margin:8px 8px 4px;border:1px solid rgba(232,57,14,.25);background:rgba(232,57,14,.06)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Início
+      <span class="sb-lock" id="home-lock" style="display:none">🔒</span>
+    </button>
+
     <div class="sb-section">Dashboards</div>
 
-    <button class="sb-item active" data-tab="comercial">
+    <button class="sb-item" data-tab="comercial">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
       Comercial
       <span class="sb-lock" style="display:none">🔒</span>
@@ -557,7 +608,7 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
             <div class="search-results" id="search-results">
               <div class="search-empty">Digite para buscar…</div>
             </div>
-            <div class="search-hint">Pesquisando em atividades · pressione <kbd style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px">Esc</kbd> para fechar</div>
+            <div class="search-hint">Busca em Operações &amp; Suporte · <kbd style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px">⌘K</kbd> / <kbd style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px">Ctrl+K</kbd> · <kbd style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px">Esc</kbd> fecha</div>
           </div>
         </div>
 
@@ -583,7 +634,43 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
       </div>
     </div>
 
-    <div class="tab-panel active" id="tab-comercial">
+    <!-- ── HOME PANEL ──────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-home">
+      <div class="home-wrap">
+        <div class="home-greeting">
+          <h1 id="home-greeting-title">Olá! 👋</h1>
+          <p id="home-greeting-sub">Aqui está o resumo da plataforma — <span id="home-date-lbl"></span></p>
+        </div>
+        <div class="home-kpis" id="home-kpis">
+          <!-- renderizado por renderHome() -->
+        </div>
+        <div class="home-grid">
+          <div class="home-card">
+            <div class="home-card-head">
+              <div class="home-card-title">🔌 Ativações Recentes</div>
+              <button class="home-card-link" onclick="switchTab('cac')">Ver tudo →</button>
+            </div>
+            <div id="home-ativacoes-list"><div class="home-empty">Carregando…</div></div>
+          </div>
+          <div class="home-card">
+            <div class="home-card-head">
+              <div class="home-card-title">🎧 Tickets em Aberto</div>
+              <button class="home-card-link" onclick="switchTab('suporte')">Ver tudo →</button>
+            </div>
+            <div id="home-tickets-list"><div class="home-empty">Carregando…</div></div>
+          </div>
+        </div>
+        <div class="home-card">
+          <div class="home-card-head">
+            <div class="home-card-title">📦 Estoque de Insumos</div>
+            <button class="home-card-link" onclick="switchTab('cac')">Gerenciar →</button>
+          </div>
+          <div id="home-stock-list"><div class="home-empty">Carregando…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-comercial">
       <iframe src="comercial/index.html" id="iframe-comercial" title="Dashboard Comercial"></iframe>
     </div>
 
@@ -614,8 +701,8 @@ const USERS = {
 };
 
 const ROLE_ACCESS = {
-  admin:      ['comercial', 'financeiro', 'suporte', 'cac', 'logs'],
-  financeiro: ['comercial', 'financeiro', 'cac'],
+  admin:      ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs'],
+  financeiro: ['home', 'comercial', 'financeiro', 'cac'],
   comercial:  ['comercial'],
   suporte:    ['suporte'],
 };
@@ -625,11 +712,12 @@ const ROLE_LABELS = {
 };
 
 const TAB_META = {
+  home:       { title: 'Início — Resumo do Dia',    badge: 'HOME' },
   comercial:  { title: 'Dashboard Comercial',       badge: 'COMERCIAL' },
   financeiro: { title: 'Painel Financeiro',         badge: 'FINANCEIRO' },
-  suporte:    { title: 'Painel de Suporte',          badge: 'SUPORTE' },
-  cac:        { title: 'Operações',                  badge: 'OPS' },
-  logs:       { title: 'Log de Atividades',          badge: 'LOG' },
+  suporte:    { title: 'Painel de Suporte',         badge: 'SUPORTE' },
+  cac:        { title: 'Operações',                 badge: 'OPS' },
+  logs:       { title: 'Log de Atividades',         badge: 'LOG' },
 };
 
 // ── LOG ───────────────────────────────────────────────────────────────────────
@@ -696,19 +784,19 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['comercial', 'financeiro', 'suporte', 'cac', 'logs'].forEach(tab => {
+  ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab);
     if (btn) {
-      btn.style.opacity      = hasAccess ? '1' : '.4';
+      btn.style.opacity       = hasAccess ? '1' : '.4';
       btn.style.pointerEvents = hasAccess ? 'auto' : 'none';
     }
     if (lockEl) lockEl.style.display = hasAccess ? 'none' : '';
   });
 
-  // Abre a primeira aba acessível ao usuário
-  const firstTab = ['comercial', 'financeiro', 'suporte', 'logs'].find(t => canAccess(session.role, t)) || 'comercial';
+  // Abre a primeira aba acessível (Home se disponível, senão Comercial)
+  const firstTab = ROLE_ACCESS[session.role]?.[0] || 'comercial';
   switchTab(firstTab);
 
   // Inicia Firebase do portal (notificações + busca global)
@@ -730,6 +818,7 @@ function switchTab(tab) {
   document.getElementById('topbar-badge').textContent = meta.badge;
   if (currentTab && currentTab !== tab) logAction('Portal', 'Navegação', `Acessou aba: ${meta.title}`);
   currentTab = tab;
+  if (tab === 'home') renderHome();
 }
 
 document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
@@ -985,6 +1074,9 @@ try { _fbApp2 = firebase.app('portal'); } catch(e) {
 const _db2 = firebase.database(_fbApp2);
 
 let _allActivities = [];
+let _allAtivacoes  = [];
+let _cacEstoque    = { ont:{qtd:0}, drop:{metros:0}, conector:{qtd:0} };
+let _cacConfig     = { ont:{alertaMin:3}, drop:{alertaMin:200}, conector:{alertaMin:20} };
 
 function fbToArr(val) {
   if (!val) return [];
@@ -996,6 +1088,28 @@ function setupPortalFirebase() {
   _db2.ref('suporte/atividades').on('value', snap => {
     _allActivities = fbToArr(snap.val());
     refreshNotifications();
+    renderHome();
+  });
+  _db2.ref('cac/ativacoes').on('value', snap => {
+    const v = snap.val() || {};
+    _allAtivacoes = Object.entries(v)
+      .map(([id,a]) => ({...a, id}))
+      .sort((a,b) => (b.data||'').localeCompare(a.data||''));
+    renderHome();
+  });
+  _db2.ref('cac/estoque').on('value', snap => {
+    const v = snap.val() || {};
+    _cacEstoque.ont      = v.ont      || {qtd:0};
+    _cacEstoque.drop     = v.drop     || {metros:0};
+    _cacEstoque.conector = v.conector || {qtd:0};
+    renderHome();
+  });
+  _db2.ref('cac/config').on('value', snap => {
+    const v = snap.val() || {};
+    if (v.ont)      _cacConfig.ont      = v.ont;
+    if (v.drop)     _cacConfig.drop     = v.drop;
+    if (v.conector) _cacConfig.conector = v.conector;
+    renderHome();
   });
 }
 
@@ -1128,6 +1242,9 @@ function closeSearch() {
   if (res) res.innerHTML = '<div class="search-empty">Digite para buscar…</div>';
 }
 
+const TIPO_COLORS_S = { instalacao:'#E8390E', manutencao:'#3b82f6', migracao:'#eab308', infra:'#94a3b8' };
+const TIPO_LABEL_S  = { instalacao:'Instalação', manutencao:'Manutenção', migracao:'Migração Fibra', infra:'Infra' };
+
 function doSearch(q) {
   const results = document.getElementById('search-results');
   const term = q.trim().toLowerCase();
@@ -1135,42 +1252,214 @@ function doSearch(q) {
     results.innerHTML = '<div class="search-empty">Digite para buscar…</div>';
     return;
   }
-  const found = _allActivities.filter(a =>
+
+  // Resultados de Operações (ativações CAC)
+  const foundOps = _allAtivacoes.filter(a =>
+    (a.cliente || '').toLowerCase().includes(term) ||
+    (a.pppoe   || '').toLowerCase().includes(term) ||
+    (a.tecnico || '').toLowerCase().includes(term)
+  ).slice(0, 7);
+
+  // Resultados de Suporte
+  const foundSup = _allActivities.filter(a =>
     (a.titulo    || '').toLowerCase().includes(term) ||
     (a.descricao || '').toLowerCase().includes(term) ||
     (a.parceiro  || '').toLowerCase().includes(term) ||
     (a.observacao|| '').toLowerCase().includes(term)
-  ).slice(0, 12);
+  ).slice(0, 7);
 
-  if (!found.length) {
+  if (!foundOps.length && !foundSup.length) {
     results.innerHTML = `<div class="search-empty">Nenhum resultado para "<strong>${q}</strong>"</div>`;
     return;
   }
 
-  results.innerHTML = found.map(a => {
-    const cor  = PRI_COLORS[a.prioridade] || '#94a3b8';
-    const stCls = 'sr-st-' + (a.status || 'a_fazer');
-    const stLbl = ST_LABELS[a.status] || a.status;
-    const sub   = [a.parceiro ? a.parceiro.toUpperCase() : 'Geral', a.prazo ? fmtDateBR(a.prazo) : null].filter(Boolean).join(' · ');
-    return `<div class="search-result-item" onclick="openSearchResult('${a.id}')">
-      <div class="sr-dot" style="background:${cor}"></div>
-      <div class="sr-info">
-        <div class="sr-title">${a.titulo}</div>
-        ${sub ? `<div class="sr-meta">${sub}</div>` : ''}
-      </div>
-      <span class="sr-status ${stCls}">${stLbl}</span>
-    </div>`;
-  }).join('');
+  let html = '';
+
+  if (foundOps.length) {
+    html += `<div class="sr-section-hdr">🏗 Operações</div>`;
+    html += foundOps.map(a => {
+      const tipo = a.tipo || 'instalacao';
+      const cor  = TIPO_COLORS_S[tipo] || '#94a3b8';
+      const lbl  = TIPO_LABEL_S[tipo]  || tipo;
+      return `<div class="search-result-item" onclick="openOpsResult('${a.id}')">
+        <div class="sr-dot" style="background:${cor}"></div>
+        <div class="sr-info">
+          <div class="sr-title">${a.cliente || a.pppoe || '—'}</div>
+          <div class="sr-meta">${lbl} · ${a.tecnico||'—'} · ${fmtDateBR(a.data)}</div>
+        </div>
+        <span class="sr-status" style="background:rgba(232,57,14,.12);color:#E8390E">OPS</span>
+      </div>`;
+    }).join('');
+  }
+
+  if (foundSup.length) {
+    html += `<div class="sr-section-hdr">🎧 Suporte</div>`;
+    html += foundSup.map(a => {
+      const cor   = PRI_COLORS[a.prioridade] || '#94a3b8';
+      const stCls = 'sr-st-' + (a.status || 'a_fazer');
+      const stLbl = ST_LABELS[a.status] || a.status;
+      const sub   = [a.parceiro ? a.parceiro.toUpperCase() : 'Geral', a.prazo ? fmtDateBR(a.prazo) : null].filter(Boolean).join(' · ');
+      return `<div class="search-result-item" onclick="openSearchResult('${a.id}')">
+        <div class="sr-dot" style="background:${cor}"></div>
+        <div class="sr-info">
+          <div class="sr-title">${a.titulo}</div>
+          ${sub ? `<div class="sr-meta">${sub}</div>` : ''}
+        </div>
+        <span class="sr-status ${stCls}">${stLbl}</span>
+      </div>`;
+    }).join('');
+  }
+
+  results.innerHTML = html;
 }
 
 function openSearchResult(id) {
   closeSearch();
   switchTab('suporte');
-  // Passa o id para o iframe do suporte abrir o modal de edição
   setTimeout(() => {
     document.getElementById('iframe-suporte')?.contentWindow
       ?.postMessage({ type: 'openActivity', id }, '*');
   }, 400);
+}
+
+function openOpsResult(id) {
+  closeSearch();
+  switchTab('cac');
+}
+
+// ── HOME RENDER ───────────────────────────────────────────────────────────
+function renderHome() {
+  if (currentTab !== 'home') return;
+  const session = getSession();
+  if (!session) return;
+
+  const now     = new Date();
+  const h       = now.getHours();
+  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const greetEl = document.getElementById('home-greeting-title');
+  if (greetEl) greetEl.textContent = `${saudacao}, ${session.nome}! 👋`;
+  const dateEl = document.getElementById('home-date-lbl');
+  if (dateEl) dateEl.textContent = now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  const todayStr = now.toISOString().slice(0,10);
+  const mesStr   = todayStr.slice(0,7);
+
+  const hoje    = _allAtivacoes.filter(a => a.data === todayStr);
+  const doMes   = _allAtivacoes.filter(a => a.data && a.data.startsWith(mesStr));
+  const tickets = _allActivities.filter(a => a.status !== 'concluido');
+  const urgentes= tickets.filter(a => a.prioridade === 'alta');
+
+  const ontQtd  = _cacEstoque.ont.qtd    || 0;
+  const dropQtd = _cacEstoque.drop.metros|| 0;
+  const conQtd  = _cacEstoque.conector.qtd || 0;
+  const ontAlr  = _cacConfig.ont?.alertaMin    || 3;
+  const dropAlr = _cacConfig.drop?.alertaMin   || 200;
+  const conAlr  = _cacConfig.conector?.alertaMin || 20;
+  const critico = (ontQtd <= ontAlr ? 1:0) + (dropQtd <= dropAlr ? 1:0) + (conQtd <= conAlr ? 1:0);
+
+  // KPIs
+  const kpisEl = document.getElementById('home-kpis');
+  if (kpisEl) kpisEl.innerHTML = `
+    <div class="home-kpi" style="--hkpi-c:#E8390E">
+      <div class="home-kpi-icon">🔌</div>
+      <div class="home-kpi-val">${hoje.length}</div>
+      <div class="home-kpi-lbl">Ativações Hoje</div>
+      <div class="home-kpi-sub">${doMes.length} no mês</div>
+    </div>
+    <div class="home-kpi" style="--hkpi-c:#3b82f6">
+      <div class="home-kpi-icon">📊</div>
+      <div class="home-kpi-val">${doMes.filter(a=>(a.tipo||'instalacao')==='instalacao').length}</div>
+      <div class="home-kpi-lbl">Instalações no Mês</div>
+      <div class="home-kpi-sub">${doMes.filter(a=>a.tipo==='manutencao').length} manutenções</div>
+    </div>
+    <div class="home-kpi" style="--hkpi-c:#f59e0b">
+      <div class="home-kpi-icon">🎧</div>
+      <div class="home-kpi-val">${tickets.length}</div>
+      <div class="home-kpi-lbl">Tickets Abertos</div>
+      <div class="home-kpi-sub">${urgentes.length} urgentes</div>
+    </div>
+    <div class="home-kpi" style="--hkpi-c:${critico > 0 ? '#ef4444' : '#22c55e'}">
+      <div class="home-kpi-icon">📦</div>
+      <div class="home-kpi-val">${critico}</div>
+      <div class="home-kpi-lbl">Estoque Crítico</div>
+      <div class="home-kpi-sub">${critico ? 'Reposição necessária' : 'Tudo em ordem'}</div>
+    </div>
+  `;
+
+  // Ativações recentes
+  const ativEl = document.getElementById('home-ativacoes-list');
+  if (ativEl) {
+    const recent = _allAtivacoes.slice(0,7);
+    if (!recent.length) {
+      ativEl.innerHTML = '<div class="home-empty">Nenhuma ativação registrada ainda.</div>';
+    } else {
+      ativEl.innerHTML = recent.map(a => {
+        const tipo = a.tipo || 'instalacao';
+        const cor  = TIPO_COLORS_S[tipo] || '#94a3b8';
+        const lbl  = TIPO_LABEL_S[tipo]  || tipo;
+        const eHoje = a.data === todayStr;
+        return `<div class="home-item">
+          <div class="home-item-dot" style="background:${cor}"></div>
+          <div class="home-item-body">
+            <div class="home-item-title">${a.cliente || a.pppoe || '—'}</div>
+            <div class="home-item-meta">${lbl} · ${a.tecnico||'—'} · ${fmtDateBR(a.data)}</div>
+          </div>
+          ${eHoje ? '<span class="home-badge" style="background:rgba(34,197,94,.15);color:#22c55e">Hoje</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Tickets
+  const tickEl = document.getElementById('home-tickets-list');
+  if (tickEl) {
+    const PRI_ORDER = {alta:0,media:1,baixa:2};
+    const sorted = [...tickets].sort((a,b)=>(PRI_ORDER[a.prioridade]||1)-(PRI_ORDER[b.prioridade]||1)).slice(0,7);
+    if (!sorted.length) {
+      tickEl.innerHTML = '<div class="home-empty">✅ Nenhum ticket em aberto!</div>';
+    } else {
+      const ST2 = {a_fazer:'A Fazer', em_andamento:'Em Andamento', concluido:'Concluído'};
+      tickEl.innerHTML = sorted.map(a => {
+        const cor  = PRI_COLORS[a.prioridade] || '#94a3b8';
+        const stLbl= ST2[a.status] || a.status;
+        return `<div class="home-item" onclick="switchTab('suporte')" style="cursor:pointer">
+          <div class="home-item-dot" style="background:${cor}"></div>
+          <div class="home-item-body">
+            <div class="home-item-title">${a.titulo||'—'}</div>
+            <div class="home-item-meta">${a.parceiro||'Geral'} · ${stLbl}</div>
+          </div>
+          ${a.prioridade==='alta' ? '<span class="home-badge" style="background:rgba(239,68,68,.15);color:#ef4444">Urgente</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Estoque
+  const stockEl = document.getElementById('home-stock-list');
+  if (stockEl) {
+    const items = [
+      { icon:'📡', name:'ONT',      qty:ontQtd,  unit:'un', alr:ontAlr  },
+      { icon:'🔌', name:'DROP',     qty:dropQtd, unit:'m',  alr:dropAlr },
+      { icon:'🔗', name:'Conector', qty:conQtd,  unit:'un', alr:conAlr  },
+    ];
+    stockEl.innerHTML = items.map(item => {
+      const st  = item.qty <= 0 ? 'crit' : item.qty <= item.alr ? 'crit' : item.qty <= item.alr*2 ? 'low' : 'ok';
+      const pct = Math.max(3, Math.min(100, item.alr>0 ? (item.qty/(item.alr*4))*100 : 100));
+      const barC= st==='ok' ? '#22c55e' : st==='low' ? '#eab308' : '#ef4444';
+      const pillLbl = st==='ok' ? 'OK' : st==='low' ? 'Baixo' : 'Crítico';
+      return `<div class="home-stock-item">
+        <div class="home-stock-icon">${item.icon}</div>
+        <div class="home-stock-name">${item.name}</div>
+        <div style="flex:1;margin:0 14px">
+          <div style="height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden">
+            <div style="height:100%;border-radius:3px;background:${barC};width:${pct}%;transition:width .4s"></div>
+          </div>
+        </div>
+        <div class="home-stock-qty">${item.qty.toLocaleString('pt-BR')} ${item.unit}</div>
+        <span class="home-stock-pill hsp-${st}">${pillLbl}</span>
+      </div>`;
+    }).join('');
+  }
 }
 
 // Fecha painéis ao clicar fora
@@ -1180,6 +1469,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeSearch(); closeNotifications(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); toggleSearch(); }
 });
 
 // Se a sessão já existia (reload sem logout), reconecta Firebase imediatamente

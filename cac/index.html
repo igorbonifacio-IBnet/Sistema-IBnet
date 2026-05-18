@@ -252,6 +252,29 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .cfg-save-btn:disabled{opacity:.5;cursor:not-allowed}
 .cfg-sep{border:none;border-top:1px solid var(--border);margin:28px 0}
 
+/* ── DESEMPENHO ──────────────────────────────────────────────────────────── */
+.desemp-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.desemp-kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
+.desemp-kpi-val{font-size:24px;font-weight:700;line-height:1;margin-bottom:4px}
+.desemp-kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.rank-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;margin-bottom:24px}
+.rank-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;transition:box-shadow .2s}
+.rank-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.rank-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--rank-c,var(--border))}
+.rank-num{position:absolute;top:14px;right:16px;font-size:26px;font-weight:900;color:var(--rank-c,var(--border));opacity:.15;line-height:1;pointer-events:none}
+.rank-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.rank-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0}
+.rank-nome{font-size:14px;font-weight:700}
+.rank-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.rank-kpi-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+.rank-kpi{background:rgba(255,255,255,.04);border-radius:8px;padding:8px 6px;text-align:center}
+.rank-kpi-val{font-size:14px;font-weight:700;line-height:1;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank-kpi-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;line-height:1.2}
+.rank-bar-wrap{height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.rank-bar-fill{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.rank-tipos{display:flex;gap:5px;flex-wrap:wrap}
+.rank-empty{text-align:center;color:var(--muted);padding:60px 20px;font-size:13px;font-style:italic}
+
 @media(max-width:700px){
   main{padding:14px 12px}
   .mini-header{padding:8px 12px;gap:8px}
@@ -277,6 +300,7 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <button class="tab-btn" onclick="showTab('historico')">📋 Histórico</button>
     <button class="tab-btn" onclick="showTab('tecnicos')">👥 Técnicos</button>
     <button class="tab-btn" onclick="showTab('config')">⚙️ Config</button>
+    <button class="tab-btn" onclick="showTab('desempenho')">📈 Desempenho</button>
   </div>
 </div>
 
@@ -489,6 +513,17 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <button class="btn-primary" onclick="copyLinkCfg()">📋 Copiar</button>
     </div>
 
+  </div>
+
+  <!-- ── ABA: DESEMPENHO ──────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-desempenho">
+    <div class="sec-head">
+      <div><h2>📈 Desempenho dos Técnicos</h2><p id="desemp-mes-lbl">Ranking e produtividade do mês</p></div>
+    </div>
+    <div class="desemp-summary" id="desemp-summary"></div>
+    <div class="rank-grid" id="rank-grid">
+      <div class="rank-empty">Carregando…</div>
+    </div>
   </div>
 
 </main>
@@ -870,8 +905,9 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   event.currentTarget.classList.add('active');
   document.getElementById('month-nav').style.display = (id==='visao') ? '' : 'none';
-  if (id === 'historico') buildHistMesSelect();
-  if (id === 'config')    fillConfigFields();
+  if (id === 'historico')   buildHistMesSelect();
+  if (id === 'config')      fillConfigFields();
+  if (id === 'desempenho')  renderDesempenho();
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────
@@ -2033,6 +2069,109 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft')  fotosNav(-1);
   if (e.key === 'ArrowRight') fotosNav(1);
 });
+
+// ── DESEMPENHO ────────────────────────────────────────────────────────────
+const RANK_COLORS = ['#E8390E','#f59e0b','#3b82f6','#22c55e','#a855f7','#06b6d4','#ec4899'];
+
+function renderDesempenho() {
+  const mes    = mesAtual();
+  const mesLbl = `${MONTHS[viewMonth]} ${viewYear}`;
+  const descEl = document.getElementById('desemp-mes-lbl');
+  if (descEl) descEl.textContent = `Ranking e produtividade — ${mesLbl}`;
+
+  const mesAtivs = allAtivacoes.filter(a => a.data && a.data.startsWith(mes));
+
+  // Agrupar por técnico
+  const byTec = {};
+  mesAtivs.forEach(a => {
+    const tec = a.tecnico || '(sem técnico)';
+    if (!byTec[tec]) byTec[tec] = { nome:tec, total:0, tipos:{instalacao:0,manutencao:0,migracao:0,infra:0}, cacs:[], lastDate:null };
+    byTec[tec].total++;
+    const tipo = a.tipo || 'instalacao';
+    byTec[tec].tipos[tipo] = (byTec[tec].tipos[tipo] || 0) + 1;
+    if (tipo === 'instalacao' && a.totalCAC) byTec[tec].cacs.push(a.totalCAC);
+    if (!byTec[tec].lastDate || a.data > byTec[tec].lastDate) byTec[tec].lastDate = a.data;
+  });
+
+  // Incluir técnicos sem ativações no mês (mas cadastrados)
+  Object.values(allTecnicos).forEach(t => {
+    if (t.nome && !byTec[t.nome]) {
+      byTec[t.nome] = { nome:t.nome, total:0, tipos:{instalacao:0,manutencao:0,migracao:0,infra:0}, cacs:[], lastDate:null, inativo:!t.ativo };
+    }
+  });
+
+  const ranked  = Object.values(byTec).sort((a,b) => b.total - a.total);
+  const maxTot  = ranked[0]?.total || 1;
+
+  // KPIs do mês
+  const totalMes  = mesAtivs.length;
+  const totalInst = mesAtivs.filter(a => (a.tipo||'instalacao') === 'instalacao').length;
+  const ativosCnt = ranked.filter(t => t.total > 0).length;
+  const allCacsM  = mesAtivs.filter(a => (a.tipo||'instalacao') === 'instalacao' && a.totalCAC).map(a => a.totalCAC);
+  const cacMedM   = allCacsM.length ? allCacsM.reduce((s,v)=>s+v,0)/allCacsM.length : 0;
+
+  const summaryEl = document.getElementById('desemp-summary');
+  if (summaryEl) summaryEl.innerHTML = `
+    <div class="desemp-kpi"><div class="desemp-kpi-val" style="color:var(--accent)">${totalMes}</div><div class="desemp-kpi-lbl">Total Atividades</div></div>
+    <div class="desemp-kpi"><div class="desemp-kpi-val" style="color:var(--blue)">${totalInst}</div><div class="desemp-kpi-lbl">Instalações</div></div>
+    <div class="desemp-kpi"><div class="desemp-kpi-val" style="color:var(--green)">${ativosCnt}</div><div class="desemp-kpi-lbl">Técnicos Ativos</div></div>
+    <div class="desemp-kpi"><div class="desemp-kpi-val" style="color:var(--yellow)">${cacMedM ? fmt(cacMedM) : '—'}</div><div class="desemp-kpi-lbl">CAC Médio</div></div>
+  `;
+
+  const gridEl = document.getElementById('rank-grid');
+  if (!ranked.length) {
+    gridEl.innerHTML = '<div class="rank-empty">Nenhum técnico cadastrado ainda.</div>';
+    return;
+  }
+  if (!mesAtivs.length) {
+    gridEl.innerHTML = '<div class="rank-empty">Nenhuma ativação registrada em ' + mesLbl + '.</div>';
+    return;
+  }
+
+  const medalhas = ['🥇','🥈','🥉'];
+
+  gridEl.innerHTML = ranked.map((t, i) => {
+    const color   = RANK_COLORS[i % RANK_COLORS.length];
+    const pct     = maxTot > 0 ? Math.round((t.total / maxTot) * 100) : 0;
+    const cacTec  = t.cacs.length ? t.cacs.reduce((s,v)=>s+v,0)/t.cacs.length : 0;
+    const iniciais= t.nome.split(' ').map(p=>p[0]||'').join('').toUpperCase().slice(0,2);
+    const medal   = i < 3 ? medalhas[i] : `#${i+1}`;
+
+    const tiposChips = Object.entries(t.tipos)
+      .filter(([,v]) => v > 0)
+      .map(([k,v]) => `<span class="tag ${TIPO_CLS[k]||'tag-inst'}" style="font-size:10px">${TIPO_LABEL[k]||k} ×${v}</span>`)
+      .join('');
+
+    return `<div class="rank-card" style="--rank-c:${color}">
+      <div class="rank-num">${medal}</div>
+      <div class="rank-top">
+        <div class="rank-avatar" style="background:linear-gradient(135deg,${color},${color}88)">${iniciais}</div>
+        <div>
+          <div class="rank-nome">${t.nome}</div>
+          <div class="rank-sub">${t.total === 0 ? 'Sem atividades neste mês' : t.lastDate ? 'Último: ' + fmtDate(t.lastDate) : '—'}</div>
+        </div>
+      </div>
+      <div class="rank-kpi-row">
+        <div class="rank-kpi">
+          <div class="rank-kpi-val" style="color:${color}">${t.total}</div>
+          <div class="rank-kpi-lbl">Atividades</div>
+        </div>
+        <div class="rank-kpi">
+          <div class="rank-kpi-val" style="color:var(--blue)">${t.tipos.instalacao||0}</div>
+          <div class="rank-kpi-lbl">Instalações</div>
+        </div>
+        <div class="rank-kpi">
+          <div class="rank-kpi-val" style="color:var(--green);font-size:11px">${cacTec ? fmt(cacTec) : '—'}</div>
+          <div class="rank-kpi-lbl">CAC Médio</div>
+        </div>
+      </div>
+      <div class="rank-bar-wrap">
+        <div class="rank-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      ${tiposChips ? `<div class="rank-tipos">${tiposChips}</div>` : ''}
+    </div>`;
+  }).join('');
+}
 
 // ── SYNC THEME ────────────────────────────────────────────────────────────
 window.addEventListener('message', e => {
