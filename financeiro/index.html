@@ -435,7 +435,7 @@
         <option value="">Todos</option>
         <option value="CAPEX">CAPEX</option>
         <option value="OPEX">OPEX</option>
-        <option value="RECEITA">RECEITA</option>
+        <option value="FINANCEIRO">FINANCEIRO</option>
       </select>
     </div>
     <button class="btn btn-ghost" id="btn-limpar">Limpar</button>
@@ -471,6 +471,10 @@
       <div class="kpi-label">Total OPEX</div>
       <div class="kpi-value neutral" id="kpi-opex">—</div>
     </div>
+    <div class="kpi-card accent">
+      <div class="kpi-label">Total Financeiro</div>
+      <div class="kpi-value neutral" id="kpi-financeiro">—</div>
+    </div>
     <div class="kpi-card red">
       <div class="kpi-label">Maior Despesa</div>
       <div class="kpi-value neutral" id="kpi-maior-valor">—</div>
@@ -491,7 +495,7 @@
       </div>
     </div>
     <div class="chart-card">
-      <h3>CAPEX × OPEX</h3>
+      <h3>CAPEX × OPEX × Financeiro</h3>
       <div class="chart-wrapper doughnut">
         <canvas id="chart-doughnut"></canvas>
       </div>
@@ -662,8 +666,8 @@ async function fetchSheet(sheetName, label) {
     const dataStr   = (cols[2] || '').trim();
     const valorStr  = (cols[3] || '').trim();
     const natureza  = (cols[5] || '').trim().toUpperCase();
-    const categoria = (cols[6] || '').trim();
-    const capexopex = (cols[7] || '').trim().toUpperCase();
+    let   categoria = (cols[6] || '').trim();
+    let   capexopex = (cols[7] || '').trim().toUpperCase();
 
     // Skip rules
     if (!descricao) continue;
@@ -673,6 +677,26 @@ async function fetchSheet(sheetName, label) {
 
     const valor = parseValor(valorStr);
     if (valor === 0) continue;
+
+    // ── Normalizar classificações divergentes ─────────────────────────────
+    // 1. N/A no CAPEX/OPEX → FINANCEIRO (entradas de empréstimo/juros/transferência)
+    if (capexopex === 'N/A') capexopex = 'FINANCEIRO';
+
+    // 2. Categoria "Receita" em linha DESPESA → corrigir pelo tipo de lançamento
+    if (natureza === 'DESPESA' && categoria.toLowerCase() === 'receita') {
+      const desc = descricao.toLowerCase();
+      if (desc.includes('juros') || desc.includes('empréstimo') || desc.includes('loan')) {
+        categoria = 'Financeiro';
+      } else if (desc.includes('combustível') || desc.includes('combust') || desc.includes('estorno')) {
+        categoria = 'Combustível';
+      } else if (desc.includes('pneu') || desc.includes('conserto') || desc.includes('reparo')) {
+        categoria = 'Manutenção de Veículo';
+      } else if (desc.includes('drop') || desc.includes('cabo') || desc.includes('insumo')) {
+        categoria = 'Insumos';
+      } else {
+        categoria = 'Sem categoria';
+      }
+    }
 
     result.push({
       mes: label,
@@ -804,6 +828,10 @@ function updateKPIs() {
     .filter(r => r.capexopex === 'OPEX')
     .reduce((s, r) => s + Math.abs(r.valor), 0);
 
+  const financeiro = data
+    .filter(r => r.capexopex === 'FINANCEIRO' && r.natureza === 'DESPESA')
+    .reduce((s, r) => s + Math.abs(r.valor), 0);
+
   const opexPct = receita ? (opex / receita) * 100 : 0;
 
   const despesas = data.filter(r => r.natureza === 'DESPESA');
@@ -817,9 +845,10 @@ function updateKPIs() {
   setKPI('kpi-despesa',   fmtBRL(despesa),  'neutral');
   setKPI('kpi-saldo',     fmtBRL(saldo),    saldo >= 0 ? 'positive' : 'negative');
   setKPI('kpi-margem',    fmtPct(margem),   margem >= 0 ? 'positive' : 'negative');
-  setKPI('kpi-capex',     fmtBRL(capex),    'neutral');
-  setKPI('kpi-opex',      fmtBRL(opex),     'neutral');
-  setKPI('kpi-opex-pct',  fmtPct(opexPct),  'neutral');
+  setKPI('kpi-capex',       fmtBRL(capex),       'neutral');
+  setKPI('kpi-opex',        fmtBRL(opex),        'neutral');
+  setKPI('kpi-financeiro',  fmtBRL(financeiro),  'neutral');
+  setKPI('kpi-opex-pct',    fmtPct(opexPct),     'neutral');
 
   if (maiorDespesa) {
     setKPI('kpi-maior-valor', fmtBRL(maiorDespesa.valor), 'negative');
@@ -919,13 +948,13 @@ function updateBarChart() {
 function updateDoughnutChart() {
   const capex = filtered.filter(r => r.capexopex === 'CAPEX').reduce((s, r) => s + Math.abs(r.valor), 0);
   const opex  = filtered.filter(r => r.capexopex === 'OPEX').reduce((s, r) => s + Math.abs(r.valor), 0);
-  const rec   = filtered.filter(r => r.capexopex === 'RECEITA').reduce((s, r) => s + Math.abs(r.valor), 0);
+  const fin   = filtered.filter(r => r.capexopex === 'FINANCEIRO').reduce((s, r) => s + Math.abs(r.valor), 0);
 
   const data = {
-    labels: ['CAPEX', 'OPEX', 'RECEITA'],
+    labels: ['CAPEX', 'OPEX', 'FINANCEIRO'],
     datasets: [{
-      data: [capex, opex, rec],
-      backgroundColor: ['rgba(59,130,246,0.8)', 'rgba(245,158,11,0.8)', 'rgba(34,197,94,0.8)'],
+      data: [capex, opex, fin],
+      backgroundColor: ['rgba(59,130,246,0.8)', 'rgba(245,158,11,0.8)', 'rgba(168,85,247,0.8)'],
       borderColor: '#0f1117',
       borderWidth: 3,
       hoverOffset: 8,
