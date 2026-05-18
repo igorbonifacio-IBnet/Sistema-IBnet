@@ -190,20 +190,29 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
         </select>
         <div class="lote-tip" id="lote-tip-ont"></div>
       </div>
-      <!-- S/N da ONT -->
+      <!-- S/N da ONT — leitura automática por IA -->
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <span class="lote-sel-label">🔖 S/N da ONT</span>
-        <input type="text" id="f-sn-ont"
-               class="lote-select"
-               placeholder="Ex: 2241567003871"
-               inputmode="text"
-               autocomplete="off"
-               autocapitalize="characters"
-               spellcheck="false"
-               maxlength="30"
-               oninput="this.value=this.value.toUpperCase()"
-               style="font-family:monospace;letter-spacing:.5px;margin-top:0"/>
-        <div class="lote-tip" style="margin-top:5px">Etiqueta traseira do roteador · será vinculado ao cliente no painel</div>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input type="text" id="f-sn-ont"
+                 class="lote-select"
+                 placeholder="Ex: 2241567003871"
+                 inputmode="text"
+                 autocomplete="off"
+                 autocapitalize="characters"
+                 spellcheck="false"
+                 maxlength="40"
+                 oninput="this.value=this.value.toUpperCase()"
+                 style="font-family:monospace;letter-spacing:.5px;flex:1"/>
+          <button type="button" id="btn-scan-sn" onclick="document.getElementById('sn-photo-input').click()"
+                  style="background:var(--accent);border:none;color:#fff;padding:10px 13px;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0;transition:opacity .15s"
+                  title="Tirar foto da etiqueta — IA lê o S/N automaticamente">📷</button>
+        </div>
+        <!-- input oculto que abre câmera traseira do celular -->
+        <input type="file" id="sn-photo-input" accept="image/*" capture="environment" style="display:none" onchange="processSNPhoto(this)"/>
+        <div class="lote-tip" id="sn-status" style="margin-top:5px">
+          Toque em 📷 para fotografar a etiqueta — a IA lê o S/N automaticamente
+        </div>
       </div>
     </div>
 
@@ -385,6 +394,8 @@ function showForm() {
   document.getElementById('f-con').value  = String(cfg.conector.qtdPadrao ?? 2);
   const snEl = document.getElementById('f-sn-ont');
   if (snEl) snEl.value = '';
+  const snStatus = document.getElementById('sn-status');
+  if (snStatus) { snStatus.className = 'lote-tip'; snStatus.textContent = 'Toque em 📷 para fotografar a etiqueta — a IA lê o S/N automaticamente'; }
   const btn = document.getElementById('btn-submit');
   btn.disabled = false;
   btn.textContent = '✅ Registrar Ativação';
@@ -659,6 +670,84 @@ async function processarFotos(ativId) {
   fillEl.style.width = '100%';
   lblEl.textContent = fotos.length ? `✅ ${fotos.length} foto(s) salvas` : '⚠️ Nenhuma foto processada.';
   return fotos.length;
+}
+
+// ── LEITURA DE S/N POR IA (Claude Vision) ────────────────────────────────
+const ANTHROPIC_KEY = 'SUA_CHAVE_AQUI'; // substitua pela sua chave da Anthropic
+
+async function processSNPhoto(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  input.value = ''; // reset para permitir nova captura
+
+  const statusEl = document.getElementById('sn-status');
+  const fieldEl  = document.getElementById('f-sn-ont');
+  const scanBtn  = document.getElementById('btn-scan-sn');
+
+  // Feedback visual de carregamento
+  scanBtn.textContent = '⏳';
+  scanBtn.disabled    = true;
+  statusEl.className  = 'lote-tip';
+  statusEl.textContent = '🔍 IA lendo a etiqueta…';
+
+  // Adiciona a foto ao grid de fotos da instalação (se tiver espaço)
+  if (pendingFotos.length < 5) {
+    pendingFotos.push(file);
+    renderFotoGrid();
+  }
+
+  try {
+    // Comprime para reduzir tamanho e acelerar envio
+    const compressed  = await compressImage(file, 1400, 0.88);
+    const base64Data  = compressed.split(',')[1];
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':                                      ANTHROPIC_KEY,
+        'anthropic-version':                              '2023-06-01',
+        'content-type':                                   'application/json',
+        'anthropic-dangerous-client-side-request-warning': 'I acknowledge the security risk of exposing my API key in client-side code for this internal tool.',
+      },
+      body: JSON.stringify({
+        model:      'claude-haiku-4-5',
+        max_tokens: 80,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: base64Data }
+            },
+            {
+              type: 'text',
+              text: 'Esta é a etiqueta traseira de um roteador/ONT de fibra óptica. Encontre o número de série principal — normalmente indicado como "S/N", "Serial Number", "SN" ou "Serial No". Responda APENAS com o número, sem nenhum texto adicional, sem rótulos, sem espaços extras. Se não conseguir identificar claramente, responda exatamente: NAO_ENCONTRADO'
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = await res.json();
+    const sn   = (data.content?.[0]?.text || '').trim().replace(/\s+/g,'').toUpperCase();
+
+    if (!sn || sn === 'NAO_ENCONTRADO' || sn.length < 4) {
+      statusEl.className  = 'lote-tip warn';
+      statusEl.textContent = '⚠ S/N não detectado — verifique a etiqueta e preencha manualmente';
+    } else {
+      fieldEl.value       = sn;
+      statusEl.className  = 'lote-tip ok';
+      statusEl.textContent = '✅ S/N lido pela IA — confirme se está correto antes de enviar';
+    }
+  } catch(e) {
+    console.error('SN OCR error:', e);
+    statusEl.className  = 'lote-tip warn';
+    statusEl.textContent = '⚠ Erro ao ler — preencha o S/N manualmente';
+  } finally {
+    scanBtn.textContent = '📷';
+    scanBtn.disabled    = false;
+  }
 }
 
 async function submitAtiv() {
