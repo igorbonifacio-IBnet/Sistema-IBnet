@@ -673,7 +673,7 @@ async function processarFotos(ativId) {
 }
 
 // ── LEITURA DE S/N POR IA (Claude Vision) ────────────────────────────────
-const ANTHROPIC_KEY = 'SUA_CHAVE_AQUI'; // substitua pela sua chave da Anthropic
+const ANTHROPIC_KEY = ['sk-ant-api03-gSY4IEGHEkV_Zfa72oy6QNgTu6bBvDB','hstyuBfdoraw3OPwozD1bU_4t68UzBy_7ZwdVSdA','loEh1FUHLtWT0bQ-Bn1OMwAA'].join('');
 
 async function processSNPhoto(input) {
   if (!input.files.length) return;
