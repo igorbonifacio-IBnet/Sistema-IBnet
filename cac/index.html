@@ -314,8 +314,8 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
-        <tbody id="visao-tbody"><tr><td colspan="13" class="tbl-empty">Carregando…</td></tr></tbody>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>S/N ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="14" class="tbl-empty">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -375,9 +375,9 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano Comercial</th><th>R$/mês</th><th>Payback</th><th>Vínculo</th><th>Fotos</th></tr></thead>
-        <tbody id="hist-tbody"><tr><td colspan="15" class="tbl-empty">Carregando…</td></tr></tbody>
-        <tfoot><tr class="tbl-footer"><td colspan="9" style="text-align:right">Total CAC (Instalações):</td><td id="hist-total">—</td><td colspan="5"></td></tr></tfoot>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>S/N ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano Comercial</th><th>R$/mês</th><th>Payback</th><th>Vínculo</th><th>Fotos</th></tr></thead>
+        <tbody id="hist-tbody"><tr><td colspan="16" class="tbl-empty">Carregando…</td></tr></tbody>
+        <tfoot><tr class="tbl-footer"><td colspan="10" style="text-align:right">Total CAC (Instalações):</td><td id="hist-total">—</td><td colspan="5"></td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -952,6 +952,7 @@ function renderVisaoRecentes() {
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td>${a.ont?.qtd ?? 0} un</td>
+      <td style="font-family:monospace;font-size:11px">${a.ont?.sn ? `<span style="background:rgba(59,130,246,.1);color:var(--blue);padding:2px 6px;border-radius:4px">${a.ont.sn}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${(a.drop?.metros||0).toLocaleString('pt-BR')} m</td>
       <td>${a.conector?.qtd ?? 0} un</td>
       <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
@@ -1445,6 +1446,7 @@ function renderHistorico() {
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
       <td style="text-align:center">${a.ont?.qtd??0}</td>
+      <td style="font-family:monospace;font-size:11px">${a.ont?.sn ? `<span style="background:rgba(59,130,246,.1);color:var(--blue);padding:2px 6px;border-radius:4px">${a.ont.sn}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="text-align:center">${a.drop?.metros??0}</td>
       <td style="text-align:center">${a.conector?.qtd??0}</td>
       <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>

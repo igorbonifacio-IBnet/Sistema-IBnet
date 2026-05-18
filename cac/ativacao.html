@@ -190,6 +190,21 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
         </select>
         <div class="lote-tip" id="lote-tip-ont"></div>
       </div>
+      <!-- S/N da ONT -->
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <span class="lote-sel-label">🔖 S/N da ONT</span>
+        <input type="text" id="f-sn-ont"
+               class="lote-select"
+               placeholder="Ex: 2241567003871"
+               inputmode="text"
+               autocomplete="off"
+               autocapitalize="characters"
+               spellcheck="false"
+               maxlength="30"
+               oninput="this.value=this.value.toUpperCase()"
+               style="font-family:monospace;letter-spacing:.5px;margin-top:0"/>
+        <div class="lote-tip" style="margin-top:5px">Etiqueta traseira do roteador · será vinculado ao cliente no painel</div>
+      </div>
     </div>
 
     <!-- DROP -->
@@ -368,6 +383,8 @@ function showForm() {
   document.getElementById('f-ont').value  = '1';
   document.getElementById('f-drop').value = '';
   document.getElementById('f-con').value  = String(cfg.conector.qtdPadrao ?? 2);
+  const snEl = document.getElementById('f-sn-ont');
+  if (snEl) snEl.value = '';
   const btn = document.getElementById('btn-submit');
   btn.disabled = false;
   btn.textContent = '✅ Registrar Ativação';
@@ -664,6 +681,9 @@ async function submitAtiv() {
   const loteDrp = document.getElementById('sel-lote-drop')?.value    || null;
   const loteCon = document.getElementById('sel-lote-conector')?.value || null;
 
+  // S/N da ONT (etiqueta traseira do roteador)
+  const snOnt = document.getElementById('f-sn-ont')?.value.trim().toUpperCase() || null;
+
   const agora = new Date();
   const id    = Date.now().toString();
 
@@ -683,7 +703,7 @@ async function submitAtiv() {
       tecnico:   tecnico.nome,
       data:      agora.toISOString().slice(0,10),
       criadoEm:  agora.toISOString(),
-      ont:      Object.assign({ qtd: ontQtd },    isInstalacao ? { total: tOnt } : {}, loteOnt ? { loteId: loteOnt } : {}),
+      ont:      Object.assign({ qtd: ontQtd },    isInstalacao ? { total: tOnt } : {}, loteOnt ? { loteId: loteOnt } : {}, snOnt ? { sn: snOnt } : {}),
       drop:     Object.assign({ metros: dropM },  isInstalacao ? { total: tDrp } : {}, loteDrp ? { loteId: loteDrp } : {}),
       conector: Object.assign({ qtd: conQtd },    isInstalacao ? { total: tCon } : {}, loteCon ? { loteId: loteCon } : {}),
       ...(isInstalacao ? { totalCAC } : {}),

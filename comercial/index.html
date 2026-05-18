@@ -377,6 +377,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
           <th onclick="sortBy('equip')">Equip. Recolhido ↕</th>
           <th onclick="sortBy('motivo')">Motivo Churn ↕</th>
           <th>CAC / Payback</th>
+          <th onclick="sortBy('sn')">S/N ONT ↕</th>
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
@@ -422,10 +423,16 @@ async function loadCACData() {
     cacLookup = {};
     Object.entries(ativs).forEach(([id, a]) => {
       // Determinar nome chave: vínculo manual tem prioridade
-      const vinc     = cacVinculos[id];
+      const vinc      = cacVinculos[id];
       const nomeChave = normNome(vinc?.nomeComercial || a.cliente);
       if (!cacLookup[nomeChave] || a.totalCAC > cacLookup[nomeChave].totalCAC) {
-        cacLookup[nomeChave] = { totalCAC: a.totalCAC || 0, id };
+        cacLookup[nomeChave] = {
+          totalCAC: a.totalCAC || 0,
+          id,
+          sn:   a.ont?.sn   || null,
+          data: a.data       || null,
+          tec:  a.tecnico    || null,
+        };
       }
     });
   } catch(e) { /* Firebase indisponível — continua sem CAC */ }
@@ -442,6 +449,16 @@ function cacBadgeHTML(nomeCliente, valorMensal) {
   return `<div class="cac-badge">
     <span class="cac-badge-val">R$ ${val.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
     <span class="cac-badge-pb ${pbCls}">⏱ ${pbLabel}</span>
+  </div>`;
+}
+
+function snBadgeHTML(nomeCliente) {
+  const cac = cacLookup[normNome(nomeCliente)];
+  if (!cac?.sn) return `<span style="color:var(--muted);font-size:11px">—</span>`;
+  const tip = [cac.data ? `Instalação: ${cac.data.split('-').reverse().join('/')}` : '', cac.tec ? `Técnico: ${cac.tec}` : ''].filter(Boolean).join(' · ');
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    <span title="${tip}" style="font-family:monospace;font-size:11px;font-weight:600;background:rgba(59,130,246,.1);color:var(--accent);padding:2px 7px;border-radius:5px;cursor:default;white-space:nowrap">${cac.sn}</span>
+    ${tip ? `<span style="font-size:9px;color:var(--muted)">${cac.tec||''}</span>` : ''}
   </div>`;
 }
 
@@ -713,7 +730,7 @@ function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key;
 
 function renderTable() {
   const search = document.getElementById('search-input').value.toLowerCase();
-  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn'};
+  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn',sn:'_sn'};
   let rows = getAdvFilteredRows([...filteredData]);
   if (search) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(search));
   rows.sort((a,b)=>{
@@ -746,6 +763,7 @@ function renderTable() {
     <td>${equipBadge(equip, churn)}</td>
     <td><span class="motivo-churn" title="${motivo}">${motivo||'—'}</span></td>
     <td>${cacBadgeHTML(r['Nome do Cliente'], parseFloat((r['Valor mensal num']||'0').toString().replace(/[^0-9,.]/g,'').replace(',','.')) || 0)}</td>
+    <td>${snBadgeHTML(r['Nome do Cliente'])}</td>
   </tr>`;
   }).join('');
   // pagination
