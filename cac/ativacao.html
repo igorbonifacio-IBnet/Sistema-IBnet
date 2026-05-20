@@ -303,6 +303,34 @@ const FB = {
 firebase.initializeApp(FB);
 const db = firebase.database();
 
+// ── GOOGLE SHEETS SYNC ────────────────────────────────────────────────────
+// Após implantar o Google Apps Script (veja instruções em cac/apps-script.js),
+// cole a URL gerada aqui:
+const APPS_SCRIPT_URL = ''; // ex: 'https://script.google.com/macros/s/XXXXXX/exec'
+
+async function syncToSheet(ativData) {
+  if (!APPS_SCRIPT_URL) return; // não configurado ainda
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      mode:    'no-cors', // Apps Script não retorna CORS header; usamos no-cors
+      headers: { 'Content-Type': 'text/plain' }, // no-cors só aceita text/plain ou form
+      body:    JSON.stringify({
+        cliente:  ativData.cliente,
+        pppoe:    ativData.pppoe,
+        contrato: ativData.contrato,
+        sn:       ativData.ont?.sn || '',
+        tipo:     ativData.tipo,
+        data:     ativData.data,
+        tecnico:  ativData.tecnico,
+      }),
+    });
+  } catch(e) {
+    // Falha silenciosa — Firebase já foi salvo corretamente
+    console.warn('[IBnet] Sync planilha falhou:', e.message);
+  }
+}
+
 // ── ESTADO ────────────────────────────────────────────────────────────────
 let pin = '';
 let tecnico = null;
@@ -808,6 +836,11 @@ async function submitAtiv() {
     // 3. Salvar ativação (estoque já debitado pelo FIFO acima)
     btn.textContent = 'Salvando…';
     await db.ref(`cac/ativacoes/${id}`).set(ativ);
+
+    // 4. Sincronizar com planilha Controle de Vendas (apenas instalações)
+    if (tipoAtiv === 'instalacao') {
+      syncToSheet(ativ); // fire & forget — não bloqueia o fluxo do técnico
+    }
 
     const TIPO_OK_LABEL = {
       instalacao: '✅ Ativação registrada!',

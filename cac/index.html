@@ -252,6 +252,13 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 .cfg-save-btn:disabled{opacity:.5;cursor:not-allowed}
 .cfg-sep{border:none;border-top:1px solid var(--border);margin:28px 0}
 
+/* ── SERIAIS ─────────────────────────────────────────────────────────────── */
+.sn-chip{font-family:monospace;font-size:12px;font-weight:700;background:rgba(59,130,246,.1);color:var(--blue);padding:3px 10px;border-radius:6px;letter-spacing:.5px;display:inline-block;white-space:nowrap}
+.sn-empty{background:rgba(100,116,139,.08);color:var(--muted);font-style:italic}
+.ser-sync-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px}
+.ser-sync-ok{background:rgba(34,197,94,.12);color:var(--green)}
+.ser-sync-pend{background:rgba(234,179,8,.12);color:#eab308}
+
 /* ── DESEMPENHO ──────────────────────────────────────────────────────────── */
 .desemp-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
 .desemp-kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
@@ -301,6 +308,7 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
     <button class="tab-btn" onclick="showTab('tecnicos')">👥 Técnicos</button>
     <button class="tab-btn" onclick="showTab('config')">⚙️ Config</button>
     <button class="tab-btn" onclick="showTab('desempenho')">📈 Desempenho</button>
+    <button class="tab-btn" onclick="showTab('seriais')">🔖 Seriais</button>
   </div>
 </div>
 
@@ -513,6 +521,65 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <button class="btn-primary" onclick="copyLinkCfg()">📋 Copiar</button>
     </div>
 
+  </div>
+
+  <!-- ── ABA: SERIAIS ─────────────────────────────────────────────────────── -->
+  <div class="tab-section" id="tab-seriais">
+    <div class="sec-head">
+      <div>
+        <h2>🔖 Serial dos Clientes</h2>
+        <p>Rastreamento de equipamentos por cliente — instalações, manutenções e trocas</p>
+      </div>
+      <button class="btn-secondary" onclick="exportSeriaisCSV()">⬇ Exportar CSV</button>
+    </div>
+
+    <!-- Filtros -->
+    <div class="ent-filter" style="margin-bottom:16px">
+      <input type="text" class="ent-search" id="ser-search"
+             placeholder="🔍 Buscar por cliente, S/N, contrato ou técnico…"
+             oninput="renderSeriais()" style="min-width:180px"/>
+      <select class="filter-sel" id="ser-tipo" onchange="renderSeriais()">
+        <option value="">Todos os tipos</option>
+        <option value="instalacao">🔌 Instalação</option>
+        <option value="manutencao">🔧 Manutenção</option>
+        <option value="migracao">🔄 Migração Fibra</option>
+        <option value="infra">🏗 Infra</option>
+      </select>
+      <select class="filter-sel" id="ser-sn-filter" onchange="renderSeriais()">
+        <option value="">Todos os equipamentos</option>
+        <option value="com">Com S/N registrado</option>
+        <option value="sem">Sem S/N</option>
+      </select>
+      <span class="ent-count" id="ser-count"></span>
+    </div>
+
+    <!-- Tabela -->
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Cliente</th>
+            <th>Contrato</th>
+            <th>S/N ONT</th>
+            <th>Tipo</th>
+            <th>Técnico</th>
+            <th>PPPoE</th>
+            <th>Planilha</th>
+          </tr>
+        </thead>
+        <tbody id="ser-tbody">
+          <tr><td colspan="8" class="tbl-empty">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Info sobre sincronização -->
+    <div style="margin-top:16px;padding:14px 16px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:10px;font-size:12px;color:var(--muted);line-height:1.6" id="ser-sync-info">
+      <strong style="color:var(--text)">ℹ️ Sincronização com Controle de Vendas</strong><br>
+      Instalações com S/N são enviadas automaticamente para a planilha assim que o técnico registra.<br>
+      <span id="ser-apps-script-status"></span>
+    </div>
   </div>
 
   <!-- ── ABA: DESEMPENHO ──────────────────────────────────────────────────── -->
@@ -831,6 +898,8 @@ async function init() {
     renderHistorico();
     renderStockCards(); // recalcula duração estimada com novo consumo
     populateTecFilter();
+    if (document.getElementById('tab-seriais')?.classList.contains('active'))    renderSeriais();
+    if (document.getElementById('tab-desempenho')?.classList.contains('active')) renderDesempenho();
   });
   db.ref('cac/entradas').on('value', s => {
     const v = s.val() || {};
@@ -908,6 +977,7 @@ function showTab(id) {
   if (id === 'historico')   buildHistMesSelect();
   if (id === 'config')      fillConfigFields();
   if (id === 'desempenho')  renderDesempenho();
+  if (id === 'seriais')     renderSeriais();
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────
@@ -2069,6 +2139,100 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft')  fotosNav(-1);
   if (e.key === 'ArrowRight') fotosNav(1);
 });
+
+// ── SERIAIS ───────────────────────────────────────────────────────────────
+function renderSeriais() {
+  const fSearch    = (document.getElementById('ser-search')?.value    || '').trim().toLowerCase();
+  const fTipo      = document.getElementById('ser-tipo')?.value        || '';
+  const fSnFilter  = document.getElementById('ser-sn-filter')?.value   || '';
+
+  const lista = allAtivacoes.filter(a => {
+    const temSN = !!(a.ont?.sn);
+    if (fSnFilter === 'com' && !temSN)  return false;
+    if (fSnFilter === 'sem' && temSN)   return false;
+    if (fTipo && (a.tipo || 'instalacao') !== fTipo) return false;
+    if (fSearch) {
+      const hay = [
+        a.cliente   || '',
+        a.ont?.sn   || '',
+        a.tecnico   || '',
+        a.pppoe     || '',
+        a.contrato  || '',
+      ].join(' ').toLowerCase();
+      if (!hay.includes(fSearch)) return false;
+    }
+    return true;
+  });
+
+  const countEl = document.getElementById('ser-count');
+  if (countEl) countEl.textContent = `${lista.length} registro${lista.length !== 1 ? 's' : ''}`;
+
+  // Status do Apps Script
+  const statusEl = document.getElementById('ser-apps-script-status');
+  if (statusEl) {
+    const configured = !!(typeof APPS_SCRIPT_URL !== 'undefined' && APPS_SCRIPT_URL);
+    statusEl.innerHTML = configured
+      ? `<span style="color:var(--green)">✅ Sincronização ativa — instalações são enviadas automaticamente para a planilha.</span>`
+      : `<span style="color:var(--yellow)">⚠️ Sincronização não configurada. Cole a URL do Google Apps Script na constante <code>APPS_SCRIPT_URL</code> em <code>cac/ativacao.html</code> para ativar o envio automático.</span>`;
+  }
+
+  const tbody = document.getElementById('ser-tbody');
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">${
+      fSearch || fTipo || fSnFilter
+        ? 'Nenhum resultado com esses filtros.'
+        : 'Nenhum registro de equipamento ainda.'
+    }</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lista.map(a => {
+    const tipo   = a.tipo || 'instalacao';
+    const temSN  = !!(a.ont?.sn);
+    const isInst = tipo === 'instalacao';
+
+    // Badge "planilha" — instalações com S/N foram (ou serão) sincronizadas
+    const plBadge = isInst && temSN
+      ? `<span class="ser-sync-badge ser-sync-ok">✓ Planilha</span>`
+      : isInst
+        ? `<span class="ser-sync-badge ser-sync-pend">⚠ Sem S/N</span>`
+        : `<span style="font-size:10px;color:var(--muted)">—</span>`;
+
+    return `<tr>
+      <td>${fmtDate(a.data)}</td>
+      <td style="font-weight:600;max-width:160px;white-space:normal;line-height:1.3">${a.cliente || '—'}</td>
+      <td style="font-family:monospace;font-size:11px">${a.contrato || '—'}</td>
+      <td>${temSN
+        ? `<span class="sn-chip">${a.ont.sn}</span>`
+        : `<span class="sn-chip sn-empty">não informado</span>`
+      }</td>
+      <td><span class="tag ${TIPO_CLS[tipo] || 'tag-inst'}">${TIPO_LABEL[tipo] || tipo}</span></td>
+      <td><span class="tag tag-tec">${a.tecnico || '—'}</span></td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe || '—'}</td>
+      <td>${plBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportSeriaisCSV() {
+  const rows = [['Data','Cliente','Contrato','S/N ONT','Tipo','Técnico','PPPoE']];
+  allAtivacoes.forEach(a => {
+    rows.push([
+      fmtDate(a.data),
+      a.cliente  || '',
+      a.contrato || '',
+      a.ont?.sn  || '',
+      TIPO_LABEL[a.tipo || 'instalacao'] || a.tipo,
+      a.tecnico  || '',
+      a.pppoe    || '',
+    ]);
+  });
+  const csv = '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a   = document.createElement('a');
+  a.href    = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download= `seriais_ibnet_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
 
 // ── DESEMPENHO ────────────────────────────────────────────────────────────
 const RANK_COLORS = ['#E8390E','#f59e0b','#3b82f6','#22c55e','#a855f7','#06b6d4','#ec4899'];
