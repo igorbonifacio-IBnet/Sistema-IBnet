@@ -796,6 +796,11 @@ const SGP_BASE = 'https://sbsginfo.sgp.tsmx.com.br';
 const SGP_USER = 'admin';
 const SGP_PASS = 'Info@2024';
 
+// Chave Anthropic — usada para ler S/N da ONT nas fotos do SGP via Claude Haiku
+const ANTHROPIC_KEY = 'sk-ant-api03-gSY4IEGHEkV_Zfa72oy6QNgTu6bBvDB'
+                    + 'hstyuBfdoraw3OPwozD1bU_4t68UzBy_7ZwdVSdA'
+                    + 'loEh1FUHLtWT0bQ-Bn1OMwAA';
+
 function doGet(e) {
   const action = (e.parameter.action || '').toLowerCase();
   if (action === 'sgp_fotos') {
@@ -1169,16 +1174,21 @@ function _sgpExtrairOS(cookieStr, pk, osInfo) {
     }
   } catch(_) { /* silencioso */ }
 
-  // Log de diagnóstico: mostra ocorrencia pk e qtd de fotos para cada OS
-  Logger.log(`   OS ${pk} → ocorrencia_pk=${ocorrenciaPk} | fotos=${qtdFotos} | servico="${servicoTxt.slice(0,60)}"`);
-
   const insumos    = _sgpParseServico(servicoTxt);
   const motivoLow  = (osInfo.motivo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   let tipo = 'manutencao';
   if      (motivoLow.includes('instala')) tipo = 'instalacao';
   else if (motivoLow.includes('migra'))   tipo = 'migracao';
   else if (motivoLow.includes('infra'))   tipo = 'infra';
-  else if (motivoLow.includes('remoca'))  tipo = 'manutencao'; // Remoção de KIT
+  else if (motivoLow.includes('remoca'))  tipo = 'manutencao';
+
+  // Tenta ler S/N da ONT nas fotos via IA (só se tem ONT e fotos)
+  let snOnt = null;
+  if (insumos.ont > 0 && qtdFotos > 0) {
+    snOnt = _sgpExtrairSNdaFoto(cookieStr, ocorrenciaPk);
+  }
+
+  Logger.log(`   OS ${pk} → ocorrencia_pk=${ocorrenciaPk} | fotos=${qtdFotos} | drop=${insumos.drop}m | ont=${insumos.ont} | sn=${snOnt||'-'} | servico="${servicoTxt.slice(0,50)}"`);
 
   const tecnicoNome = osInfo.tecnico || '';
   const agora       = new Date().toISOString();
@@ -1195,9 +1205,9 @@ function _sgpExtrairOS(cookieStr, pk, osInfo) {
     criadoEm:  agora,
     sgp_pk:           pk,
     sgp_os:           pk,
-    sgp_ocorrencia_pk: ocorrenciaPk,  // pk da Ocorrencia (diferente do pk da OS!)
+    sgp_ocorrencia_pk: ocorrenciaPk,
     origem:    'sgp_auto',
-    ont:       { qtd: insumos.ont },
+    ont:       { qtd: insumos.ont, ...(snOnt ? { sn: snOnt } : {}) },
     drop:      { metros: insumos.drop },
     conector:  { qtd: insumos.conector },
     ...(qtdFotos > 0 ? { sgpFotos: qtdFotos } : {}),
@@ -1208,25 +1218,108 @@ function _sgpExtrairOS(cookieStr, pk, osInfo) {
  * Extrai quantidades de insumos do campo "Serviço Prestado".
  * Exemplos reconhecidos:
  *   "2 conectores"  "1 ont"  "179 metros drop"  "179 mts drop"
+ *   "78 metros"  "120 metros" (standalone — técnico omite palavra "drop")
  *   "drop 85m"  "3x conector"  "ONT: 1"
- *   "1004-845=159 mts drop"  "302-188= 114 mts drop"  (cálculo com resultado antes de drop)
+ *   "1004-845=159 mts drop"  "302-188= 114 mts drop"  (cálculo com resultado)
  */
 function _sgpParseServico(texto) {
   if (!texto) return { ont: 0, drop: 0, conector: 0 };
   const ont      = parseInt((texto.match(/(\d+)\s*(?:x\s*)?ont/i)      || [])[1] || 0);
   const conector = parseInt((texto.match(/(\d+)\s*(?:x\s*)?conect/i)   || [])[1] || 0);
 
-  // Drop: aceita "metros", "mts", "m" — e resultado de cálculo antes de drop/m
-  // Ex: "179 metros drop", "114 mts drop", "1004-845=159 mts drop", "drop 85m"
+  // Drop — por ordem de prioridade:
+  // 1. Cálculo com resultado: "1004-845=159 mts drop" ou "= 159 metros"
+  // 2. Número antes de drop: "179 metros drop" / "114 mts drop"
+  // 3. Drop antes de número: "drop: 85m"
+  // 4. Fallback: "78 metros" standalone (técnicos geralmente omitem "drop")
   const dropRaw = (
-    texto.match(/=\s*([\d.,]+)\s*(?:metros?|mts?)\s*(?:de\s*)?drop/i)  // = 159 mts drop
-    || texto.match(/([\d.,]+)\s*(?:metros?|mts?)\s*(?:de\s*)?drop/i)    // 179 metros drop / 114 mts drop
-    || texto.match(/drop\s*[:\-]?\s*([\d.,]+)\s*(?:metros?|mts?|m\b)/i) // drop: 85m
+    texto.match(/=\s*([\d.,]+)\s*(?:metros?|mts?)\s*(?:de\s*)?drop/i)
+    || texto.match(/([\d.,]+)\s*(?:metros?|mts?)\s*(?:de\s*)?drop/i)
+    || texto.match(/drop\s*[:\-]?\s*([\d.,]+)\s*(?:metros?|mts?|m\b)/i)
+    || texto.match(/^\s*([\d.,]+)\s*(?:metros?|mts?)\s*$/im)
+    || texto.match(/^\s*([\d.,]+)\s*(?:metros?|mts?)\b/im)
     || []
   )[1] || '0';
   const drop = parseFloat(dropRaw.replace(',', '.'));
 
   return { ont, drop, conector };
+}
+
+/**
+ * Tenta ler o S/N da ONT nas fotos do SGP usando Claude Haiku (visão).
+ * Baixa até MAX_FOTOS_SN fotos e retorna o primeiro S/N encontrado, ou null.
+ * Só é chamado quando a OS tem ONT (qtd > 0) e fotos.
+ */
+const MAX_FOTOS_SN = 4; // máximo de fotos para tentar ler o S/N
+
+function _sgpExtrairSNdaFoto(cookieStr, ocorrenciaPk) {
+  try {
+    // Lista anexos
+    const aUrl  = `${SGP_BASE}/admin/atendimento/ocorrencia/${ocorrenciaPk}/anexo/list/`;
+    const aResp = UrlFetchApp.fetch(aUrl, {
+      method: 'get', muteHttpExceptions: true,
+      headers: { Cookie: cookieStr }, followRedirects: true,
+    });
+    if (aResp.getResponseCode() !== 200) return null;
+
+    const aHtml = aResp.getContentText();
+    const ids   = [...new Set(
+      (aHtml.match(/\/atendimento\/ocorrencia\/anexo\/(\d+)\/get\//g) || [])
+        .map(m => m.match(/\/(\d+)\//)[1])
+    )];
+    if (!ids.length) return null;
+
+    // Tenta cada foto até achar o S/N
+    for (const id of ids.slice(0, MAX_FOTOS_SN)) {
+      try {
+        const imgUrl  = `${SGP_BASE}/admin/atendimento/ocorrencia/anexo/${id}/get/?noattachment=1`;
+        const imgResp = UrlFetchApp.fetch(imgUrl, {
+          method: 'get', muteHttpExceptions: true,
+          headers: { Cookie: cookieStr },
+        });
+        if (imgResp.getResponseCode() !== 200) continue;
+
+        const ct = (imgResp.getHeaders()['Content-Type'] || 'image/jpeg').split(';')[0].trim();
+        if (!ct.startsWith('image/')) continue;
+
+        const b64 = Utilities.base64Encode(imgResp.getBlob().getBytes());
+
+        const aiResp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+          method: 'post', muteHttpExceptions: true,
+          headers: {
+            'x-api-key':         ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type':      'application/json',
+          },
+          payload: JSON.stringify({
+            model:      'claude-haiku-4-5',
+            max_tokens: 80,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'base64', media_type: ct, data: b64 } },
+                { type: 'text',  text:
+                  'Esta é a etiqueta traseira de um roteador/ONT de fibra óptica. ' +
+                  'Encontre o número de série principal — indicado como "S/N", "SN", "Serial Number" ou "Serial No". ' +
+                  'Responda APENAS com o número/código, sem texto adicional. ' +
+                  'Se não encontrar claramente, responda: NAO_ENCONTRADO'
+                }
+              ]
+            }]
+          }),
+        });
+
+        if (aiResp.getResponseCode() !== 200) continue;
+        const aiData = JSON.parse(aiResp.getContentText());
+        const sn     = (aiData.content?.[0]?.text || '').trim().replace(/\s+/g,'').toUpperCase();
+
+        if (sn && sn !== 'NAO_ENCONTRADO' && sn.length >= 4 && sn.length <= 30) {
+          return sn;
+        }
+      } catch(_) { continue; }
+    }
+    return null;
+  } catch(_) { return null; }
 }
 
 /**
