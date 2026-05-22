@@ -129,6 +129,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .filter-sel{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .2s}
 .filter-sel:focus{outline:none;border-color:var(--accent)}
 
+/* ── BOTÕES DE PERÍODO ───────────────────────────────────────────────────── */
+.period-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.period-btn{background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);padding:5px 11px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all .18s;font-family:inherit;letter-spacing:.2px;white-space:nowrap}
+.period-btn:hover{border-color:var(--accent);color:var(--text)}
+.period-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── ATIVIDADES PENDENTES ────────────────────────────────────────────────── */
+.pend-card{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.pend-card-title{font-size:12px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.pend-badge{background:rgba(245,158,11,.2);color:#f59e0b;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700}
+.pend-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto}
+.pend-item{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:5px 8px;background:rgba(255,255,255,.03);border-radius:7px;font-size:12px}
+.pend-item-cliente{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pend-item-meta{color:var(--muted);font-size:11px;text-align:right;white-space:nowrap}
+.pend-empty{color:var(--muted);font-size:12px;font-style:italic;padding:6px 0;text-align:center}
+
 /* ── MODAIS ──────────────────────────────────────────────────────────────── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px}
 .modal-overlay.show{opacity:1;pointer-events:auto}
@@ -409,13 +425,40 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <div id="resumo-tec-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px"></div>
     </div>
 
+    <!-- ── BLOCO 3.5: Atividades Pendentes ──────────────────────────────────── -->
+    <div class="pend-card" id="pend-section">
+      <div class="pend-card-title">
+        ⏳ Atividades Pendentes no SGP
+        <span class="pend-badge" id="pend-badge">0</span>
+        <span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--muted)">OSes abertas / em andamento</span>
+      </div>
+      <div class="pend-list" id="pend-list">
+        <div class="pend-empty">Carregando…</div>
+      </div>
+    </div>
+
     <!-- ── BLOCO 4: Tabela filtrada ───────────────────────────────────────── -->
     <div class="sec-head" style="margin-top:4px">
-      <div><h2>Atividades do Mês</h2><p>Registradas via SGP · use os filtros para refinar</p></div>
+      <div><h2 id="visao-period-title">Atividades — Este Mês</h2><p>Registradas via SGP · use os filtros para refinar</p></div>
       <span class="ent-count" id="visao-count" style="font-size:12px;color:var(--muted)"></span>
     </div>
+
+    <!-- Botões de período rápido -->
+    <div class="period-btns">
+      <button class="period-btn active" id="pbtn-mes"      onclick="setPeriod('mes')">Este mês</button>
+      <button class="period-btn"        id="pbtn-semana"   onclick="setPeriod('semana')">Esta semana</button>
+      <button class="period-btn"        id="pbtn-semanapass" onclick="setPeriod('semanapass')">Semana passada</button>
+      <button class="period-btn"        id="pbtn-mespass"  onclick="setPeriod('mespass')">Mês passado</button>
+      <button class="period-btn"        id="pbtn-30d"      onclick="setPeriod('30d')">Últimos 30 dias</button>
+      <button class="period-btn"        id="pbtn-custom"   onclick="setPeriod('custom')">📅 Personalizado</button>
+      <span style="color:var(--muted);font-size:11px;margin-left:4px">|</span>
+      <input  type="date" class="filter-sel" id="visao-data-ini" onchange="setPeriod('custom')" style="min-width:130px"/>
+      <span style="color:var(--muted);font-size:11px">→</span>
+      <input  type="date" class="filter-sel" id="visao-data-fim" onchange="setPeriod('custom')" style="min-width:130px"/>
+    </div>
+
+    <!-- Filtros de tipo/técnico/busca -->
     <div class="filter-bar" style="margin-bottom:10px">
-      <input  type="date"   class="filter-sel" id="visao-data"  onchange="renderVisaoRecentes()" style="min-width:140px"/>
       <select class="filter-sel" id="visao-tipo"  onchange="renderVisaoRecentes()">
         <option value="">Todos os tipos</option>
         <option value="instalacao">🏠 Instalação</option>
@@ -932,10 +975,12 @@ let viewYear  = new Date().getFullYear();
 let viewMonth = new Date().getMonth();
 const MONTHS  = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-let allAtivacoes = [];
-let allEntradas  = [];
-let allTecnicos  = {};
-let estoque      = { ont:{qtd:0}, drop:{metros:0}, conector:{qtd:0} };
+let allAtivacoes  = [];
+let allPendentes  = [];
+let allEntradas   = [];
+let allTecnicos   = {};
+let estoque       = { ont:{qtd:0}, drop:{metros:0}, conector:{qtd:0} };
+let currentPeriod = 'mes'; // periodo ativo no filtro da tabela
 let config       = {
   ont:     { precoUnit: 120, alertaMin: 3 },
   drop:    { precoPorMetro: 0.30, alertaMin: 200 },
@@ -1017,6 +1062,11 @@ async function init() {
     renderTecnicos();
     populateTecFilter();
   });
+  db.ref('cac/pendentes').on('value', s => {
+    const v = s.val() || {};
+    allPendentes = Object.values(v).sort((a,b) => (a.data||'').localeCompare(b.data||''));
+    renderPendentes();
+  });
 
   // Carregar dados do Comercial (para payback) e vínculos manuais
   loadComercialSheet();
@@ -1034,6 +1084,7 @@ async function init() {
 
   fillConfigFields();
   updateMonthLabel();
+  setPeriod('mes'); // inicializa botões de período e datas
 }
 init();
 
@@ -1053,6 +1104,91 @@ function ativacoesDoMes() {
   return allAtivacoes.filter(a => a.data && a.data.startsWith(pref));
 }
 
+// ── FILTRO DE PERÍODO ─────────────────────────────────────────────────────
+function _isoDate(d) { return d.toISOString().slice(0,10); }
+
+function setPeriod(p) {
+  currentPeriod = p;
+  const today = new Date();
+
+  if (p !== 'custom') {
+    let ini, fim;
+    if (p === 'mes') {
+      ini = new Date(today.getFullYear(), today.getMonth(), 1);
+      fim = today;
+    } else if (p === 'semana') {
+      const dow = today.getDay();
+      const diff = (dow === 0 ? -6 : 1 - dow); // segunda-feira desta semana
+      ini = new Date(today); ini.setDate(today.getDate() + diff);
+      fim = today;
+    } else if (p === 'semanapass') {
+      const dow = today.getDay();
+      const diff = (dow === 0 ? -6 : 1 - dow);
+      fim = new Date(today); fim.setDate(today.getDate() + diff - 1); // domingo passado
+      ini = new Date(fim);   ini.setDate(fim.getDate() - 6);           // segunda passada
+    } else if (p === 'mespass') {
+      ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      fim = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (p === '30d') {
+      ini = new Date(today); ini.setDate(today.getDate() - 29);
+      fim = today;
+    }
+    document.getElementById('visao-data-ini').value = _isoDate(ini);
+    document.getElementById('visao-data-fim').value = _isoDate(fim);
+  }
+
+  // Atualiza botões ativos
+  ['mes','semana','semanapass','mespass','30d','custom'].forEach(id => {
+    const btn = document.getElementById('pbtn-' + id);
+    if (btn) btn.classList.toggle('active', id === p);
+  });
+
+  // Atualiza título
+  const titles = {
+    mes: 'Atividades — Este Mês',
+    semana: 'Atividades — Esta Semana',
+    semanapass: 'Atividades — Semana Passada',
+    mespass: 'Atividades — Mês Passado',
+    '30d': 'Atividades — Últimos 30 Dias',
+    custom: 'Atividades — Período Personalizado',
+  };
+  const titleEl = document.getElementById('visao-period-title');
+  if (titleEl) titleEl.textContent = titles[p] || 'Atividades';
+
+  renderVisaoRecentes();
+}
+
+// ── ATIVIDADES PENDENTES ──────────────────────────────────────────────────
+function renderPendentes() {
+  const badge = document.getElementById('pend-badge');
+  const list  = document.getElementById('pend-list');
+  if (!list) return;
+
+  if (badge) badge.textContent = allPendentes.length;
+
+  if (!allPendentes.length) {
+    list.innerHTML = `<div class="pend-empty">✅ Nenhuma atividade pendente no momento.</div>`;
+    return;
+  }
+
+  const MOTIVO_ICON = { 'Instalação': '🏠', 'instalacao': '🏠', 'Corretiva': '🔧', 'Preventiva': '🔧', 'Manutenção': '🔧', 'Mudança': '🔄', 'Financeiro': '💰' };
+  list.innerHTML = allPendentes.map(p => {
+    const icon   = MOTIVO_ICON[p.motivo] || '📋';
+    const tec    = (p.tecnico || '—').replace('tecnico.','');
+    const data   = p.data ? p.data.slice(0,10).split('-').reverse().join('/') : '—';
+    const motivo = p.motivo || '—';
+    return `<div class="pend-item">
+      <span style="font-size:15px;line-height:1">${icon}</span>
+      <div>
+        <div class="pend-item-cliente">${p.cliente || '—'}</div>
+        <div style="font-size:10px;color:var(--muted)">${motivo} · Contrato ${p.contrato || '—'}</div>
+      </div>
+      <span class="tag tag-tec" style="font-size:10px">${tec}</span>
+      <span class="pend-item-meta">${data}</span>
+    </div>`;
+  }).join('');
+}
+
 // ── MÊS NAV ───────────────────────────────────────────────────────────────
 function changeMonth(d) {
   viewMonth += d;
@@ -1060,6 +1196,25 @@ function changeMonth(d) {
   if (viewMonth < 0)  { viewMonth = 11; viewYear--; }
   updateMonthLabel();
   renderKPIs();
+  // Atualiza range de datas para o mês navegado
+  const pad = v => String(v).padStart(2,'0');
+  const lastDay = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const ini = `${viewYear}-${pad(viewMonth+1)}-01`;
+  const fim = `${viewYear}-${pad(viewMonth+1)}-${pad(lastDay)}`;
+  document.getElementById('visao-data-ini').value = ini;
+  document.getElementById('visao-data-fim').value = fim;
+  // Marca como "personalizado" (estamos num mês diferente do corrente)
+  const hoje = new Date();
+  const estesMes = (viewMonth === hoje.getMonth() && viewYear === hoje.getFullYear());
+  currentPeriod = estesMes ? 'mes' : 'custom';
+  ['mes','semana','semanapass','mespass','30d','custom'].forEach(id => {
+    const btn = document.getElementById('pbtn-' + id);
+    if (btn) btn.classList.toggle('active', id === currentPeriod);
+  });
+  const titleEl = document.getElementById('visao-period-title');
+  if (titleEl) titleEl.textContent = estesMes
+    ? 'Atividades — Este Mês'
+    : `Atividades — ${MONTHS[viewMonth]} ${viewYear}`;
   renderVisaoRecentes();
 }
 function updateMonthLabel() {
@@ -1178,31 +1333,53 @@ function populateVisaoTecFilter() {
   const sel  = document.getElementById('visao-tec');
   if (!sel) return;
   const prev = sel.value;
-  const tecs = [...new Set(ativacoesDoMes().map(a=>a.tecnico).filter(Boolean))].sort();
+  // usa a mesma base do render (range de datas ou mês atual)
+  const fIni = document.getElementById('visao-data-ini')?.value || '';
+  const fFim = document.getElementById('visao-data-fim')?.value || '';
+  const base = (fIni || fFim)
+    ? allAtivacoes.filter(a => {
+        if (!a.data) return false;
+        const d = a.data.slice(0,10);
+        if (fIni && d < fIni) return false;
+        if (fFim && d > fFim) return false;
+        return true;
+      })
+    : ativacoesDoMes();
+  const tecs = [...new Set(base.map(a=>a.tecnico).filter(Boolean))].sort();
   sel.innerHTML = `<option value="">Todos os técnicos</option>` +
     tecs.map(t=>`<option value="${t}"${t===prev?' selected':''}>${t}</option>`).join('');
 }
 
 function limparFiltrosVisao() {
-  const ids = ['visao-data','visao-tipo','visao-search'];
-  ids.forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  ['visao-tipo','visao-search'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value='';
+  });
   const sel = document.getElementById('visao-tec');
   if (sel) sel.value = '';
-  renderVisaoRecentes();
+  setPeriod('mes'); // volta ao período padrão
 }
 
 function renderVisaoRecentes() {
   populateVisaoTecFilter();
 
-  const fData   = document.getElementById('visao-data')?.value   || '';
-  const fTipo   = document.getElementById('visao-tipo')?.value   || '';
-  const fTec    = document.getElementById('visao-tec')?.value    || '';
+  const fIni    = document.getElementById('visao-data-ini')?.value || '';
+  const fFim    = document.getElementById('visao-data-fim')?.value || '';
+  const fTipo   = document.getElementById('visao-tipo')?.value     || '';
+  const fTec    = document.getElementById('visao-tec')?.value      || '';
   const fSearch = (document.getElementById('visao-search')?.value || '').trim().toLowerCase();
 
-  const base = ativacoesDoMes();
+  // Base: usa range de datas (se definido) ou ativacoesDoMes como fallback
+  const base = (fIni || fFim)
+    ? allAtivacoes.filter(a => {
+        if (!a.data) return false;
+        const d = a.data.slice(0,10);
+        if (fIni && d < fIni) return false;
+        if (fFim && d > fFim) return false;
+        return true;
+      })
+    : ativacoesDoMes();
 
   const lista = base.filter(a => {
-    if (fData   && a.data !== fData)                         return false;
     if (fTipo   && (a.tipo||'instalacao') !== fTipo)         return false;
     if (fTec    && a.tecnico !== fTec)                       return false;
     if (fSearch) {
@@ -1212,15 +1389,15 @@ function renderVisaoRecentes() {
     return true;
   });
 
-  const countEl = document.getElementById('visao-count');
-  const temFiltro = fData || fTipo || fTec || fSearch;
+  const countEl  = document.getElementById('visao-count');
+  const temFiltro = fTipo || fTec || fSearch;
   if (countEl) countEl.textContent = temFiltro
     ? `${lista.length} de ${base.length} ativações`
     : `${base.length} ativações`;
 
   const tbody = document.getElementById('visao-tbody');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="12" class="tbl-empty">${temFiltro ? 'Nenhuma atividade com esses filtros.' : 'Nenhuma atividade neste mês.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="tbl-empty">${temFiltro ? 'Nenhuma atividade com esses filtros.' : 'Nenhuma atividade neste período.'}</td></tr>`;
     return;
   }
 

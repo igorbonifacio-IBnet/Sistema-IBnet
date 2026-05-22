@@ -1101,7 +1101,59 @@ function _sincronizarSGPComDatas(iniStr, fimStr, forcarReimport) {
   });
 
   props.setProperty('SGP_PKS_SYNC', JSON.stringify([...jaSync].slice(-2000)));
-  Logger.log(`✅ Sync concluído · ${importadas} OS(es) importada(s).`);
+  Logger.log(`✅ Sync encerradas concluído · ${importadas} OS(es) importada(s).`);
+
+  // ── Sync pendentes (OSes não encerradas) ──────────────────────────────────
+  const pendentes = osList.filter(os => !os.encerrada);
+  Logger.log(`⏳ Atualizando ${pendentes.length} OS(es) pendente(s) no Firebase…`);
+
+  // 1. Remove do nó /pendentes/ qualquer OS que agora está encerrada
+  const encerradasPks = new Set(osList.filter(o => o.encerrada).map(o => String(o.pk)));
+  try {
+    const kResp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/pendentes.json?shallow=true`, {
+      method: 'get', muteHttpExceptions: true,
+    });
+    if (kResp.getResponseCode() === 200) {
+      const kd = kResp.getContentText();
+      if (kd && kd !== 'null') {
+        const toRemove = {};
+        Object.keys(JSON.parse(kd)).forEach(k => {
+          if (encerradasPks.has(k.replace('sgp_', ''))) toRemove[k] = null;
+        });
+        if (Object.keys(toRemove).length) {
+          UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/pendentes.json`, {
+            method: 'patch', contentType: 'application/json',
+            payload: JSON.stringify(toRemove), muteHttpExceptions: true,
+          });
+          Logger.log(`   🗑 ${Object.keys(toRemove).length} OS(es) movida(s) de pendentes → encerradas.`);
+        }
+      }
+    }
+  } catch(e) {
+    Logger.log(`⚠️ Erro ao limpar pendentes: ${e}`);
+  }
+
+  // 2. Grava/atualiza as pendentes atuais
+  pendentes.forEach(os => {
+    try {
+      _firebasePut(`cac/pendentes/sgp_${os.pk}`, {
+        id:           `sgp_${os.pk}`,
+        sgp_pk:       os.pk,
+        cliente:      os.clienteNome,
+        contrato:     os.contrato,
+        motivo:       os.motivo,
+        tecnico:      os.tecnico,
+        data:         os.dataISO,
+        status:       'pendente',
+        origem:       'sgp_auto',
+        atualizadoEm: new Date().toISOString(),
+      });
+      Utilities.sleep(150);
+    } catch(err) {
+      Logger.log(`⚠️ Erro ao salvar pendente OS ${os.pk}: ${err}`);
+    }
+  });
+  Logger.log(`⏳ Pendentes atualizadas: ${pendentes.length}`);
 }
 
 /**
@@ -1160,10 +1212,12 @@ function _sgpListarOS(cookieStr, iniStr, fimStr) {
     const motivoMatch = row.match(/>\s*(Instala[çc][ãa]o[^<]{0,20}|Remo[çc][ãa]o[^<]{0,20}|Preventiva|Corretiva|Financeiro|Mudan[çc]a[^<]{0,20})\s*<\/td>/i);
     const motivo = motivoMatch ? motivoMatch[1].trim() : '';
 
-    // Data cadastro: primeiro sort span com 14 dígitos (YYYYMMDDHHmmss)
-    const dataSortMatch = row.match(/<span class="sort">(\d{14})<\/span>/);
-    const dataISO = dataSortMatch
-      ? `${dataSortMatch[1].slice(0,4)}-${dataSortMatch[1].slice(4,6)}-${dataSortMatch[1].slice(6,8)}`
+    // Data encerramento: usa o ÚLTIMO sort span (14 dígitos) da linha
+    // O SGP exibe: [data_cadastro] ... [data_encerramento] — o último é o encerramento
+    const sortAll = [...row.matchAll(/<span class="sort">(\d{14})<\/span>/g)].map(m => m[1]);
+    const sortUsar = sortAll.length ? sortAll[sortAll.length - 1] : null;
+    const dataISO = sortUsar
+      ? `${sortUsar.slice(0,4)}-${sortUsar.slice(4,6)}-${sortUsar.slice(6,8)}`
       : new Date().toISOString().slice(0, 10);
 
     // Técnico: padrão "tecnico.nome" ou primeiro nome após as datas
