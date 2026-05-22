@@ -1257,9 +1257,11 @@ function _sgpExtrairOS(cookieStr, pk, osInfo) {
     tecnicoId: `sgp_${tecnicoNome.replace(/\s+/g,'_').toLowerCase()}`,
     data:      osInfo.dataISO   || agora.slice(0, 10),
     criadoEm:  agora,
-    sgp_pk:           pk,
-    sgp_os:           pk,
+    sgp_pk:            pk,
+    sgp_os:            pk,
     sgp_ocorrencia_pk: ocorrenciaPk,
+    sgp_motivo:        osInfo.motivo   || '',
+    sgp_servico:       servicoTxt      || '',   // texto do campo "Serviço Prestado" da OS
     origem:    'sgp_auto',
     ont:       { qtd: insumos.ont, ...(snOnt ? { sn: snOnt } : {}) },
     drop:      { metros: insumos.drop },

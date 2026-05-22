@@ -885,6 +885,20 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
   </div>
 </div>
 
+<!-- ── MODAL: Detalhe da OS do SGP ─────────────────────────────────────── -->
+<div class="modal-overlay" id="os-detail-modal" onclick="if(event.target===this)closeOsDetail()">
+  <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto">
+    <div class="modal-title" id="os-detail-title">📋 Detalhes da OS</div>
+    <div id="os-detail-body" style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
+      <!-- preenchido via JS -->
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-primary" id="os-detail-fotos-btn" onclick="" style="display:none">📷 Ver Fotos do SGP</button>
+      <button class="btn-secondary" onclick="closeOsDetail()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── LIGHTBOX: Fotos Instalação ──────────────────────────────────────── -->
 <div class="fotos-overlay" id="fotos-overlay" onclick="if(event.target===this)closeFotosViewer()">
   <button class="fotos-close" onclick="closeFotosViewer()">×</button>
@@ -1226,7 +1240,7 @@ function renderVisaoRecentes() {
     return `<tr>
       <td style="white-space:nowrap">${fmtDate(a.data)}</td>
       <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar">${TIPO_LABEL[tipo]||tipo} ✎</span>${sgpBadge}</td>
-      <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.cliente}">${a.cliente}</td>
+      <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:var(--accent)" title="Clique para ver detalhes da OS" onclick="openOsDetail('${a.id}')">${a.cliente}</td>
       <td style="color:var(--muted);font-size:12px">${a.contrato||'—'}</td>
       <td><span class="tag tag-tec" style="font-size:10px">${(a.tecnico||'—').replace('tecnico.','')}</span></td>
       <td style="text-align:center">${a.ont?.qtd > 0 ? `<span style="font-weight:700;color:#06b6d4">${a.ont.qtd}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
@@ -2271,6 +2285,86 @@ function fotoBadgeHTML(ativ) {
   const count = ativ.temFotos || ativ.fotos?.length || 0;
   if (!count) return '<span style="color:var(--muted);font-size:11px">—</span>';
   return `<button class="foto-badge" onclick="openFotosByAtivId('${ativ.id}')">📷 ${count}</button>`;
+}
+
+// ── MODAL DETALHE DA OS ───────────────────────────────────────────────────
+function openOsDetail(ativId) {
+  const a = allAtivacoes.find(x => x.id === ativId);
+  if (!a) return;
+
+  const modal = document.getElementById('os-detail-modal');
+  const title = document.getElementById('os-detail-title');
+  const body  = document.getElementById('os-detail-body');
+  const fotBtn= document.getElementById('os-detail-fotos-btn');
+  if (!modal) return;
+
+  const tipo  = a.tipo || 'instalacao';
+  const label = TIPO_LABEL[tipo] || tipo;
+  const cls   = TIPO_CLS[tipo]   || 'tag-inst';
+
+  // Texto do serviço prestado (só OSes do SGP têm)
+  const servico = a.sgp_servico || '';
+  const motivo  = a.sgp_motivo  || '';
+
+  // Insumos em texto
+  const insumos = [
+    a.ont?.qtd    > 0 ? `📡 ${a.ont.qtd} ONT${a.ont.qtd>1?'s':''}${a.ont.sn ? ` — S/N: <b>${a.ont.sn}</b>` : ''}` : '',
+    a.drop?.metros > 0 ? `📏 ${(a.drop.metros).toLocaleString('pt-BR')} metros de drop` : '',
+    a.conector?.qtd > 0 ? `🔗 ${a.conector.qtd} conector${a.conector.qtd>1?'es':''}` : '',
+  ].filter(Boolean);
+
+  title.innerHTML = `📋 OS ${a.sgp_pk || a.id} — ${a.cliente}`;
+
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="tag ${cls}">${label}</span>
+      ${motivo ? `<span style="font-size:11px;color:var(--muted);background:var(--bg);padding:2px 8px;border-radius:4px;border:1px solid var(--border)">${motivo}</span>` : ''}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:4px">Cliente</div>
+        <div style="font-weight:600">${a.cliente}</div>
+        ${a.contrato ? `<div style="font-size:11px;color:var(--muted)">Contrato #${a.contrato}</div>` : ''}
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:4px">Técnico</div>
+        <div style="font-weight:600">${(a.tecnico||'—').replace('tecnico.','')}</div>
+        <div style="font-size:11px;color:var(--muted)">${a.data ? fmtDate(a.data) : '—'}</div>
+      </div>
+    </div>
+
+    ${insumos.length ? `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px">⚙️ Insumos Utilizados</div>
+      ${insumos.map(i=>`<div style="font-size:13px;padding:3px 0">${i}</div>`).join('')}
+    </div>` : ''}
+
+    ${servico ? `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px">📝 Serviço Prestado</div>
+      <div style="font-size:13px;line-height:1.65;white-space:pre-wrap;color:var(--text)">${servico.replace(/</g,'&lt;')}</div>
+    </div>` : `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;color:var(--muted);font-size:12px">
+      📝 Serviço Prestado não disponível${a.origem==='sgp_auto' ? ' — reimporte para obter' : ''}
+    </div>`}
+  `;
+
+  // Botão de fotos
+  const ocPk = a.sgp_ocorrencia_pk || a.sgp_pk;
+  if (ocPk && a.origem === 'sgp_auto') {
+    fotBtn.style.display = '';
+    fotBtn.onclick = () => { closeOsDetail(); openFotosSGP(ocPk); };
+    fotBtn.textContent = a.sgpFotos > 0 ? `📷 Ver ${a.sgpFotos} foto${a.sgpFotos>1?'s':''} do SGP` : '📷 Buscar Fotos no SGP';
+  } else {
+    fotBtn.style.display = 'none';
+  }
+
+  modal.classList.add('active');
+}
+
+function closeOsDetail() {
+  document.getElementById('os-detail-modal')?.classList.remove('active');
 }
 
 async function openFotosSGP(sgpPk) {
