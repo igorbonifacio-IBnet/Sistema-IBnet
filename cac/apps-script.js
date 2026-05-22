@@ -1016,14 +1016,31 @@ function sincronizarSGP() {
  */
 function reimportarMaio2026() {
   Logger.log('🗑️ Limpando cac/ativacoes no Firebase…');
-  // PUT null equivale a DELETE no Firebase RTDB e é mais confiável que DELETE direto
-  const delResp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/ativacoes.json`, {
-    method: 'put',
-    contentType: 'application/json',
-    payload: 'null',
-    muteHttpExceptions: true,
+  // 1. Busca todas as chaves existentes (shallow=true retorna só os IDs, sem dados)
+  const keysResp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/ativacoes.json?shallow=true`, {
+    method: 'get', muteHttpExceptions: true,
   });
-  Logger.log(`   Limpeza Firebase: HTTP ${delResp.getResponseCode()}`);
+  if (keysResp.getResponseCode() === 200) {
+    const keysData = keysResp.getContentText();
+    if (keysData && keysData !== 'null') {
+      const keys = Object.keys(JSON.parse(keysData));
+      Logger.log(`   Encontradas ${keys.length} ativações para remover…`);
+      // 2. PATCH com todos os IDs → null (apaga cada filho sem mexer na raiz)
+      const nullMap = {};
+      keys.forEach(k => nullMap[k] = null);
+      UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/ativacoes.json`, {
+        method: 'patch',
+        contentType: 'application/json',
+        payload: JSON.stringify(nullMap),
+        muteHttpExceptions: true,
+      });
+      Logger.log('   ✅ Todas as ativações removidas.');
+    } else {
+      Logger.log('   ℹ️ Nenhuma ativação existente para remover.');
+    }
+  } else {
+    Logger.log(`   ⚠️ Não foi possível listar ativações: HTTP ${keysResp.getResponseCode()}`);
+  }
 
   // Limpa cache de PKs sincronizados
   PropertiesService.getScriptProperties().deleteProperty('SGP_PKS_SYNC');
