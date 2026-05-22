@@ -1016,10 +1016,14 @@ function sincronizarSGP() {
  */
 function reimportarMaio2026() {
   Logger.log('🗑️ Limpando cac/ativacoes no Firebase…');
+  // PUT null equivale a DELETE no Firebase RTDB e é mais confiável que DELETE direto
   const delResp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/ativacoes.json`, {
-    method: 'delete', muteHttpExceptions: true,
+    method: 'put',
+    contentType: 'application/json',
+    payload: 'null',
+    muteHttpExceptions: true,
   });
-  Logger.log(`   DELETE Firebase: HTTP ${delResp.getResponseCode()}`);
+  Logger.log(`   Limpeza Firebase: HTTP ${delResp.getResponseCode()}`);
 
   // Limpa cache de PKs sincronizados
   PropertiesService.getScriptProperties().deleteProperty('SGP_PKS_SYNC');
