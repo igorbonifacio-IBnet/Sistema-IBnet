@@ -34,13 +34,28 @@ main{padding:20px 24px;max-width:1280px;margin:0 auto}
 .tab-section.active{display:block}
 
 /* ── KPIs ────────────────────────────────────────────────────────────────── */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:14px}
 .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .kpi-card:hover{transform:translateY(-2px);border-color:var(--kpi-c,var(--accent))}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-c,var(--accent))}
 .kpi-icon{font-size:20px;margin-bottom:8px;display:block}
 .kpi-val{font-size:26px;font-weight:700;color:var(--kpi-c,var(--text));line-height:1;margin-bottom:4px;letter-spacing:-.5px}
 .kpi-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
+/* ── Operações: novos estilos ─────────────────────────────────────────── */
+.ops-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;padding-left:2px}
+.ops-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.ops-card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px}
+.ops-insumo-row{display:flex;gap:0;align-items:stretch}
+.ops-insumo-item{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 4px;border-right:1px solid var(--border)}
+.ops-insumo-item:last-child{border-right:none}
+.ops-insumo-val{font-size:22px;font-weight:700;color:var(--text);line-height:1.1;letter-spacing:-.5px}
+.ops-insumo-lbl{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-top:4px}
+.ops-tec-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.ops-tec-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-tec-stats{display:flex;gap:6px;flex-wrap:wrap}
+.ops-tec-pill{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;white-space:nowrap}
+.ops-tec-bar{height:4px;border-radius:2px;background:var(--border);margin-top:4px;overflow:hidden}
+.ops-tec-bar-fill{height:100%;border-radius:2px;transition:width .4s}
 
 /* ── SECTION TITLE ───────────────────────────────────────────────────────── */
 .sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap}
@@ -316,24 +331,94 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 
   <!-- ── ABA: VISÃO GERAL ───────────────────────────────────────────────── -->
   <div class="tab-section active" id="tab-visao">
-    <div class="kpi-grid">
-      <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Atividades no mês</div></div>
-      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">💰</span><div class="kpi-val" id="kpi-cac-med">—</div><div class="kpi-lbl">CAC Médio (Instalação)</div></div>
-      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">📊</span><div class="kpi-val" id="kpi-total-gasto">—</div><div class="kpi-lbl">Total CAC no Mês</div></div>
-      <div class="kpi-card" style="--kpi-c:#3b82f6"><span class="kpi-icon">📡</span><div class="kpi-val" id="kpi-ont">—</div><div class="kpi-lbl">ONTs em Estoque</div></div>
-      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">🔌</span><div class="kpi-val" id="kpi-drop">—</div><div class="kpi-lbl">DROP em Estoque (m)</div></div>
-      <div class="kpi-card" style="--kpi-c:#eab308"><span class="kpi-icon">🔗</span><div class="kpi-val" id="kpi-con">—</div><div class="kpi-lbl">Conectores em Estoque</div></div>
+
+    <!-- ── BLOCO 1: Resumo Operacional ───────────────────────────────────── -->
+    <div class="ops-section-label">📊 Resumo do Mês</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
+      <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">⚡</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Total atividades</div></div>
+      <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">🏠</span><div class="kpi-val" id="kpi-inst">—</div><div class="kpi-lbl">Instalações</div></div>
+      <div class="kpi-card" style="--kpi-c:#f59e0b"><span class="kpi-icon">🔧</span><div class="kpi-val" id="kpi-manut">—</div><div class="kpi-lbl">Manutenções</div></div>
+      <div class="kpi-card" style="--kpi-c:#8b5cf6"><span class="kpi-icon">🔄</span><div class="kpi-val" id="kpi-mig">—</div><div class="kpi-lbl">Migrações + Infra</div></div>
+      <div class="kpi-card" style="--kpi-c:#06b6d4"><span class="kpi-icon">🔖</span><div class="kpi-val" id="kpi-sn-lidos">—</div><div class="kpi-lbl">S/N lidos pela IA</div></div>
     </div>
 
-    <div class="sec-head">
-      <div><h2>Ativações do Mês</h2><p>Registradas pelos técnicos · use os filtros para refinar</p></div>
+    <!-- ── BLOCO 2: Insumos + Estoque + CAC ──────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:14px 0">
+
+      <!-- Insumos usados no mês -->
+      <div class="ops-card">
+        <div class="ops-card-title">⚙️ Insumos Utilizados no Mês</div>
+        <div class="ops-insumo-row">
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-ont-uso">—</span>
+            <span class="ops-insumo-lbl">ONTs instaladas</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-drop-uso">—</span>
+            <span class="ops-insumo-lbl">metros de drop</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-con-uso">—</span>
+            <span class="ops-insumo-lbl">conectores</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estoque atual -->
+      <div class="ops-card">
+        <div class="ops-card-title">📦 Estoque Atual</div>
+        <div class="ops-insumo-row">
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-ont-est" style="color:#06b6d4">—</span>
+            <span class="ops-insumo-lbl">ONTs</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-drop-est" style="color:#22c55e">—</span>
+            <span class="ops-insumo-lbl">Drop (m)</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-con-est" style="color:#eab308">—</span>
+            <span class="ops-insumo-lbl">Conectores</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAC instalações -->
+      <div class="ops-card">
+        <div class="ops-card-title">💰 CAC — Instalações</div>
+        <div class="ops-insumo-row">
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-cac-med" style="color:#E8390E">—</span>
+            <span class="ops-insumo-lbl">CAC médio</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-cac-total" style="color:#f59e0b">—</span>
+            <span class="ops-insumo-lbl">Total no mês</span>
+          </div>
+          <div class="ops-insumo-item">
+            <span class="ops-insumo-val" id="kpi-payback-med" style="color:#8b5cf6">—</span>
+            <span class="ops-insumo-lbl">Payback médio</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BLOCO 3: Resumo por Técnico ────────────────────────────────────── -->
+    <div class="ops-card" style="margin-bottom:14px">
+      <div class="ops-card-title">👷 Desempenho dos Técnicos — Mês Atual</div>
+      <div id="resumo-tec-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px"></div>
+    </div>
+
+    <!-- ── BLOCO 4: Tabela filtrada ───────────────────────────────────────── -->
+    <div class="sec-head" style="margin-top:4px">
+      <div><h2>Atividades do Mês</h2><p>Registradas via SGP · use os filtros para refinar</p></div>
       <span class="ent-count" id="visao-count" style="font-size:12px;color:var(--muted)"></span>
     </div>
     <div class="filter-bar" style="margin-bottom:10px">
       <input  type="date"   class="filter-sel" id="visao-data"  onchange="renderVisaoRecentes()" style="min-width:140px"/>
       <select class="filter-sel" id="visao-tipo"  onchange="renderVisaoRecentes()">
         <option value="">Todos os tipos</option>
-        <option value="instalacao">🔌 Instalação</option>
+        <option value="instalacao">🏠 Instalação</option>
         <option value="manutencao">🔧 Manutenção</option>
         <option value="migracao">🔄 Migração Fibra</option>
         <option value="infra">🏗 Infra</option>
@@ -341,13 +426,13 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <select class="filter-sel" id="visao-tec"  onchange="renderVisaoRecentes()">
         <option value="">Todos os técnicos</option>
       </select>
-      <input  type="text"   class="filter-sel" id="visao-search" placeholder="🔍 Cliente ou PPPoE…" oninput="renderVisaoRecentes()" style="flex:1;min-width:140px"/>
+      <input  type="text"   class="filter-sel" id="visao-search" placeholder="🔍 Cliente ou contrato…" oninput="renderVisaoRecentes()" style="flex:1;min-width:140px"/>
       <button class="btn-secondary" onclick="limparFiltrosVisao()" style="white-space:nowrap;padding:7px 12px">✕ Limpar</button>
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>PPPoE</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>S/N ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Plano</th><th>Payback</th><th>Fotos</th></tr></thead>
-        <tbody id="visao-tbody"><tr><td colspan="14" class="tbl-empty">Carregando…</td></tr></tbody>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Cliente</th><th>Contrato</th><th>Técnico</th><th>ONT</th><th>S/N ONT</th><th>DROP (m)</th><th>Conector</th><th>CAC Total</th><th>Payback</th><th>Fotos</th></tr></thead>
+        <tbody id="visao-tbody"><tr><td colspan="12" class="tbl-empty">Carregando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -980,19 +1065,98 @@ function showTab(id) {
   if (id === 'seriais')     renderSeriais();
 }
 
-// ── KPIs ──────────────────────────────────────────────────────────────────
+// ── KPIs e Resumos ────────────────────────────────────────────────────────
 function renderKPIs() {
-  const lista     = ativacoesDoMes();
-  const instLista = lista.filter(a => (a.tipo || 'instalacao') === 'instalacao');
-  const total     = instLista.reduce((s,a)=>s+(a.totalCAC||0),0);
-  const med       = instLista.length ? total/instLista.length : 0;
+  const lista  = ativacoesDoMes();
+  const inst   = lista.filter(a => (a.tipo||'instalacao') === 'instalacao');
+  const manut  = lista.filter(a => a.tipo === 'manutencao');
+  const mig    = lista.filter(a => a.tipo === 'migracao' || a.tipo === 'infra');
+  const snLidos= lista.filter(a => a.ont?.sn).length;
 
-  document.getElementById('kpi-ativ').textContent       = lista.length;
-  document.getElementById('kpi-cac-med').textContent    = instLista.length ? fmt(med) : '—';
-  document.getElementById('kpi-total-gasto').textContent= instLista.length ? fmt(total) : '—';
-  document.getElementById('kpi-ont').textContent  = estoque.ont.qtd  ?? 0;
-  document.getElementById('kpi-drop').textContent = (estoque.drop.metros ?? 0).toLocaleString('pt-BR');
-  document.getElementById('kpi-con').textContent  = estoque.conector.qtd ?? 0;
+  // Insumos consumidos no mês
+  const ontUso  = lista.reduce((s,a)=>s+(a.ont?.qtd||0),0);
+  const dropUso = lista.reduce((s,a)=>s+(a.drop?.metros||0),0);
+  const conUso  = lista.reduce((s,a)=>s+(a.conector?.qtd||0),0);
+
+  // CAC instalações
+  const totalCAC = inst.reduce((s,a)=>s+(a.totalCAC||0),0);
+  const cacMed   = inst.length ? totalCAC/inst.length : 0;
+
+  // Payback médio (só instalações com valor de plano)
+  const paybacks = inst.map(a => {
+    const com = findComercial(a);
+    const val = com?.valor || 0;
+    return (val > 0 && a.totalCAC > 0) ? Math.ceil(a.totalCAC / val) : null;
+  }).filter(v => v !== null);
+  const paybackMed = paybacks.length ? Math.round(paybacks.reduce((s,v)=>s+v,0)/paybacks.length) : null;
+
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+
+  // Bloco 1 — Resumo operacional
+  set('kpi-ativ',      lista.length);
+  set('kpi-inst',      inst.length);
+  set('kpi-manut',     manut.length);
+  set('kpi-mig',       mig.length);
+  set('kpi-sn-lidos',  snLidos);
+
+  // Bloco 2 — Insumos
+  set('kpi-ont-uso',  ontUso + ' un');
+  set('kpi-drop-uso', dropUso.toLocaleString('pt-BR') + ' m');
+  set('kpi-con-uso',  conUso + ' un');
+
+  // Bloco 2 — Estoque
+  set('kpi-ont-est',  (estoque.ont?.qtd  ?? 0) + ' un');
+  set('kpi-drop-est', ((estoque.drop?.metros ?? 0)).toLocaleString('pt-BR') + ' m');
+  set('kpi-con-est',  (estoque.conector?.qtd ?? 0) + ' un');
+
+  // Bloco 2 — CAC
+  set('kpi-cac-med',     inst.length ? fmt(cacMed) : '—');
+  set('kpi-cac-total',   inst.length ? fmt(totalCAC) : '—');
+  set('kpi-payback-med', paybackMed ? paybackMed + ' meses' : '—');
+
+  // Bloco 3 — Resumo por técnico
+  renderResumoTecnicos(lista);
+}
+
+function renderResumoTecnicos(lista) {
+  const grid = document.getElementById('resumo-tec-grid');
+  if (!grid) return;
+
+  const tecs = {};
+  lista.forEach(a => {
+    const t = a.tecnico || 'Sem técnico';
+    if (!tecs[t]) tecs[t] = { inst:0, manut:0, mig:0, ont:0, drop:0, con:0 };
+    const tipo = a.tipo || 'instalacao';
+    if (tipo === 'instalacao') tecs[t].inst++;
+    else if (tipo === 'manutencao') tecs[t].manut++;
+    else tecs[t].mig++;
+    tecs[t].ont  += a.ont?.qtd || 0;
+    tecs[t].drop += a.drop?.metros || 0;
+    tecs[t].con  += a.conector?.qtd || 0;
+  });
+
+  const sorted = Object.entries(tecs).sort((a,b) => (b[1].inst+b[1].manut+b[1].mig) - (a[1].inst+a[1].manut+a[1].mig));
+  const maxAtiv = sorted.length ? (sorted[0][1].inst + sorted[0][1].manut + sorted[0][1].mig) : 1;
+
+  grid.innerHTML = sorted.map(([nome, s]) => {
+    const total = s.inst + s.manut + s.mig;
+    const pct   = Math.round((total / maxAtiv) * 100);
+    const nomeStr = nome.replace('tecnico.', '');
+    return `<div class="ops-tec-card">
+      <div class="ops-tec-name">👷 ${nomeStr}</div>
+      <div class="ops-tec-stats">
+        ${s.inst  ? `<span class="ops-tec-pill" style="background:rgba(34,197,94,.15);color:#22c55e">${s.inst} inst</span>` : ''}
+        ${s.manut ? `<span class="ops-tec-pill" style="background:rgba(245,158,11,.15);color:#f59e0b">${s.manut} manut</span>` : ''}
+        ${s.mig   ? `<span class="ops-tec-pill" style="background:rgba(139,92,246,.15);color:#8b5cf6">${s.mig} mig</span>` : ''}
+      </div>
+      <div style="font-size:10px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
+        ${s.ont  ? `<span>📡 ${s.ont} ONT</span>` : ''}
+        ${s.drop ? `<span>📏 ${s.drop.toLocaleString('pt-BR')} m</span>` : ''}
+        ${s.con  ? `<span>🔗 ${s.con} con</span>` : ''}
+      </div>
+      <div class="ops-tec-bar"><div class="ops-tec-bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>
+    </div>`;
+  }).join('');
 }
 
 // ── VISÃO GERAL — RECENTES ────────────────────────────────────────────────
@@ -1042,7 +1206,7 @@ function renderVisaoRecentes() {
 
   const tbody = document.getElementById('visao-tbody');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="13" class="tbl-empty">${temFiltro ? 'Nenhuma ativação com esses filtros.' : 'Nenhuma ativação neste mês.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="tbl-empty">${temFiltro ? 'Nenhuma atividade com esses filtros.' : 'Nenhuma atividade neste mês.'}</td></tr>`;
     return;
   }
 
@@ -1050,19 +1214,26 @@ function renderVisaoRecentes() {
     const com    = findComercial(a);
     const tipo   = a.tipo || 'instalacao';
     const isInst = tipo === 'instalacao';
+    const sgpBadge = a.origem==='sgp_auto'
+      ? `<span style="margin-left:4px;font-size:9px;background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.25);padding:1px 5px;border-radius:4px;font-weight:700">SGP</span>` : '';
+    const snEl = a.ont?.sn
+      ? `<span style="background:rgba(59,130,246,.12);color:var(--blue);padding:2px 7px;border-radius:4px;font-family:monospace;font-size:10px;font-weight:600;cursor:pointer" title="${a.ont.sn}">${a.ont.sn}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    const dropM = a.drop?.metros || 0;
+    const dropEl = dropM > 0
+      ? `<span style="color:#22c55e;font-weight:600">${dropM.toLocaleString('pt-BR')} m</span>`
+      : '<span style="color:var(--muted)">0 m</span>';
     return `<tr>
-      <td>${fmtDate(a.data)}</td>
-      <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar o tipo">${TIPO_LABEL[tipo]||tipo} ✎</span>${a.origem==='sgp_auto'?'<span style="margin-left:4px;font-size:9px;background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.25);padding:1px 5px;border-radius:4px;font-weight:700">SGP</span>':''}</td>
-      <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
-      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
-      <td style="color:var(--muted)">${a.contrato||'—'}</td>
-      <td><span class="tag tag-tec">${a.tecnico||'—'}</span></td>
-      <td>${a.ont?.qtd ?? 0} un</td>
-      <td style="font-family:monospace;font-size:11px">${a.ont?.sn ? `<span style="background:rgba(59,130,246,.1);color:var(--blue);padding:2px 6px;border-radius:4px">${a.ont.sn}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${(a.drop?.metros||0).toLocaleString('pt-BR')} m</td>
-      <td>${a.conector?.qtd ?? 0} un</td>
-      <td style="font-weight:700;color:var(--accent)">${isInst ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
-      <td style="font-size:11px;color:var(--muted)">${isInst ? (com?.plano||'—') : '—'}</td>
+      <td style="white-space:nowrap">${fmtDate(a.data)}</td>
+      <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar">${TIPO_LABEL[tipo]||tipo} ✎</span>${sgpBadge}</td>
+      <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.cliente}">${a.cliente}</td>
+      <td style="color:var(--muted);font-size:12px">${a.contrato||'—'}</td>
+      <td><span class="tag tag-tec" style="font-size:10px">${(a.tecnico||'—').replace('tecnico.','')}</span></td>
+      <td style="text-align:center">${a.ont?.qtd > 0 ? `<span style="font-weight:700;color:#06b6d4">${a.ont.qtd}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${snEl}</td>
+      <td>${dropEl}</td>
+      <td style="text-align:center">${a.conector?.qtd > 0 ? `<span style="font-weight:600;color:#eab308">${a.conector.qtd}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-weight:700;color:var(--accent)">${isInst && a.totalCAC > 0 ? fmt(a.totalCAC) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${isInst ? paybackPill(a.totalCAC, com?.valor) : '<span style="color:var(--muted)">—</span>'}</td>
       <td style="display:flex;gap:4px;align-items:center">${fotoBadgeHTML(a)}<button class="icon-btn" onclick="openInsumosModal('${a.id}')" title="Editar insumos" style="flex-shrink:0">✎</button></td>
     </tr>`;
