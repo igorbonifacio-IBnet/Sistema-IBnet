@@ -1052,7 +1052,7 @@ function renderVisaoRecentes() {
     const isInst = tipo === 'instalacao';
     return `<tr>
       <td>${fmtDate(a.data)}</td>
-      <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar o tipo">${TIPO_LABEL[tipo]||tipo} ✎</span></td>
+      <td><span class="tag tag-editable ${TIPO_CLS[tipo]||'tag-inst'}" onclick="openTipoModal('${a.id}')" title="Clique para alterar o tipo">${TIPO_LABEL[tipo]||tipo} ✎</span>${a.origem==='sgp_auto'?'<span style="margin-left:4px;font-size:9px;background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.25);padding:1px 5px;border-radius:4px;font-weight:700">SGP</span>':''}</td>
       <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis">${a.cliente}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${a.pppoe||'—'}</td>
       <td style="color:var(--muted)">${a.contrato||'—'}</td>
@@ -2085,16 +2085,60 @@ document.getElementById('tipo-modal').addEventListener('click', function(e) {
 let _fotosArr = [];
 let _fotosIdx = 0;
 
+const APPS_SCRIPT_URL_CAC = 'https://script.google.com/macros/s/AKfycbyynaq1tAnuW9lQjAIYQMABEu0T14JGMaR0pVxfjJxEMalDx9QnvWwhRvxxhioQlTEe/exec';
+
 function fotoBadgeHTML(ativ) {
-  // temFotos = contagem (novo formato base64 no RTDB)
-  // fotos = array de URLs (formato antigo Firebase Storage)
+  // Registro importado do SGP automaticamente
+  if (ativ.origem === 'sgp_auto' && ativ.sgp_pk) {
+    // Usa sgp_ocorrencia_pk (modelo Ocorrencia) — diferente do sgp_pk (OrdemServico)
+    const ocPk = ativ.sgp_ocorrencia_pk || ativ.sgp_pk;
+    const qtd  = ativ.sgpFotos || 0;
+    if (!qtd) return `<button class="foto-badge" style="background:rgba(168,85,247,.08);color:#a855f7;border-color:rgba(168,85,247,.2);opacity:.6" onclick="openFotosSGP('${ocPk}')">📷 SGP</button>`;
+    return `<button class="foto-badge" style="background:rgba(168,85,247,.12);color:#a855f7;border-color:rgba(168,85,247,.25)" onclick="openFotosSGP('${ocPk}')">📷 SGP ${qtd}</button>`;
+  }
+  // temFotos = contagem (formato base64 no RTDB)
   const count = ativ.temFotos || ativ.fotos?.length || 0;
   if (!count) return '<span style="color:var(--muted);font-size:11px">—</span>';
   return `<button class="foto-badge" onclick="openFotosByAtivId('${ativ.id}')">📷 ${count}</button>`;
 }
+
+async function openFotosSGP(sgpPk) {
+  if (!APPS_SCRIPT_URL_CAC) { alert('APPS_SCRIPT_URL não configurada.'); return; }
+  // Abre um viewer temporário com loading
+  _fotosArr = [];
+  _fotosIdx = 0;
+  const overlay = document.getElementById('fotos-overlay');
+  const img     = document.getElementById('fotos-img');
+  const info    = document.getElementById('fotos-info');
+  if (!overlay) return;
+  overlay.classList.add('show');
+  if (img)  img.src = '';
+  if (info) info.textContent = '⏳ Buscando fotos no SGP…';
+  try {
+    const url  = `${APPS_SCRIPT_URL_CAC}?action=sgp_fotos&ocorrencia_id=${encodeURIComponent(sgpPk)}`;
+    const data = await fetch(url).then(r => r.json());
+    if (!data.ok || !data.fotos?.length) {
+      if (info) info.textContent = data.erro || 'Nenhuma foto encontrada no SGP.';
+      return;
+    }
+    // Converte base64 para data URLs (mesmo formato do viewer existente)
+    _fotosArr = data.fotos
+      .filter(f => f.base64)
+      .map(f => `data:${f.content_type||'image/jpeg'};base64,${f.base64}`);
+    _fotosIdx = 0;
+    renderFotosViewer();
+    document.getElementById('fotos-prev').style.display = _fotosArr.length > 1 ? '' : 'none';
+    document.getElementById('fotos-next').style.display = _fotosArr.length > 1 ? '' : 'none';
+  } catch(e) {
+    if (info) info.textContent = 'Erro: ' + e.message;
+  }
+}
+
 async function openFotosByAtivId(ativId) {
   const ativ = allAtivacoes.find(a => a.id === ativId);
   if (!ativ) return;
+  // Registro SGP → usa proxy
+  if (ativ.origem === 'sgp_auto' && ativ.sgp_pk) { openFotosSGP(ativ.sgp_ocorrencia_pk || ativ.sgp_pk); return; }
   // Formato antigo: URLs do Firebase Storage já salvas na ativação
   if (ativ.fotos?.length) { openFotosViewer(ativ.fotos); return; }
   // Formato novo: base64 salvo separadamente em cac/fotos/{id}
