@@ -359,12 +359,17 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 
     <!-- ── BLOCO 1: Resumo Operacional ───────────────────────────────────── -->
     <div class="ops-section-label">📊 Resumo do Mês</div>
-    <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="kpi-grid" style="grid-template-columns:repeat(6,1fr)">
       <div class="kpi-card" style="--kpi-c:#E8390E"><span class="kpi-icon">⚡</span><div class="kpi-val" id="kpi-ativ">—</div><div class="kpi-lbl">Total atividades</div></div>
       <div class="kpi-card" style="--kpi-c:#22c55e"><span class="kpi-icon">🏠</span><div class="kpi-val" id="kpi-inst">—</div><div class="kpi-lbl">Instalações</div></div>
       <div class="kpi-card" style="--kpi-c:#f59e0b"><span class="kpi-icon">🔧</span><div class="kpi-val" id="kpi-manut">—</div><div class="kpi-lbl">Manutenções</div></div>
       <div class="kpi-card" style="--kpi-c:#8b5cf6"><span class="kpi-icon">🔄</span><div class="kpi-val" id="kpi-mig">—</div><div class="kpi-lbl">Migrações + Infra</div></div>
       <div class="kpi-card" style="--kpi-c:#06b6d4"><span class="kpi-icon">🔖</span><div class="kpi-val" id="kpi-sn-lidos">—</div><div class="kpi-lbl">S/N lidos pela IA</div></div>
+      <div class="kpi-card" style="--kpi-c:#f59e0b;cursor:pointer" onclick="document.getElementById('visao-status').value='pendente';renderVisaoRecentes()" title="Clique para filtrar pendentes">
+        <span class="kpi-icon">⏳</span>
+        <div class="kpi-val" id="kpi-pendentes">—</div>
+        <div class="kpi-lbl">Pendentes</div>
+      </div>
     </div>
 
     <!-- ── BLOCO 2: Insumos + Estoque + CAC ──────────────────────────────── -->
@@ -434,18 +439,6 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <div id="resumo-tec-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px"></div>
     </div>
 
-    <!-- ── BLOCO 3.5: Atividades Pendentes ──────────────────────────────────── -->
-    <div class="pend-wrap" id="pend-section">
-      <div class="pend-header">
-        <span class="pend-header-title">⏳ Atividades Pendentes no SGP</span>
-        <span class="pend-badge" id="pend-badge">0</span>
-        <span class="pend-header-sub">OSes abertas / em andamento</span>
-      </div>
-      <div class="pend-grid" id="pend-list">
-        <div class="pend-empty">Carregando…</div>
-      </div>
-    </div>
-
     <!-- ── BLOCO 4: Tabela filtrada ───────────────────────────────────────── -->
     <div class="sec-head" style="margin-top:4px">
       <div><h2 id="visao-period-title">Atividades — Este Mês</h2><p>Registradas via SGP · use os filtros para refinar</p></div>
@@ -466,8 +459,14 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
       <input  type="date" class="filter-sel" id="visao-data-fim" onchange="setPeriod('custom')" style="min-width:130px"/>
     </div>
 
-    <!-- Filtros de tipo/técnico/busca -->
+    <!-- Filtros de status / tipo / técnico / busca -->
     <div class="filter-bar" style="margin-bottom:10px">
+      <select class="filter-sel" id="visao-status" onchange="renderVisaoRecentes()" style="font-weight:600">
+        <option value="">Todos os status</option>
+        <option value="finalizado">✅ Finalizado</option>
+        <option value="em_andamento">🔄 Em Andamento</option>
+        <option value="pendente">⏳ Pendente</option>
+      </select>
       <select class="filter-sel" id="visao-tipo"  onchange="renderVisaoRecentes()">
         <option value="">Todos os tipos</option>
         <option value="instalacao">🏠 Instalação</option>
@@ -1175,36 +1174,19 @@ const MOTIVO_ICON = {
   'Financeiro': '💰', 'Remoção': '📦',
 };
 
+// Normaliza status SGP → chave interna
+function _sgpStatusKey(sgpStatus) {
+  const s = (sgpStatus || '').toLowerCase();
+  if (s.includes('andamento')) return 'em_andamento';
+  if (s.includes('encerrada') || s.includes('finaliz')) return 'finalizado';
+  return 'pendente'; // Aberta, Pendente, Agendada, etc.
+}
+
 function renderPendentes() {
-  const badge = document.getElementById('pend-badge');
-  const grid  = document.getElementById('pend-list');
-  if (!grid) return;
-
-  if (badge) badge.textContent = allPendentes.length;
-
-  if (!allPendentes.length) {
-    grid.innerHTML = `<div class="pend-empty">✅ Nenhuma atividade pendente no momento.</div>`;
-    return;
-  }
-
-  grid.innerHTML = allPendentes.map(p => {
-    const icon   = MOTIVO_ICON[p.motivo] || '📋';
-    const tec    = (p.tecnico || '—').replace('tecnico.','');
-    const data   = p.data ? p.data.slice(0,10).split('-').reverse().join('/') : '—';
-    const motivo = p.motivo || '—';
-    return `<div class="pend-item-card">
-      <div class="pend-ic-row">
-        <span style="font-size:15px">${icon}</span>
-        <span class="pend-motivo-tag">${motivo}</span>
-      </div>
-      <div class="pend-ic-cliente" title="${p.cliente || ''}">${p.cliente || '—'}</div>
-      <div class="pend-ic-contrato">Contrato ${p.contrato || '—'}</div>
-      <div class="pend-ic-footer">
-        <span class="tag tag-tec" style="font-size:10px">${tec}</span>
-        <span style="font-size:10px;color:var(--muted)">${data}</span>
-      </div>
-    </div>`;
-  }).join('');
+  // Apenas atualiza o KPI card — a tabela já inclui os pendentes via renderVisaoRecentes
+  const el = document.getElementById('kpi-pendentes');
+  if (el) el.textContent = allPendentes.length;
+  renderVisaoRecentes(); // garante que a tabela reflita os dados atualizados
 }
 
 // ── MÊS NAV ───────────────────────────────────────────────────────────────
@@ -1280,11 +1262,12 @@ function renderKPIs() {
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
 
   // Bloco 1 — Resumo operacional
-  set('kpi-ativ',      lista.length);
-  set('kpi-inst',      inst.length);
-  set('kpi-manut',     manut.length);
-  set('kpi-mig',       mig.length);
-  set('kpi-sn-lidos',  snLidos);
+  set('kpi-ativ',       lista.length);
+  set('kpi-inst',       inst.length);
+  set('kpi-manut',      manut.length);
+  set('kpi-mig',        mig.length);
+  set('kpi-sn-lidos',   snLidos);
+  set('kpi-pendentes',  allPendentes.length);
 
   // Bloco 2 — Insumos
   set('kpi-ont-uso',  ontUso + ' un');
@@ -1369,35 +1352,42 @@ function populateVisaoTecFilter() {
 }
 
 function limparFiltrosVisao() {
-  ['visao-tipo','visao-search'].forEach(id => {
+  ['visao-status','visao-tipo','visao-search'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value='';
   });
-  const sel = document.getElementById('visao-tec');
-  if (sel) sel.value = '';
+  document.getElementById('visao-tec')?.value === undefined || (document.getElementById('visao-tec').value = '');
   setPeriod('mes'); // volta ao período padrão
 }
 
 function renderVisaoRecentes() {
   populateVisaoTecFilter();
 
+  const fStatus = document.getElementById('visao-status')?.value  || '';
   const fIni    = document.getElementById('visao-data-ini')?.value || '';
   const fFim    = document.getElementById('visao-data-fim')?.value || '';
   const fTipo   = document.getElementById('visao-tipo')?.value     || '';
   const fTec    = document.getElementById('visao-tec')?.value      || '';
   const fSearch = (document.getElementById('visao-search')?.value || '').trim().toLowerCase();
 
-  // Base: usa range de datas (se definido) ou ativacoesDoMes como fallback
-  const base = (fIni || fFim)
-    ? allAtivacoes.filter(a => {
-        if (!a.data) return false;
-        const d = a.data.slice(0,10);
-        if (fIni && d < fIni) return false;
-        if (fFim && d > fFim) return false;
-        return true;
-      })
-    : ativacoesDoMes();
+  // Se filtro status = pendente/em_andamento → oculta encerradas
+  const mostrarEncerradas = !fStatus || fStatus === 'finalizado';
+  // Se filtro status = finalizado → oculta pendentes
+  const mostrarPendentes  = !fStatus || fStatus === 'pendente' || fStatus === 'em_andamento';
 
-  const lista = base.filter(a => {
+  // Base de encerradas: range de datas ou mês atual
+  const baseEnc = mostrarEncerradas
+    ? ((fIni || fFim)
+        ? allAtivacoes.filter(a => {
+            if (!a.data) return false;
+            const d = a.data.slice(0,10);
+            if (fIni && d < fIni) return false;
+            if (fFim && d > fFim) return false;
+            return true;
+          })
+        : ativacoesDoMes())
+    : [];
+
+  const lista = baseEnc.filter(a => {
     if (fTipo   && (a.tipo||'instalacao') !== fTipo)         return false;
     if (fTec    && a.tecnico !== fTec)                       return false;
     if (fSearch) {
@@ -1407,21 +1397,22 @@ function renderVisaoRecentes() {
     return true;
   });
 
-  // Pendentes filtradas pelo mesmo período e filtros de texto/técnico
-  // (ignoramos filtro de tipo pois pendentes não têm tipo definido)
-  const pendFiltradas = allPendentes.filter(p => {
-    if (fTipo) return false; // pendentes não têm tipo → oculta se filtro de tipo ativo
+  // Pendentes filtradas pelo mesmo período e filtros
+  const pendFiltradas = mostrarPendentes ? allPendentes.filter(p => {
+    // sub-filtro de status
+    if (fStatus === 'pendente'     && _sgpStatusKey(p.sgpStatus) !== 'pendente')     return false;
+    if (fStatus === 'em_andamento' && _sgpStatusKey(p.sgpStatus) !== 'em_andamento') return false;
+    if (fTipo) return false; // pendentes não têm tipo
     if (fTec    && p.tecnico !== fTec) return false;
     if (fSearch) {
       const hay = ((p.cliente||'') + ' ' + (p.contrato||'')).toLowerCase();
       if (!hay.includes(fSearch)) return false;
     }
-    // filtro de data
     const d = (p.data||'').slice(0,10);
     if (fIni && d < fIni) return false;
     if (fFim && d > fFim) return false;
     return true;
-  });
+  }) : [];
 
   // Combina encerradas + pendentes, ordena por data desc
   const combinada = [
@@ -1430,12 +1421,13 @@ function renderVisaoRecentes() {
   ].sort((a, b) => (b.data||'').localeCompare(a.data||''));
 
   const countEl  = document.getElementById('visao-count');
-  const temFiltro = fTipo || fTec || fSearch;
+  const temFiltro = fStatus || fTipo || fTec || fSearch;
   if (countEl) {
-    const pendStr = pendFiltradas.length ? ` + ${pendFiltradas.length} pendente(s)` : '';
+    const total   = lista.length + pendFiltradas.length;
+    const pendStr = pendFiltradas.length ? ` (${pendFiltradas.length} pendente${pendFiltradas.length>1?'s':''})` : '';
     countEl.textContent = temFiltro
-      ? `${lista.length} de ${base.length} ativações${pendStr}`
-      : `${base.length} ativações${pendStr}`;
+      ? `${total} atividades com filtro${pendStr}`
+      : `${lista.length} finalizadas${pendStr}`;
   }
 
   const tbody = document.getElementById('visao-tbody');
@@ -1445,20 +1437,28 @@ function renderVisaoRecentes() {
   }
 
   tbody.innerHTML = combinada.map(a => {
-    // ── linha de PENDENTE ──────────────────────────────────────────────────
+    // ── linha de PENDENTE / EM ANDAMENTO ──────────────────────────────────
     if (a._pend) {
-      const motivo = a.motivo || '—';
-      const icon   = MOTIVO_ICON[motivo] || '📋';
-      return `<tr style="opacity:.85;background:rgba(245,158,11,.04)">
+      const motivo  = a.motivo || '—';
+      const icon    = MOTIVO_ICON[motivo] || '📋';
+      const sKey    = _sgpStatusKey(a.sgpStatus);
+      const isAndamento = sKey === 'em_andamento';
+      const statusBg    = isAndamento ? 'rgba(34,197,94,.12)' : 'rgba(245,158,11,.12)';
+      const statusClr   = isAndamento ? '#22c55e' : '#f59e0b';
+      const statusBdr   = isAndamento ? 'rgba(34,197,94,.3)' : 'rgba(245,158,11,.3)';
+      const statusIcon  = isAndamento ? '🔄' : '⏳';
+      const statusTxt   = isAndamento ? 'EM ANDAMENTO' : 'PENDENTE';
+      const rowBg       = isAndamento ? 'rgba(34,197,94,.03)' : 'rgba(245,158,11,.04)';
+      return `<tr style="opacity:.88;background:${rowBg}">
         <td style="white-space:nowrap">${fmtDate(a.data)}</td>
         <td>
           <span class="tag tag-pend">${icon} ${motivo}</span>
-          <span style="margin-left:4px;font-size:9px;background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);padding:1px 5px;border-radius:4px;font-weight:700">⏳ PEND.</span>
+          <span style="margin-left:4px;font-size:9px;background:${statusBg};color:${statusClr};border:1px solid ${statusBdr};padding:1px 5px;border-radius:4px;font-weight:700">${statusIcon} ${statusTxt}</span>
         </td>
         <td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${a.cliente||'—'}</td>
         <td style="color:var(--muted);font-size:12px">${a.contrato||'—'}</td>
         <td><span class="tag tag-tec" style="font-size:10px">${(a.tecnico||'—').replace('tecnico.','')}</span></td>
-        <td colspan="7" style="color:var(--muted);font-size:11px;font-style:italic">OS aberta no SGP — aguardando encerramento</td>
+        <td colspan="7" style="color:var(--muted);font-size:11px;font-style:italic">${a.sgpStatus || 'OS aberta'} no SGP — aguardando encerramento</td>
       </tr>`;
     }
     // ── linha de ATIVAÇÃO ENCERRADA ────────────────────────────────────────

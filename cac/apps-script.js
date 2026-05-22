@@ -1144,7 +1144,7 @@ function _sincronizarSGPComDatas(iniStr, fimStr, forcarReimport) {
         motivo:       os.motivo,
         tecnico:      os.tecnico,
         data:         os.dataISO,
-        status:       'pendente',
+        sgpStatus:    os.sgpStatus || 'Aberta',
         origem:       'sgp_auto',
         atualizadoEm: new Date().toISOString(),
       });
@@ -1199,9 +1199,10 @@ function _sgpListarOS(cookieStr, iniStr, fimStr) {
     if (seen.has(pk)) continue;
     seen.add(pk);
 
-    // Status: red_bold = Encerrada
-    const encerrada = /class="red_bold"[^>]*>\s*Encerrada/i.test(row)
-                   || />Encerrada</.test(row);
+    // Status SGP — captura o texto real exibido na coluna de status
+    const statusMatch = row.match(/class="(?:red_bold|[^"]*)"[^>]*>\s*(Encerrada|Em\s+Andamento|Aberta|Pendente|Agendada|Cancelada)[^<]*<\/(?:td|span|div)>/i);
+    const sgpStatus = statusMatch ? statusMatch[1].trim() : (/>Encerrada</.test(row) ? 'Encerrada' : 'Aberta');
+    const encerrada = /encerrada/i.test(sgpStatus);
 
     // Cliente/Contrato: "296 - SHERLEY SOARES BELE"
     const cliMatch  = row.match(/href="\/admin\/cliente\/\d+\/contratos\/">\s*(\d+)\s*-\s*([^<]+)</i);
@@ -1224,7 +1225,7 @@ function _sgpListarOS(cookieStr, iniStr, fimStr) {
     const tecMatch = row.match(/>\s*(tecnico\.\w+)\s*</i);
     const tecnico  = tecMatch ? tecMatch[1].trim() : '';
 
-    osList.push({ pk, encerrada, contrato, clienteNome, motivo, tecnico, dataISO });
+    osList.push({ pk, encerrada, sgpStatus, contrato, clienteNome, motivo, tecnico, dataISO });
   }
 
   Logger.log(`📋 _sgpListarOS: ${osList.length} OS(es) · ${osList.filter(o=>o.encerrada).length} encerradas`);
