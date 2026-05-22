@@ -1006,10 +1006,42 @@ const FIREBASE_RTDB_URL = 'https://ibnet-platform-default-rtdb.firebaseio.com';
 const SGP_OS_LIST_URL = `${SGP_BASE}/admin/atendimento/relatorios/ocorrencia/os/`;
 
 function sincronizarSGP() {
-  const props  = PropertiesService.getScriptProperties();
-  const jaSync = new Set(JSON.parse(props.getProperty('SGP_PKS_SYNC') || '[]'));
+  _sincronizarSGPComDatas(null, null, false);
+}
 
-  Logger.log('🔄 Iniciando sincronização automática SGP → IBnet Operações…');
+/**
+ * Limpa TODAS as ativações do Firebase (cac/ativacoes) e reimporta
+ * apenas as OSes encerradas de Maio/2026 com todos os campos:
+ * drop, S/N ONT via IA, fotos, técnico, cliente, contrato.
+ */
+function reimportarMaio2026() {
+  Logger.log('🗑️ Limpando cac/ativacoes no Firebase…');
+  const delResp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/cac/ativacoes.json`, {
+    method: 'delete', muteHttpExceptions: true,
+  });
+  Logger.log(`   DELETE Firebase: HTTP ${delResp.getResponseCode()}`);
+
+  // Limpa cache de PKs sincronizados
+  PropertiesService.getScriptProperties().deleteProperty('SGP_PKS_SYNC');
+  Logger.log('🗑️ Cache de PKs limpo.');
+
+  // Importa somente Maio/2026
+  Logger.log('📅 Reimportando OSes de Maio/2026…');
+  _sincronizarSGPComDatas('01/05/2026 00:00:00', '31/05/2026 23:59:59', true);
+}
+
+/**
+ * Núcleo do sync — aceita datas opcionais (formato DD/MM/YYYY HH:MM:SS).
+ * Se iniStr/fimStr forem null, usa os últimos 60 dias (comportamento padrão).
+ * forcarReimport=true ignora o cache e reimporta tudo no intervalo.
+ */
+function _sincronizarSGPComDatas(iniStr, fimStr, forcarReimport) {
+  const props  = PropertiesService.getScriptProperties();
+  const jaSync = forcarReimport
+    ? new Set()
+    : new Set(JSON.parse(props.getProperty('SGP_PKS_SYNC') || '[]'));
+
+  Logger.log('🔄 Iniciando sincronização SGP → IBnet Operações…');
 
   let cookieStr;
   try {
@@ -1019,13 +1051,12 @@ function sincronizarSGP() {
     return;
   }
 
-  const osList = _sgpListarOS(cookieStr);
+  const osList = _sgpListarOS(cookieStr, iniStr, fimStr);
   if (!osList.length) {
-    Logger.log('✅ Nenhuma OS encerrada encontrada nos últimos 60 dias.');
+    Logger.log('ℹ️ Nenhuma OS encerrada encontrada no período.');
     return;
   }
 
-  // Filtra: só Encerradas e ainda não importadas
   const novas = osList.filter(os => os.encerrada && !jaSync.has(String(os.pk)));
   Logger.log(`📋 ${osList.length} OS(es) total · ${osList.filter(o=>o.encerrada).length} encerradas · ${novas.length} nova(s) para importar`);
 
@@ -1040,34 +1071,36 @@ function sincronizarSGP() {
 
       jaSync.add(String(os.pk));
       importadas++;
-      Logger.log(`✅ OS ${os.pk} importada → cac/ativacoes/${id}`);
+      Logger.log(`✅ OS ${os.pk} importada → ${id}`);
 
-      Utilities.sleep(600);
+      Utilities.sleep(400);
     } catch (err) {
-      Logger.log(`⚠️ Erro ao processar OS pk=${os.pk}: ${err}`);
+      Logger.log(`⚠️ Erro OS pk=${os.pk}: ${err}`);
     }
   });
 
   props.setProperty('SGP_PKS_SYNC', JSON.stringify([...jaSync].slice(-2000)));
-  Logger.log(`✅ Sync concluído · ${importadas} OS(es) importada(s) nesta rodada.`);
+  Logger.log(`✅ Sync concluído · ${importadas} OS(es) importada(s).`);
 }
 
 /**
- * Lista OSes dos últimos 60 dias na página de relatório do SGP.
+ * Lista OSes no SGP dentro de um período.
+ * iniStr / fimStr: "DD/MM/YYYY HH:MM:SS" — se null usa últimos 60 dias.
  * Retorna [{pk, encerrada, contrato, clienteNome, motivo, tecnico, dataISO}]
- *
- * Campos de data corretos: data_cadastro_inicial / data_cadastro_final
- * Link de cada OS: /admin/atendimento/ocorrencia/os/{pk}/edit/
- * Status: span class="red_bold" → Encerrada
  */
-function _sgpListarOS(cookieStr) {
+function _sgpListarOS(cookieStr, iniStr, fimStr) {
   const hoje = new Date();
   const fmt  = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
   const ini  = new Date(hoje); ini.setDate(ini.getDate() - 60);
 
+  const dataIni = iniStr || (fmt(ini)  + ' 00:00:00');
+  const dataFim = fimStr || (fmt(hoje) + ' 23:59:59');
+
+  Logger.log(`📅 Buscando OSes de ${dataIni} até ${dataFim}`);
+
   const listUrl = SGP_OS_LIST_URL
-    + '?data_cadastro_inicial=' + encodeURIComponent(fmt(ini)  + ' 00:00:00')
-    + '&data_cadastro_final='   + encodeURIComponent(fmt(hoje) + ' 23:59:59');
+    + '?data_cadastro_inicial=' + encodeURIComponent(dataIni)
+    + '&data_cadastro_final='   + encodeURIComponent(dataFim);
 
   const resp = UrlFetchApp.fetch(listUrl, {
     method: 'get', muteHttpExceptions: true,
@@ -1635,6 +1668,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔄 Sincronizar SGP agora',                  'testarSyncSGP')
     .addItem('🗑️  Limpar cache de sync SGP',              'limparCacheSyncSGP')
+    .addItem('📅 Reimportar Maio/2026 (limpa tudo)',      'reimportarMaio2026')
     .addSeparator()
     .addItem('⚙️  Configurar automação (fazer uma vez)',   'configurarGatilhos')
     .addItem('🗑️  Remover automação',                     'removerGatilhos')
