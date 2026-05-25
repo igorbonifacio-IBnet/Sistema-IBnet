@@ -1329,7 +1329,8 @@ function openOpsResult(id) {
 
 // ── HOME RENDER ───────────────────────────────────────────────────────────
 function renderHome() {
-  if (currentTab !== 'home') return;
+  // Atualiza os elementos da home sempre que dados chegam — os elementos existem
+  // no DOM mesmo quando a aba está oculta (só o CSS muda a visibilidade).
   const session = getSession();
   if (!session) return;
 
@@ -1472,8 +1473,8 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); toggleSearch(); }
 });
 
-// Se a sessão já existia (reload sem logout), reconecta Firebase imediatamente
-if (getSession()) setupPortalFirebase();
+// NOTA: setupPortalFirebase() já é chamado dentro de bootPlatform().
+// Não chamar novamente aqui para evitar listeners duplicados.
 </script>
 </body>
 </html>
