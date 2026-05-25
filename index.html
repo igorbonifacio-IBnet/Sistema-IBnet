@@ -965,14 +965,10 @@ document.getElementById('sug-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeSugestoes();
 });
 
-// ── AUTO LOGIN (session exists) ───────────────────────────────────────────
-const existing = getSession();
-if (existing && USERS[existing.username]) {
-  bootPlatform(existing);
-}
-
 applyTheme(currentTheme);
 updateSugCount();
+// NOTA: auto-login movido para após a inicialização do Firebase (_db2, _allAtivacoes etc.)
+// pois renderHome() e setupPortalFirebase() dependem dessas variáveis.
 
 // ── EMAILJS CONFIG ────────────────────────────────────────────────────────
 const EMAILJS_PUBLIC_KEY  = 'SEU_PUBLIC_KEY';   // ← preencher após criar conta
@@ -1077,6 +1073,14 @@ let _allActivities = [];
 let _allAtivacoes  = [];
 let _cacEstoque    = { ont:{qtd:0}, drop:{metros:0}, conector:{qtd:0} };
 let _cacConfig     = { ont:{alertaMin:3}, drop:{alertaMin:200}, conector:{alertaMin:20} };
+
+// ── AUTO LOGIN — roda aqui, após _db2 e todas as variáveis estarem prontas ──
+(function() {
+  const existing = getSession();
+  if (existing && USERS[existing.username]) {
+    bootPlatform(existing);
+  }
+})();
 
 function fbToArr(val) {
   if (!val) return [];
