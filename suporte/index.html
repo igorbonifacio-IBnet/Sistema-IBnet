@@ -381,6 +381,38 @@ body.light .attach-zone{border-color:#e2e8f0}
 body.light .attach-zone:hover{border-color:#2563eb;background:rgba(37,99,235,.04)}
 body.light .attach-thumb,.body.light .act-attach-mini{border-color:#e2e8f0}
 body.light .act-attach-badge{background:#dbeafe;color:#1d4ed8;border-color:#bfdbfe}
+/* ── SGP Fotos ────────────────────────────────────────────────────────────── */
+.sgp-os-wrap{display:flex;gap:8px;align-items:center}
+.sgp-os-wrap input{flex:1}
+.sgp-preview-btn{white-space:nowrap;padding:0 14px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px}
+.sgp-preview-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sgp-fotos-wrap{margin-top:10px;padding:12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border)}
+.sgp-fotos-loading{text-align:center;padding:20px;font-size:12px;color:var(--muted)}
+.sgp-fotos-error{color:#ef4444;font-size:12px;padding:8px}
+.sgp-foto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px}
+.sgp-foto-item{border-radius:6px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:transform .15s,box-shadow .15s}
+.sgp-foto-item:hover{transform:scale(1.03);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.sgp-foto-item img{width:100%;height:80px;object-fit:cover;display:block}
+.sgp-foto-caption{font-size:9px;color:var(--muted);padding:3px 5px;background:var(--surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sgp-fotos-header{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);font-weight:600}
+.act-sgp-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.25);cursor:pointer;transition:all .15s;flex-shrink:0}
+.act-sgp-badge:hover{background:rgba(168,85,247,.28)}
+/* Viewer modal SGP */
+.sgp-viewer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center}
+.sgp-viewer-overlay.show{display:flex}
+.sgp-viewer-close{position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:26px;cursor:pointer;opacity:.7;transition:opacity .15s;z-index:1}
+.sgp-viewer-close:hover{opacity:1}
+.sgp-viewer-img{max-width:90vw;max-height:82vh;border-radius:8px;object-fit:contain}
+.sgp-viewer-toolbar{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);padding:10px 20px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(6px)}
+.sgp-viewer-info{flex:1;font-size:12px;color:rgba(255,255,255,.8)}
+.sgp-viewer-nav{display:flex;gap:8px}
+.sgp-viewer-nav-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:7px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.sgp-viewer-nav-btn:hover{background:rgba(255,255,255,.22)}
+body.light .sgp-preview-btn{background:#f1f5f9;color:#374151;border-color:#e2e8f0}
+body.light .sgp-preview-btn:hover{border-color:#2563eb;color:#2563eb}
+body.light .sgp-fotos-wrap{background:#f8fafc;border-color:#e2e8f0}
+body.light .sgp-foto-caption{background:#f1f5f9}
+body.light .act-sgp-badge{background:rgba(126,34,206,.08);color:#7e22ce;border-color:rgba(126,34,206,.2)}
 </style>
 </head>
 <body>
@@ -607,10 +639,33 @@ body.light .act-attach-badge{background:#dbeafe;color:#1d4ed8;border-color:#bfdb
       <div class="attach-preview" id="attach-preview"></div>
     </div>
 
+    <div class="mf">
+      <label>📷 OS do SGP <span style="font-weight:400;color:var(--muted)">(Nº da ocorrência no ERP — vincula fotos automaticamente)</span></label>
+      <div class="sgp-os-wrap">
+        <input type="text" id="act-sgp-os" placeholder="Ex: 12345" inputmode="numeric"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();previewSGPFotos();}"/>
+        <button type="button" class="sgp-preview-btn" onclick="previewSGPFotos()">📷 Ver Fotos</button>
+      </div>
+      <div id="sgp-fotos-preview" class="sgp-fotos-wrap" style="display:none"></div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn-mcancel" onclick="closeActModal()">Cancelar</button>
       <button class="btn-msave"   onclick="saveActModal()">Salvar Atividade</button>
     </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Visualizador de Fotos SGP ─────────────────────────────────── -->
+<div class="sgp-viewer-overlay" id="sgp-viewer-overlay" onclick="if(event.target===this)closeSGPViewer()">
+  <button class="sgp-viewer-close" onclick="closeSGPViewer()">✕</button>
+  <img class="sgp-viewer-img" id="sgp-viewer-img" src="" alt="">
+  <div class="sgp-viewer-toolbar">
+    <div class="sgp-viewer-nav">
+      <button class="sgp-viewer-nav-btn" onclick="sgpViewerNav(-1)">‹</button>
+      <button class="sgp-viewer-nav-btn" onclick="sgpViewerNav(1)">›</button>
+    </div>
+    <div class="sgp-viewer-info" id="sgp-viewer-info"></div>
   </div>
 </div>
 
@@ -644,6 +699,147 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// ── CONFIGURAÇÃO SGP ──────────────────────────────────────────────────────
+// URL do Apps Script (mesmo endpoint já configurado em cac/ativacao.html)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyynaq1tAnuW9lQjAIYQMABEu0T14JGMaR0pVxfjJxEMalDx9QnvWwhRvxxhioQlTEe/exec';
+
+// Cache de fotos SGP por ocorrência_id para não recarregar toda vez
+const _sgpCache = {};
+
+// Estado do viewer SGP
+let _sgpViewerFotos = [];
+let _sgpViewerIdx   = 0;
+
+/**
+ * Chama o proxy Apps Script para buscar fotos da OS no SGP.
+ * Retorna objeto { ok, fotos, total, erro }.
+ */
+async function fetchSGPFotos(osId) {
+  if (!APPS_SCRIPT_URL) return { ok: false, erro: 'APPS_SCRIPT_URL não configurada' };
+  if (_sgpCache[osId])  return _sgpCache[osId];
+
+  const url = `${APPS_SCRIPT_URL}?action=sgp_fotos&ocorrencia_id=${encodeURIComponent(osId)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  _sgpCache[osId] = data;
+  return data;
+}
+
+/**
+ * Chamado pelo botão "Ver Fotos" no modal de atividade.
+ */
+async function previewSGPFotos() {
+  const osId = document.getElementById('act-sgp-os').value.trim();
+  const wrap  = document.getElementById('sgp-fotos-preview');
+  if (!osId) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = '';
+  wrap.innerHTML = '<div class="sgp-fotos-loading">⏳ Buscando fotos no SGP…</div>';
+
+  try {
+    const data = await fetchSGPFotos(osId);
+    if (!data.ok) {
+      wrap.innerHTML = `<div class="sgp-fotos-error">❌ Erro: ${data.erro || 'falha desconhecida'}</div>`;
+      return;
+    }
+    if (!data.fotos || !data.fotos.length) {
+      wrap.innerHTML = `<div class="sgp-fotos-loading">📭 Nenhuma foto encontrada para a OS #${osId}.</div>`;
+      return;
+    }
+    renderSGPFotosPreview(data.fotos, data.total, wrap, osId);
+  } catch (err) {
+    wrap.innerHTML = `<div class="sgp-fotos-error">❌ Erro ao conectar: ${err.message}</div>`;
+  }
+}
+
+function renderSGPFotosPreview(fotos, total, wrap, osId) {
+  const extra = total > fotos.length ? ` (mostrando ${fotos.length} de ${total})` : '';
+  const header = `<div class="sgp-fotos-header"><span>📷 Fotos da OS #${osId}${extra}</span><span style="color:var(--accent)">${fotos.length} foto(s)</span></div>`;
+  const grid = fotos.map((f, i) => {
+    if (f.erro || !f.base64) return '';
+    const src = `data:${f.content_type || 'image/jpeg'};base64,${f.base64}`;
+    return `<div class="sgp-foto-item" onclick="openSGPViewerInline(${i},'${osId}')">
+      <img src="${src}" alt="Foto OS">
+      <div class="sgp-foto-caption" title="${f.data_hora}">${f.data_hora?.split(' ')[0] || '—'} · ${f.por || '—'}</div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `${header}<div class="sgp-foto-grid">${grid}</div>`;
+  // Guarda fotos no estado do viewer
+  _sgpViewerFotos = fotos;
+}
+
+/**
+ * Abre o viewer de fotos SGP a partir do preview no modal.
+ */
+function openSGPViewerInline(idx, osId) {
+  if (!_sgpViewerFotos.length) return;
+  _sgpViewerIdx = idx;
+  _renderSGPViewer();
+  document.getElementById('sgp-viewer-overlay').classList.add('show');
+}
+
+/**
+ * Abre o viewer de fotos SGP a partir do badge no card (busca on-demand).
+ */
+async function openSGPViewer(actId) {
+  const act = getActivities().find(a => a.id === actId);
+  if (!act?.sgp_os) return;
+
+  const overlay = document.getElementById('sgp-viewer-overlay');
+  const img     = document.getElementById('sgp-viewer-img');
+  const info    = document.getElementById('sgp-viewer-info');
+
+  overlay.classList.add('show');
+  img.src = '';
+  info.textContent = '⏳ Carregando fotos do SGP…';
+
+  try {
+    const data = await fetchSGPFotos(act.sgp_os);
+    if (!data.ok || !data.fotos?.length) {
+      info.textContent = data.erro || 'Nenhuma foto encontrada.';
+      return;
+    }
+    _sgpViewerFotos = data.fotos;
+    _sgpViewerIdx   = 0;
+    _renderSGPViewer();
+  } catch (err) {
+    info.textContent = `Erro: ${err.message}`;
+  }
+}
+
+function _renderSGPViewer() {
+  const f    = _sgpViewerFotos[_sgpViewerIdx];
+  const img  = document.getElementById('sgp-viewer-img');
+  const info = document.getElementById('sgp-viewer-info');
+  if (!f || f.erro || !f.base64) {
+    img.src = '';
+    info.textContent = f?.erro || 'Foto indisponível';
+    return;
+  }
+  img.src = `data:${f.content_type || 'image/jpeg'};base64,${f.base64}`;
+  info.textContent = `${_sgpViewerIdx + 1}/${_sgpViewerFotos.length}  ·  ${f.data_hora || ''}  ·  Por: ${f.por || '—'}`;
+}
+
+function sgpViewerNav(delta) {
+  if (!_sgpViewerFotos.length) return;
+  _sgpViewerIdx = (_sgpViewerIdx + delta + _sgpViewerFotos.length) % _sgpViewerFotos.length;
+  _renderSGPViewer();
+}
+
+function closeSGPViewer() {
+  document.getElementById('sgp-viewer-overlay').classList.remove('show');
+  _sgpViewerFotos = [];
+}
+
+document.addEventListener('keydown', ev => {
+  const v = document.getElementById('sgp-viewer-overlay');
+  if (!v?.classList.contains('show')) return;
+  if (ev.key === 'Escape')      closeSGPViewer();
+  if (ev.key === 'ArrowLeft')   sgpViewerNav(-1);
+  if (ev.key === 'ArrowRight')  sgpViewerNav(1);
+});
 
 // Converte retorno do Firebase (objeto numérico) de volta para array
 function fbToArray(val) {
@@ -699,6 +895,7 @@ let _sortables         = {};        // instâncias SortableJS por coluna
 
 // ── PERSISTENCE — CACHES ─────────────────────────────────────────────────
 let _activities = [];
+let _activitiesLoaded = false; // true após 1ª leitura do Firebase (proteção contra sobrescrita vazia)
 let _monthData  = {};
 
 // ── PERSISTENCE — CONFIG ──────────────────────────────────────────────────
@@ -734,19 +931,75 @@ function setPD(pid, data) {
 }
 
 // ── PERSISTENCE — ACTIVITIES ──────────────────────────────────────────────
+const _ACT_BACKUP_KEY = 'ibnet_suporte_ativ_backup'; // localStorage backup key
+
 function getActivities() { return _activities; }
-function saveActivities(arr) {
+
+/** Salva no localStorage como backup local (só neste dispositivo) */
+function _backupActivitiesToLocal(arr) {
+  try {
+    if (arr.length > 0) localStorage.setItem(_ACT_BACKUP_KEY, JSON.stringify(arr));
+  } catch(e) {}
+}
+
+/** Lê o backup local, retorna [] se não existir */
+function _loadActivitiesFromLocal() {
+  try { return JSON.parse(localStorage.getItem(_ACT_BACKUP_KEY) || '[]'); } catch(e) { return []; }
+}
+
+/**
+ * saveActivities(arr, {explicit: false})
+ * - explicit = true: chamada intencional do usuário (ex: deleteAct da última atividade)
+ * - explicit = false (default): qualquer write de array vazio é bloqueado se há dados locais
+ */
+function saveActivities(arr, { explicit = false } = {}) {
+  // Proteção 1: Firebase ainda não carregou — nunca apaga dados
+  if (!_activitiesLoaded && arr.length === 0) {
+    console.warn('[suporte] saveActivities: BLOQUEADO — Firebase ainda não confirmou dados existentes.');
+    return;
+  }
+  // Proteção 2: tentativa de apagar dados não-intencional
+  // (race condition de kanban, reload parcial, etc.)
+  if (arr.length === 0 && !explicit) {
+    console.warn('[suporte] saveActivities: BLOQUEADO — write de array vazio requer {explicit:true}.');
+    console.trace();
+    return;
+  }
   _activities = arr;
+  if (arr.length > 0) _backupActivitiesToLocal(arr); // salva backup local sempre que há dados
   db.ref('suporte/atividades').set(arr.length ? arr : null).catch(()=>{});
 }
 
 // Listener em tempo real — atividades aparecem instantaneamente para todos
-function setupActivityListener() {
+function setupActivityListener(onFirstLoad) {
+  let firstLoad = true;
   db.ref('suporte/atividades').on('value', snap => {
-    _activities = fbToArray(snap.val());
+    const fbData = fbToArray(snap.val());
+    // Proteção 3: Firebase voltou vazio mas temos backup local → restaura
+    if (fbData.length === 0 && firstLoad) {
+      const backup = _loadActivitiesFromLocal();
+      if (backup.length > 0) {
+        console.warn('[suporte] Firebase retornou vazio na 1ª leitura — restaurando do backup local.');
+        _activities = backup;
+        _activitiesLoaded = true;
+        // Grava de volta no Firebase para corrigir
+        db.ref('suporte/atividades').set(backup).catch(()=>{});
+      } else {
+        _activities = [];
+        _activitiesLoaded = true;
+      }
+    } else {
+      _activities = fbData;
+      _activitiesLoaded = true;
+      if (fbData.length > 0) _backupActivitiesToLocal(fbData);
+    }
     renderActivities();
     renderKPIs();
     if(viewMode === 'kanban') renderKanban();
+    if (firstLoad) {
+      firstLoad = false;
+      if (typeof onFirstLoad === 'function') onFirstLoad();
+    }
   });
 }
 
@@ -1139,6 +1392,9 @@ function renderActItem(act) {
   const linkBtnStop = act.link
     ? `<a class="act-link-btn" href="${act.link}" target="_blank" rel="noopener noreferrer" title="${act.link}" onclick="event.stopPropagation()">🔗 Acompanhar</a>`
     : '';
+  const sgpBadge = act.sgp_os
+    ? `<span class="act-sgp-badge" onclick="event.stopPropagation();openSGPViewer('${act.id}')" title="Ver fotos da OS #${act.sgp_os} no SGP">📷 OS #${act.sgp_os}</span>`
+    : '';
 
   return `<div class="act-item${act.status==='concluido'?' act-done':''}${over?' act-overdue':''}" onclick="openActModal('${act.id}')">
   <div class="act-dot ${PRI_DOT[act.prioridade]||'dot-media'}"></div>
@@ -1147,6 +1403,7 @@ function renderActItem(act) {
       <span class="act-title">${act.titulo}</span>
       ${chip}
       ${due}
+      ${sgpBadge}
       ${linkBtnStop}
     </div>
     ${act.descricao ? `<div class="act-desc">${act.descricao}</div>` : ''}
@@ -1186,7 +1443,8 @@ function deleteAct(id) {
   if(!confirm('Excluir esta atividade permanentemente?')) return;
   const act=getActivities().find(a=>a.id===id);
   logAction('Atividade excluída', act?`"${act.titulo}"`:`id ${id}`);
-  saveActivities(getActivities().filter(a=>a.id!==id));
+  // explicit:true permite salvar array vazio se for a última atividade
+  saveActivities(getActivities().filter(a=>a.id!==id), { explicit: true });
   renderActivities(); renderKPIs();
 }
 
@@ -1316,6 +1574,15 @@ function openActModal(id=null) {
   document.getElementById('act-prazo').value        = act?.prazo       || '';
   document.getElementById('act-link').value         = act?.link        || '';
   document.getElementById('act-observacao').value   = act?.observacao  || '';
+  document.getElementById('act-sgp-os').value       = act?.sgp_os      || '';
+
+  // Limpa preview de fotos SGP
+  const sgpPreview = document.getElementById('sgp-fotos-preview');
+  sgpPreview.style.display = 'none';
+  sgpPreview.innerHTML = '';
+
+  // Se já tem OS vinculada, carrega preview automaticamente
+  if (act?.sgp_os) setTimeout(() => previewSGPFotos(), 200);
 
   _pendingAttachments = act?.anexos ? [...act.anexos] : [];
   document.getElementById('act-file-input').value = '';
@@ -1344,6 +1611,7 @@ function saveActModal() {
       act.prazo      = document.getElementById('act-prazo').value;
       act.link       = document.getElementById('act-link').value.trim();
       act.observacao = document.getElementById('act-observacao').value.trim();
+      act.sgp_os     = document.getElementById('act-sgp-os').value.trim() || null;
       act.anexos     = _pendingAttachments.length ? [..._pendingAttachments] : null;
     }
   } else {
@@ -1357,6 +1625,7 @@ function saveActModal() {
       prazo:      document.getElementById('act-prazo').value,
       link:       document.getElementById('act-link').value.trim(),
       observacao: document.getElementById('act-observacao').value.trim(),
+      sgp_os:     document.getElementById('act-sgp-os').value.trim() || null,
       anexos:     _pendingAttachments.length ? [..._pendingAttachments] : null,
       criadoEm:   new Date().toISOString(),
       concluidoEm:null,
@@ -1514,18 +1783,30 @@ function renderKanban() {
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 (async function init(){
+  function hideOverlayAndRender() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+    renderAll();
+  }
+  // Timeout de segurança: se Firebase demorar > 6s, mostra a UI mesmo assim
+  const safetyTimer = setTimeout(hideOverlayAndRender, 6000);
+
   try {
     await loadConfig();
     await loadMonthData();
-    setupActivityListener(); // listener real-time: atividades sincronizam entre usuários
+    // Passa callback: UI só aparece após 1ª leitura do Firebase (dados seguros)
+    setupActivityListener(() => {
+      clearTimeout(safetyTimer);
+      hideOverlayAndRender();
+    });
   } catch(e) {
     console.error('Erro Firebase:', e);
+    clearTimeout(safetyTimer);
     partners   = JSON.parse(JSON.stringify(DEFAULT_PARTNERS));
     _monthData = {};
     _activities= [];
+    _activitiesLoaded = true; // fallback: sem dados, mas permitir operações
+    hideOverlayAndRender();
   }
-  document.getElementById('loading-overlay').classList.add('hidden');
-  renderAll();
 })();
 
 // Auto-refresh dos countdowns e banner a cada 60 segundos

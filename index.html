@@ -1333,6 +1333,7 @@ function openOpsResult(id) {
 
 // ── HOME RENDER ───────────────────────────────────────────────────────────
 function renderHome() {
+  try {
   // Atualiza os elementos da home sempre que dados chegam — os elementos existem
   // no DOM mesmo quando a aba está oculta (só o CSS muda a visibilidade).
   const session = getSession();
@@ -1464,6 +1465,15 @@ function renderHome() {
         <span class="home-stock-pill hsp-${st}">${pillLbl}</span>
       </div>`;
     }).join('');
+  }
+  } catch(err) {
+    // Captura qualquer erro silencioso em renderHome para facilitar diagnóstico
+    console.error('[renderHome] Erro:', err);
+    // Mostra estado de erro nos cards para evitar "Carregando..." eterno
+    const ativEl = document.getElementById('home-ativacoes-list');
+    if (ativEl && ativEl.querySelector('.home-empty')?.textContent === 'Carregando…') {
+      ativEl.innerHTML = '<div class="home-empty">Erro ao carregar — recarregue a página.</div>';
+    }
   }
 }
 

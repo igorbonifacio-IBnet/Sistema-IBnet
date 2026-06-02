@@ -1026,14 +1026,9 @@ async function init() {
     if (p.classList.contains('light')) document.body.classList.add('light');
   } catch(e){}
 
-  // Carregar config
-  const cfgSnap = await db.ref('cac/config').once('value');
-  const cfgVal  = cfgSnap.val() || {};
-  if (cfgVal.ont)      config.ont      = { ...config.ont,      ...cfgVal.ont };
-  if (cfgVal.drop)     config.drop     = { ...config.drop,     ...cfgVal.drop };
-  if (cfgVal.conector) config.conector = { ...config.conector, ...cfgVal.conector };
-
-  // Listeners realtime
+  // ── Registra listeners ANTES de qualquer await ────────────────────────────
+  // Assim, mesmo que o carregamento da config falhe ou trave, os dados
+  // continuam chegando via realtime e a UI atualiza normalmente.
   db.ref('cac/estoque').on('value', s => {
     const v = s.val() || {};
     estoque.ont      = v.ont      || { qtd: 0 };
@@ -1044,18 +1039,21 @@ async function init() {
   });
   db.ref('cac/ativacoes').on('value', s => {
     const v = s.val() || {};
-    allAtivacoes = Object.entries(v).map(([id,a])=>({...a,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
+    // Fallback em criadoEm evita crash se alguma entrada antiga não tiver o campo
+    allAtivacoes = Object.entries(v).map(([id,a])=>({...a,id}))
+      .sort((a,b)=>(b.criadoEm||b.data||'').localeCompare(a.criadoEm||a.data||''));
     renderKPIs();
     renderVisaoRecentes();
     renderHistorico();
-    renderStockCards(); // recalcula duração estimada com novo consumo
+    renderStockCards();
     populateTecFilter();
     if (document.getElementById('tab-seriais')?.classList.contains('active'))    renderSeriais();
     if (document.getElementById('tab-desempenho')?.classList.contains('active')) renderDesempenho();
   });
   db.ref('cac/entradas').on('value', s => {
     const v = s.val() || {};
-    allEntradas = Object.entries(v).map(([id,e])=>({...e,id})).sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm));
+    allEntradas = Object.entries(v).map(([id,e])=>({...e,id}))
+      .sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
     renderTimeline();
   });
   db.ref('cac/lotes').on('value', s => {
@@ -1085,7 +1083,7 @@ async function init() {
   });
 
   // Link técnico
-  const host = window.location.origin + window.location.pathname.replace('index.html','') ;
+  const host = window.location.origin + window.location.pathname.replace('index.html','');
   const linkUrl = host + 'ativacao.html';
   document.getElementById('ativ-link').textContent     = linkUrl;
   document.getElementById('ativ-link-cfg').textContent = linkUrl;
@@ -1093,6 +1091,21 @@ async function init() {
   fillConfigFields();
   updateMonthLabel();
   setPeriod('mes'); // inicializa botões de período e datas
+
+  // ── Carrega config APÓS registrar listeners (não bloqueia a UI) ───────────
+  try {
+    const cfgSnap = await Promise.race([
+      db.ref('cac/config').once('value'),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))
+    ]);
+    const cfgVal = cfgSnap.val() || {};
+    if (cfgVal.ont)      config.ont      = { ...config.ont,      ...cfgVal.ont };
+    if (cfgVal.drop)     config.drop     = { ...config.drop,     ...cfgVal.drop };
+    if (cfgVal.conector) config.conector = { ...config.conector, ...cfgVal.conector };
+    fillConfigFields(); // atualiza campos de config com valores carregados
+  } catch(e) {
+    console.warn('[cac] Config load falhou ou timeout — usando padrões.', e.message);
+  }
 }
 init();
 

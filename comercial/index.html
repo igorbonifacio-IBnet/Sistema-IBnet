@@ -396,10 +396,11 @@ if (window.self === window.top) { window.location.href = '../'; }
 const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
 const API_KEY  = 'AIzaSyAfCACaYIOsdc1cWWGr9YbGL3R-IxG9sx8';
 const SHEETS = [
-  { name: 'JAN2026', label: 'jan./2026' },
-  { name: 'FEV2026', label: 'fev./2026' },
-  { name: 'MAR2026', label: 'mar./2026' },
+  { name: 'JAN2026',  label: 'jan./2026' },
+  { name: 'FEV2026',  label: 'fev./2026' },
+  { name: 'MAR2026',  label: 'mar./2026' },
   { name: 'ABRI2026', label: 'abr./2026' },
+  { name: 'MAIO2026', label: 'mai./2026' },
 ];
 const ROWS_PER_PAGE = 20;
 
@@ -516,7 +517,8 @@ async function fetchSheet(name, label) {
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
   const res = await fetch(url, {cache:'no-store'});
   const rows = parseCSV(await res.text());
-  return rows.filter(r => r['ID Venda']).map(r => ({...r, 'Mes': r['Mes'] || label}));
+  // Não filtra por ID Venda — clientes Pendentes sem ID gerado também devem ser contados
+  return rows.map(r => ({...r, 'Mes': r['Mes'] || label}));
 }
 
 async function loadData(silent = false) {
@@ -553,11 +555,17 @@ function applyFilters() {
   const mes=document.getElementById('f-mes').value, status=document.getElementById('f-status').value,
         pop=document.getElementById('f-pop').value, plano=document.getElementById('f-plano').value,
         bairro=document.getElementById('f-bairro').value;
-  filteredData = allData.filter(r =>
-    (!mes||r['Mes']===mes)&&(!status||r['Status do Pagamento']===status)&&
-    (!pop||r['POP']===pop)&&(!plano||r['Plano Contratado']===plano)&&
-    (!bairro||(r['Região/Bairro']||r['Regiao/Bairro'])===bairro)
-  );
+  filteredData = allData.filter(r => {
+    const rStatus = (r['Status do Pagamento']||'').trim();
+    const rPop    = (r['POP']||'').trim();
+    const rPlano  = (r['Plano Contratado']||'').trim();
+    const rBairro = (r['Região/Bairro']||r['Regiao/Bairro']||'').trim();
+    return (!mes    || r['Mes']  === mes)   &&
+           (!status || rStatus   === status) &&
+           (!pop    || rPop      === pop)    &&
+           (!plano  || rPlano    === plano)  &&
+           (!bairro || rBairro   === bairro);
+  });
   currentPage = 1;
   updateKPIs(); updateCharts(); renderTable();
 }
@@ -567,7 +575,7 @@ function resetFilters() {
   applyFilters();
 }
 
-function count(col, val) { return filteredData.filter(r => r[col] === val).length; }
+function count(col, val) { return filteredData.filter(r => (r[col]||'').toString().trim() === val).length; }
 function getVal(r) { return parseValor(r['Valor mensal num'] || r['Valor Mensal (R$)'] || ''); }
 
 function updateKPIs() {

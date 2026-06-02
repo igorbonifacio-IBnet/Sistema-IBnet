@@ -254,6 +254,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
       </div>
     </div>
 
+    <!-- OS SGP -->
+    <div class="ff">
+      <label>Nº OS no SGP <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(opcional — vincula fotos do ERP)</span></label>
+      <input type="text" id="f-sgp-os" placeholder="Ex: 12345" inputmode="numeric" autocomplete="off"/>
+    </div>
+
     <!-- FOTOS -->
     <div class="foto-card">
       <div class="foto-card-head">
@@ -306,7 +312,7 @@ const db = firebase.database();
 // ── GOOGLE SHEETS SYNC ────────────────────────────────────────────────────
 // Após implantar o Google Apps Script (veja instruções em cac/apps-script.js),
 // cole a URL gerada aqui:
-const APPS_SCRIPT_URL = ''; // ex: 'https://script.google.com/macros/s/XXXXXX/exec'
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyynaq1tAnuW9lQjAIYQMABEu0T14JGMaR0pVxfjJxEMalDx9QnvWwhRvxxhioQlTEe/exec';
 
 async function syncToSheet(ativData) {
   if (!APPS_SCRIPT_URL) return; // não configurado ainda
@@ -816,6 +822,7 @@ async function submitAtiv() {
       cliente,
       pppoe,
       contrato:  document.getElementById('f-contrato').value.trim(),
+      sgp_os:    document.getElementById('f-sgp-os').value.trim() || null,
       tecnicoId: tecnico.id,
       tecnico:   tecnico.nome,
       data:      agora.toISOString().slice(0,10),
@@ -874,6 +881,7 @@ function resetForm() {
   document.getElementById('foto-count').textContent = '0 / 5';
   document.getElementById('foto-add-btn').style.display = '';
   document.getElementById('foto-progress').style.display = 'none';
+  document.getElementById('f-sgp-os').value = '';
   showForm();
 }
 function logout()    { tecnico=null; pin=''; renderDots(); setScreen('sc-pin'); }
