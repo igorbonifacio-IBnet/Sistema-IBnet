@@ -1199,10 +1199,18 @@ function _sgpListarOS(cookieStr, iniStr, fimStr) {
     if (seen.has(pk)) continue;
     seen.add(pk);
 
-    // Status SGP — captura o texto real exibido na coluna de status
-    const statusMatch = row.match(/class="(?:red_bold|[^"]*)"[^>]*>\s*(Encerrada|Em\s+Andamento|Aberta|Pendente|Agendada|Cancelada)[^<]*<\/(?:td|span|div)>/i);
-    const sgpStatus = statusMatch ? statusMatch[1].trim() : (/>Encerrada</.test(row) ? 'Encerrada' : 'Aberta');
-    const encerrada = /encerrada/i.test(sgpStatus);
+    // Detecção de encerrada: método original confiável (red_bold ou texto simples)
+    const encerrada = /class="red_bold"[^>]*>\s*Encerrada/i.test(row)
+                   || />Encerrada\s*</.test(row);
+
+    // Status SGP para display (texto simples, sem afetar a lógica de sync)
+    let sgpStatus = encerrada ? 'Encerrada' : 'Aberta';
+    if (!encerrada) {
+      if (/Em\s+Andamento/i.test(row))  sgpStatus = 'Em Andamento';
+      else if (/Agendada/i.test(row))   sgpStatus = 'Agendada';
+      else if (/Pendente/i.test(row))   sgpStatus = 'Pendente';
+      else if (/Cancelada/i.test(row))  sgpStatus = 'Cancelada';
+    }
 
     // Cliente/Contrato: "296 - SHERLEY SOARES BELE"
     const cliMatch  = row.match(/href="\/admin\/cliente\/\d+\/contratos\/">\s*(\d+)\s*-\s*([^<]+)</i);
