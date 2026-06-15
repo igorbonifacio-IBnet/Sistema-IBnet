@@ -9,17 +9,18 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f1117;
-      --card: #1a1d27;
-      --card2: #20243a;
-      --border: #2a2d3e;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --green: #22c55e;
-      --red: #ef4444;
-      --yellow: #f59e0b;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
+      --bg: #0f1115;
+      --card: #161922;
+      --card2: #1c2029;
+      --border: #242936;
+      --accent: #6b8cce;
+      --accent-hover: #5a7bbd;
+      --green: #6bbf8a;
+      --red: #cf8080;
+      --yellow: #c6a667;
+      --purple: #9a8fce;
+      --text: #e6e9ef;
+      --text-muted: #8b94a7;
       --font: 'Segoe UI', system-ui, sans-serif;
     }
 
@@ -143,28 +144,22 @@
     .kpi-card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 10px;
       padding: 18px 20px;
       position: relative;
       overflow: hidden;
+      transition: border-color 0.18s;
     }
-    .kpi-card::before {
-      content: '';
-      position: absolute; top: 0; left: 0; right: 0;
-      height: 3px;
-    }
-    .kpi-card.accent::before { background: var(--accent); }
-    .kpi-card.green::before  { background: var(--green); }
-    .kpi-card.red::before    { background: var(--red); }
-    .kpi-card.yellow::before { background: var(--yellow); }
+    .kpi-card:hover { border-color: #313748; }
 
     .kpi-label {
-      font-size: 0.73rem; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.07em;
-      margin-bottom: 8px;
+      font-size: 0.72rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 8px; font-weight: 500;
     }
     .kpi-value {
-      font-size: 1.5rem; font-weight: 700; line-height: 1.2;
+      font-size: 1.45rem; font-weight: 650; line-height: 1.2;
+      letter-spacing: -0.01em;
     }
     .kpi-value.positive { color: var(--green); }
     .kpi-value.negative { color: var(--red); }
@@ -262,10 +257,10 @@
       font-weight: 600;
       letter-spacing: 0.04em;
     }
-    .badge-receita { background: rgba(34,197,94,0.15); color: var(--green); }
-    .badge-despesa { background: rgba(239,68,68,0.15); color: var(--red); }
-    .badge-capex   { background: rgba(59,130,246,0.15); color: var(--accent); }
-    .badge-opex    { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .badge-receita { background: rgba(107,191,138,0.12); color: var(--green); }
+    .badge-despesa { background: rgba(207,128,128,0.12); color: var(--red); }
+    .badge-capex   { background: rgba(107,140,206,0.12); color: var(--accent); }
+    .badge-opex    { background: rgba(198,166,103,0.12); color: var(--yellow); }
 
     .valor-receita { color: var(--green); font-weight: 600; }
     .valor-despesa { color: var(--red);   font-weight: 600; }
@@ -407,12 +402,6 @@
       <label>Mês</label>
       <select id="f-mes">
         <option value="">Todos</option>
-        <option value="jan./2026">Janeiro 2026</option>
-        <option value="fev./2026">Fevereiro 2026</option>
-        <option value="mar./2026">Março 2026</option>
-        <option value="abr./2026">Abril 2026</option>
-        <option value="mai./2026">Maio 2026</option>
-        <option value="jun./2026">Junho 2026</option>
       </select>
     </div>
     <div class="filter-group">
@@ -550,16 +539,29 @@
    CONFIG
 ════════════════════════════════════════════════════════ */
 const SHEET_ID = '17XPd0qIdxXSDwKVayNh_ClH0qkyiliXN6msHkcpv1jU';
-const API_KEY  = 'AIzaSyAfCACaYIOsdc1cWWGr9YbGL3R-IxG9sx8';
 
-const SHEETS = [
-  { name: 'Janeiro - 2026',   label: 'jan./2026' },
-  { name: 'Fevereiro - 2026', label: 'fev./2026' },
-  { name: 'Março - 2026',     label: 'mar./2026' },
-  { name: 'Abril - 2026',     label: 'abr./2026' },
-  { name: 'Maio - 2026',      label: 'mai./2026' },
-  { name: 'Junho - 2026',     label: 'jun./2026' },
-];
+// Nomes dos meses → as abas da planilha são nomeadas "Janeiro - 2026", etc.
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MONTH_ABBR  = ['jan.','fev.','mar.','abr.','mai.','jun.',
+                     'jul.','ago.','set.','out.','nov.','dez.'];
+const START_YEAR  = 2026;
+
+// Gera todos os meses candidatos de START_YEAR até o ano atual.
+// Assim, ao adicionar uma nova aba "Julho - 2026", ela é vinculada automaticamente.
+function candidateSheets() {
+  const list = [];
+  const endYear = Math.max(START_YEAR, new Date().getFullYear());
+  for (let y = START_YEAR; y <= endYear; y++) {
+    for (let m = 0; m < 12; m++) {
+      list.push({ name: `${MONTH_NAMES[m]} - ${y}`, label: `${MONTH_ABBR[m]}/${y}`, year: y, month: m });
+    }
+  }
+  return list;
+}
+
+// Preenchido dinamicamente com os meses realmente encontrados na planilha.
+let SHEETS = [];
 
 const PAGE_SIZE = 20;
 
@@ -621,7 +623,9 @@ function hideError() {
    FETCH & PARSE
 ════════════════════════════════════════════════════════ */
 function buildUrl(sheetName) {
-  return `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName)}?key=${API_KEY}&t=${Date.now()}`;
+  // Endpoint público de export CSV (gviz) — não requer API key.
+  // Funciona desde que a planilha esteja compartilhada como "qualquer pessoa com o link pode ver".
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&t=${Date.now()}`;
 }
 
 function parseCSV(text) {
@@ -654,8 +658,16 @@ async function fetchSheet(sheetName, label) {
   const url = buildUrl(sheetName);
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheetName}"`);
-  const json = await res.json();
-  const allRows = json.values || [];
+  const text = await res.text();
+  const allRows = parseCSV(text);
+  if (!allRows.length) return null;
+
+  // Validação: quando a aba pedida NÃO existe, o gviz devolve a aba padrão
+  // (resumo anual), cujo cabeçalho não contém "Valor"/"Natureza".
+  // Só tratamos como mês válido se o cabeçalho for de uma planilha financeira.
+  const header = (allRows[0] || []).join(' ').toLowerCase();
+  if (!header.includes('valor') || !header.includes('natureza')) return null;
+
   const result = [];
 
   for (let i = 1; i < allRows.length; i++) {   // skip header row
@@ -716,28 +728,57 @@ async function loadAllData() {
   document.getElementById('loading-overlay').classList.remove('hidden');
   hideError();
   try {
+    const candidates = candidateSheets();
     const results = await Promise.allSettled(
-      SHEETS.map(s => fetchSheet(s.name, s.label))
+      candidates.map(c => fetchSheet(c.name, c.label))
     );
     allData = [];
-    const errors = [];
+    SHEETS  = [];
+    let networkErrors = 0;
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
-        allData = allData.concat(r.value);
+        if (r.value !== null) {            // aba existe e é uma planilha de mês válida
+          SHEETS.push(candidates[i]);      // vincula o mês automaticamente
+          allData = allData.concat(r.value);
+        }
       } else {
-        errors.push(SHEETS[i].name + ': ' + r.reason?.message);
+        networkErrors++;
       }
     });
-    if (errors.length) showError('Erro ao carregar: ' + errors.join(' | '));
+    // Ordena os meses encontrados cronologicamente
+    SHEETS.sort((a, b) => a.year - b.year || a.month - b.month);
+
+    populateMesFilter();
+    populateCategoriaFilter();
+
+    if (!allData.length) {
+      showError(networkErrors
+        ? 'Não foi possível conectar à planilha. Verifique sua conexão.'
+        : 'Nenhum dado encontrado. Confirme se a planilha está compartilhada como "Qualquer pessoa com o link · Leitor".');
+    }
+
     document.getElementById('last-update').textContent =
       'Atualizado: ' + new Date().toLocaleString('pt-BR');
-    populateCategoriaFilter();
     applyFilters();
   } catch (e) {
     showError('Erro inesperado: ' + e.message);
   } finally {
     document.getElementById('loading-overlay').classList.add('hidden');
   }
+}
+
+function populateMesFilter() {
+  const sel = document.getElementById('f-mes');
+  if (!sel) return;
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);   // mantém "Todos"
+  SHEETS.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.label;
+    opt.textContent = `${MONTH_NAMES[s.month]} ${s.year}`;
+    sel.appendChild(opt);
+  });
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -884,8 +925,8 @@ function chartOptions(extra = {}) {
     plugins: {
       legend: { labels: { color: '#94a3b8', boxWidth: 12, padding: 14 } },
       tooltip: {
-        backgroundColor: '#1a1d27',
-        borderColor: '#2a2d3e',
+        backgroundColor: '#161922',
+        borderColor: '#242936',
         borderWidth: 1,
         titleColor: '#e2e8f0',
         bodyColor: '#94a3b8',
@@ -920,8 +961,8 @@ function updateBarChart() {
   const data = {
     labels,
     datasets: [
-      { label: 'Receita', data: receitaData, backgroundColor: 'rgba(34,197,94,0.75)', borderRadius: 5 },
-      { label: 'Despesa', data: despesaData, backgroundColor: 'rgba(239,68,68,0.75)',  borderRadius: 5 },
+      { label: 'Receita', data: receitaData, backgroundColor: 'rgba(107,191,138,0.7)', borderRadius: 5 },
+      { label: 'Despesa', data: despesaData, backgroundColor: 'rgba(207,128,128,0.7)',  borderRadius: 5 },
     ],
   };
 
@@ -954,8 +995,8 @@ function updateDoughnutChart() {
     labels: ['CAPEX', 'OPEX', 'FINANCEIRO'],
     datasets: [{
       data: [capex, opex, fin],
-      backgroundColor: ['rgba(59,130,246,0.8)', 'rgba(245,158,11,0.8)', 'rgba(168,85,247,0.8)'],
-      borderColor: '#0f1117',
+      backgroundColor: ['rgba(107,140,206,0.78)', 'rgba(198,166,103,0.78)', 'rgba(154,143,206,0.78)'],
+      borderColor: '#0f1115',
       borderWidth: 3,
       hoverOffset: 8,
     }],
@@ -965,7 +1006,7 @@ function updateDoughnutChart() {
     plugins: {
       legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 16 } },
       tooltip: {
-        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
         titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
         callbacks: {
           label: ctx => ' ' + ctx.label + ': ' + fmtBRL(ctx.raw),
@@ -998,7 +1039,7 @@ function updateHBarChart() {
     datasets: [{
       label: 'Despesa',
       data: values,
-      backgroundColor: 'rgba(239,68,68,0.7)',
+      backgroundColor: 'rgba(207,128,128,0.65)',
       borderRadius: 4,
     }],
   };
@@ -1015,7 +1056,7 @@ function updateHBarChart() {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
         titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
         callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
       },
@@ -1051,11 +1092,11 @@ function updateLineChart() {
     datasets: [{
       label: 'Saldo Acumulado',
       data: values,
-      borderColor: '#3b82f6',
-      backgroundColor: 'rgba(59,130,246,0.08)',
+      borderColor: '#6b8cce',
+      backgroundColor: 'rgba(107,140,206,0.08)',
       borderWidth: 2,
       pointRadius: labels.length > 40 ? 0 : 3,
-      pointBackgroundColor: '#3b82f6',
+      pointBackgroundColor: '#6b8cce',
       fill: true,
       tension: 0.3,
     }],
@@ -1075,7 +1116,7 @@ function updateLineChart() {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#1a1d27', borderColor: '#2a2d3e', borderWidth: 1,
+        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
         titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
         callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
       },
