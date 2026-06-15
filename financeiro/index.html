@@ -21,7 +21,25 @@
       --purple: #9a8fce;
       --text: #e6e9ef;
       --text-muted: #8b94a7;
+      --shadow: rgba(0,0,0,0.25);
       --font: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    /* ── TEMA CLARO ──────────────────────────────────────── */
+    body.light {
+      --bg: #f3f5f9;
+      --card: #ffffff;
+      --card2: #eef1f6;
+      --border: #e2e8f0;
+      --accent: #4f74c4;
+      --accent-hover: #3f63b0;
+      --green: #3f9d6b;
+      --red: #c25b5b;
+      --yellow: #b0832f;
+      --purple: #7868bd;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --shadow: rgba(100,116,139,0.12);
     }
 
     body {
@@ -29,6 +47,7 @@
       color: var(--text);
       font-family: var(--font);
       min-height: 100vh;
+      transition: background 0.2s, color 0.2s;
     }
 
     /* ── LOADING OVERLAY ─────────────────────────────── */
@@ -40,6 +59,7 @@
       z-index: 9999;
       gap: 16px;
     }
+    body.light #loading-overlay { background: rgba(243,245,249,0.92); }
     #loading-overlay.hidden { display: none; }
     .spinner {
       width: 48px; height: 48px;
@@ -145,12 +165,28 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 18px 20px;
+      padding: 18px 20px 18px 21px;
       position: relative;
       overflow: hidden;
-      transition: border-color 0.18s;
+      transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
     }
-    .kpi-card:hover { border-color: #313748; }
+    /* Acento lateral suave por categoria */
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; bottom: 0; left: 0;
+      width: 3px; opacity: 0.85;
+    }
+    .kpi-card.c-green::before  { background: var(--green); }
+    .kpi-card.c-red::before    { background: var(--red); }
+    .kpi-card.c-blue::before   { background: var(--accent); }
+    .kpi-card.c-yellow::before { background: var(--yellow); }
+    .kpi-card.c-purple::before { background: var(--purple); }
+    .kpi-card:hover {
+      border-color: #313748;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    }
+    body.light .kpi-card:hover { box-shadow: 0 6px 18px rgba(100,116,139,0.14); }
 
     .kpi-label {
       font-size: 0.72rem; color: var(--text-muted);
@@ -161,6 +197,12 @@
       font-size: 1.45rem; font-weight: 650; line-height: 1.2;
       letter-spacing: -0.01em;
     }
+    /* Tons suaves por tipo de valor */
+    .kpi-value.c-green  { color: var(--green); }
+    .kpi-value.c-red    { color: var(--red); }
+    .kpi-value.c-blue   { color: var(--accent); }
+    .kpi-value.c-yellow { color: var(--yellow); }
+    .kpi-value.c-purple { color: var(--purple); }
     .kpi-value.positive { color: var(--green); }
     .kpi-value.negative { color: var(--red); }
     .kpi-value.neutral  { color: var(--text); }
@@ -432,19 +474,19 @@
 
   <!-- KPI Row 1 -->
   <div class="kpi-grid" id="kpi-row1">
-    <div class="kpi-card green">
+    <div class="kpi-card c-green">
       <div class="kpi-label">Receita Total</div>
       <div class="kpi-value neutral" id="kpi-receita">—</div>
     </div>
-    <div class="kpi-card red">
+    <div class="kpi-card c-red">
       <div class="kpi-label">Despesa Total</div>
       <div class="kpi-value neutral" id="kpi-despesa">—</div>
     </div>
-    <div class="kpi-card accent">
+    <div class="kpi-card c-blue">
       <div class="kpi-label">Saldo</div>
       <div class="kpi-value neutral" id="kpi-saldo">—</div>
     </div>
-    <div class="kpi-card yellow">
+    <div class="kpi-card c-green">
       <div class="kpi-label">Margem (%)</div>
       <div class="kpi-value neutral" id="kpi-margem">—</div>
     </div>
@@ -452,24 +494,24 @@
 
   <!-- KPI Row 2 -->
   <div class="kpi-grid" id="kpi-row2" style="margin-top:-8px;">
-    <div class="kpi-card accent">
+    <div class="kpi-card c-blue">
       <div class="kpi-label">Total CAPEX</div>
       <div class="kpi-value neutral" id="kpi-capex">—</div>
     </div>
-    <div class="kpi-card yellow">
+    <div class="kpi-card c-yellow">
       <div class="kpi-label">Total OPEX</div>
       <div class="kpi-value neutral" id="kpi-opex">—</div>
     </div>
-    <div class="kpi-card accent">
+    <div class="kpi-card c-purple">
       <div class="kpi-label">Total Financeiro</div>
       <div class="kpi-value neutral" id="kpi-financeiro">—</div>
     </div>
-    <div class="kpi-card red">
+    <div class="kpi-card c-red">
       <div class="kpi-label">Maior Despesa</div>
       <div class="kpi-value neutral" id="kpi-maior-valor">—</div>
       <div class="kpi-sub" id="kpi-maior-nome">—</div>
     </div>
-    <div class="kpi-card yellow">
+    <div class="kpi-card c-yellow">
       <div class="kpi-label">% OPEX s/ Receita</div>
       <div class="kpi-value neutral" id="kpi-opex-pct">—</div>
     </div>
@@ -677,18 +719,20 @@ async function fetchSheet(sheetName, label) {
     const descricao = (cols[1] || '').trim();
     const dataStr   = (cols[2] || '').trim();
     const valorStr  = (cols[3] || '').trim();
-    const natureza  = (cols[5] || '').trim().toUpperCase();
+    let   natureza  = (cols[5] || '').trim().toUpperCase();
     let   categoria = (cols[6] || '').trim();
     let   capexopex = (cols[7] || '').trim().toUpperCase();
 
     // Skip rules
     if (!descricao) continue;
     if (descricao.toLowerCase().includes('saldo anterior')) continue;
-    if (!natureza) continue;
     if (valorStr === 'R$ 0,00' || valorStr === '0' || valorStr === '') continue;
 
     const valor = parseValor(valorStr);
     if (valor === 0) continue;
+
+    // Natureza ausente → inferida pelo sinal do valor (classifyMissing refina depois)
+    if (!natureza) natureza = valor < 0 ? 'DESPESA' : 'RECEITA';
 
     // ── Normalizar classificações divergentes ─────────────────────────────
     // 1. N/A no CAPEX/OPEX → FINANCEIRO (entradas de empréstimo/juros/transferência)
@@ -748,6 +792,9 @@ async function loadAllData() {
     // Ordena os meses encontrados cronologicamente
     SHEETS.sort((a, b) => a.year - b.year || a.month - b.month);
 
+    // Preenche automaticamente linhas sem Categoria/Capex/Natureza
+    classifyMissing();
+
     populateMesFilter();
     populateCategoriaFilter();
 
@@ -765,6 +812,56 @@ async function loadAllData() {
   } finally {
     document.getElementById('loading-overlay').classList.add('hidden');
   }
+}
+
+/* ════════════════════════════════════════════════════════
+   CLASSIFICAÇÃO AUTOMÁTICA
+   Preenche Categoria / Capex-Opex / Natureza ausentes seguindo
+   o padrão dos meses já preenchidos (ex.: Maio tinha 23 lacunas).
+════════════════════════════════════════════════════════ */
+function normDesc(d) {
+  return (d || '').toLowerCase().replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Fallback por palavra-chave quando não há descrição idêntica em outro mês
+function keywordClassify(desc, natureza) {
+  const d = (desc || '').toLowerCase();
+  if (natureza === 'RECEITA') return { categoria: 'Receita', capexopex: 'FINANCEIRO' };
+  if (/tarifa banc|juros|iof|empr[ée]stimo|parcela|unitel|lytex/.test(d)) return { categoria: 'Financeiro', capexopex: 'OPEX' };
+  if (/drop|passa fio|fibra|cabo|poste|onu|ont|conector|infra|obra/.test(d)) return { categoria: 'Infraestrutura', capexopex: 'CAPEX' };
+  if (/abastec|combust|posto|pneu|[óo]leo|ve[íi]c/.test(d)) return { categoria: 'Veículo', capexopex: 'CAPEX' };
+  if (/claro|vivo|tim|telefone|m[óo]vel|internet|sistema|software|licen[çc]a/.test(d)) return { categoria: 'Administrativo', capexopex: 'OPEX' };
+  if (/sal[áa]rio|adiant|vale|pessoal|funcion/.test(d)) return { categoria: 'Pessoal', capexopex: 'OPEX' };
+  return { categoria: 'Administrativo', capexopex: 'OPEX' };
+}
+
+function classifyMissing() {
+  // 1) Lookup das linhas JÁ classificadas (descrição normalizada → padrão mais comum)
+  const lookup = {};
+  allData.forEach(r => {
+    if (r.categoria && r.capexopex) {
+      const k = normDesc(r.descricao);
+      const key = `${r.categoria}|${r.capexopex}`;
+      (lookup[k] = lookup[k] || {});
+      lookup[k][key] = (lookup[k][key] || 0) + 1;
+    }
+  });
+  // 2) Preenche o que faltar
+  allData.forEach(r => {
+    if (r.categoria && r.capexopex) return;
+    const k = lookup[normDesc(r.descricao)];
+    let cat, cap;
+    if (k) {
+      const best = Object.entries(k).sort((a, b) => b[1] - a[1])[0][0].split('|');
+      cat = best[0]; cap = best[1];
+    } else {
+      const kw = keywordClassify(r.descricao, r.natureza);
+      cat = kw.categoria; cap = kw.capexopex;
+    }
+    if (!r.categoria) r.categoria = cat;
+    if (!r.capexopex) r.capexopex = cap;
+    r._autoClass = true;   // marca que foi classificada automaticamente
+  });
 }
 
 function populateMesFilter() {
@@ -881,18 +978,18 @@ function updateKPIs() {
     if (!maiorDespesa || Math.abs(r.valor) > Math.abs(maiorDespesa.valor)) maiorDespesa = r;
   });
 
-  // Set values
-  setKPI('kpi-receita',   fmtBRL(receita),  'neutral');
-  setKPI('kpi-despesa',   fmtBRL(despesa),  'neutral');
-  setKPI('kpi-saldo',     fmtBRL(saldo),    saldo >= 0 ? 'positive' : 'negative');
-  setKPI('kpi-margem',    fmtPct(margem),   margem >= 0 ? 'positive' : 'negative');
-  setKPI('kpi-capex',       fmtBRL(capex),       'neutral');
-  setKPI('kpi-opex',        fmtBRL(opex),        'neutral');
-  setKPI('kpi-financeiro',  fmtBRL(financeiro),  'neutral');
-  setKPI('kpi-opex-pct',    fmtPct(opexPct),     'neutral');
+  // Set values (tons suaves por tipo)
+  setKPI('kpi-receita',   fmtBRL(receita),  'c-green');
+  setKPI('kpi-despesa',   fmtBRL(despesa),  'c-red');
+  setKPI('kpi-saldo',     fmtBRL(saldo),    saldo >= 0 ? 'c-green' : 'c-red');
+  setKPI('kpi-margem',    fmtPct(margem),   margem >= 0 ? 'c-green' : 'c-red');
+  setKPI('kpi-capex',       fmtBRL(capex),       'c-blue');
+  setKPI('kpi-opex',        fmtBRL(opex),        'c-yellow');
+  setKPI('kpi-financeiro',  fmtBRL(financeiro),  'c-purple');
+  setKPI('kpi-opex-pct',    fmtPct(opexPct),     'c-yellow');
 
   if (maiorDespesa) {
-    setKPI('kpi-maior-valor', fmtBRL(maiorDespesa.valor), 'negative');
+    setKPI('kpi-maior-valor', fmtBRL(maiorDespesa.valor), 'c-red');
     document.getElementById('kpi-maior-nome').textContent = maiorDespesa.descricao;
   } else {
     setKPI('kpi-maior-valor', '—', 'neutral');
@@ -909,27 +1006,35 @@ function setKPI(id, value, cls) {
 /* ════════════════════════════════════════════════════════
    CHARTS
 ════════════════════════════════════════════════════════ */
-const CHART_DEFAULTS = {
-  color: '#94a3b8',
-  font: { family: 'Segoe UI, system-ui, sans-serif', size: 11 },
-};
+Chart.defaults.font.family = 'Segoe UI, system-ui, sans-serif';
+Chart.defaults.font.size = 11;
 
-Chart.defaults.color = CHART_DEFAULTS.color;
-Chart.defaults.font.family = CHART_DEFAULTS.font.family;
-Chart.defaults.font.size = CHART_DEFAULTS.font.size;
+// Cores dos gráficos sensíveis ao tema (claro/escuro)
+function themeColors() {
+  const light = document.body.classList.contains('light');
+  return {
+    text:          light ? '#64748b' : '#8b94a7',
+    grid:          light ? 'rgba(30,41,59,0.07)' : 'rgba(255,255,255,0.05)',
+    tooltipBg:     light ? '#ffffff' : '#161922',
+    tooltipBorder: light ? '#e2e8f0' : '#242936',
+    tooltipTitle:  light ? '#1e293b' : '#e6e9ef',
+    border:        light ? '#ffffff' : '#0f1115',
+  };
+}
 
 function chartOptions(extra = {}) {
+  const tc = themeColors();
   return {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: '#94a3b8', boxWidth: 12, padding: 14 } },
+      legend: { labels: { color: tc.text, boxWidth: 12, padding: 14 } },
       tooltip: {
-        backgroundColor: '#161922',
-        borderColor: '#242936',
+        backgroundColor: tc.tooltipBg,
+        borderColor: tc.tooltipBorder,
         borderWidth: 1,
-        titleColor: '#e2e8f0',
-        bodyColor: '#94a3b8',
+        titleColor: tc.tooltipTitle,
+        bodyColor: tc.text,
         padding: 10,
       },
     },
@@ -937,7 +1042,16 @@ function chartOptions(extra = {}) {
   };
 }
 
+let _chartTheme = null;   // último tema aplicado aos gráficos
 function updateCharts() {
+  Chart.defaults.color = themeColors().text;
+  // Ao trocar de tema, destrói os gráficos para recriarem com as cores certas
+  const isLight = document.body.classList.contains('light');
+  if (_chartTheme !== null && _chartTheme !== isLight) {
+    [chartBar, chartDoughnut, chartHBar, chartLine].forEach(c => { try { c && c.destroy(); } catch(e){} });
+    chartBar = chartDoughnut = chartHBar = chartLine = null;
+  }
+  _chartTheme = isLight;
   updateBarChart();
   updateDoughnutChart();
   updateHBarChart();
@@ -966,17 +1080,18 @@ function updateBarChart() {
     ],
   };
 
+  const tc = themeColors();
   if (chartBar) { chartBar.data = data; chartBar.update(); return; }
   chartBar = new Chart(document.getElementById('chart-bar'), {
     type: 'bar',
     data,
     options: chartOptions({
       scales: {
-        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: tc.text } },
         y: {
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          grid: { color: tc.grid },
           ticks: {
-            color: '#94a3b8',
+            color: tc.text,
             callback: v => 'R$' + (v / 1000).toFixed(0) + 'k',
           },
         },
@@ -996,18 +1111,19 @@ function updateDoughnutChart() {
     datasets: [{
       data: [capex, opex, fin],
       backgroundColor: ['rgba(107,140,206,0.78)', 'rgba(198,166,103,0.78)', 'rgba(154,143,206,0.78)'],
-      borderColor: '#0f1115',
+      borderColor: themeColors().border,
       borderWidth: 3,
       hoverOffset: 8,
     }],
   };
 
+  const tc = themeColors();
   const opts = chartOptions({
     plugins: {
-      legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 16 } },
+      legend: { position: 'bottom', labels: { color: tc.text, boxWidth: 12, padding: 16 } },
       tooltip: {
-        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
-        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        backgroundColor: tc.tooltipBg, borderColor: tc.tooltipBorder, borderWidth: 1,
+        titleColor: tc.tooltipTitle, bodyColor: tc.text, padding: 10,
         callbacks: {
           label: ctx => ' ' + ctx.label + ': ' + fmtBRL(ctx.raw),
         },
@@ -1044,20 +1160,21 @@ function updateHBarChart() {
     }],
   };
 
+  const tc = themeColors();
   const opts = chartOptions({
     indexAxis: 'y',
     scales: {
       x: {
-        grid: { color: 'rgba(255,255,255,0.05)' },
-        ticks: { color: '#94a3b8', callback: v => 'R$' + (v / 1000).toFixed(0) + 'k' },
+        grid: { color: tc.grid },
+        ticks: { color: tc.text, callback: v => 'R$' + (v / 1000).toFixed(0) + 'k' },
       },
-      y: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+      y: { grid: { display: false }, ticks: { color: tc.text } },
     },
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
-        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        backgroundColor: tc.tooltipBg, borderColor: tc.tooltipBorder, borderWidth: 1,
+        titleColor: tc.tooltipTitle, bodyColor: tc.text, padding: 10,
         callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
       },
     },
@@ -1102,13 +1219,14 @@ function updateLineChart() {
     }],
   };
 
+  const tc = themeColors();
   const opts = chartOptions({
     scales: {
-      x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45 } },
+      x: { grid: { display: false }, ticks: { color: tc.text, maxRotation: 45 } },
       y: {
-        grid: { color: 'rgba(255,255,255,0.05)' },
+        grid: { color: tc.grid },
         ticks: {
-          color: '#94a3b8',
+          color: tc.text,
           callback: v => 'R$' + (v / 1000).toFixed(0) + 'k',
         },
       },
@@ -1116,8 +1234,8 @@ function updateLineChart() {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#161922', borderColor: '#242936', borderWidth: 1,
-        titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10,
+        backgroundColor: tc.tooltipBg, borderColor: tc.tooltipBorder, borderWidth: 1,
+        titleColor: tc.tooltipTitle, bodyColor: tc.text, padding: 10,
         callbacks: { label: ctx => ' ' + fmtBRL(ctx.raw) },
       },
     },
@@ -1277,6 +1395,26 @@ document.getElementById('btn-toggle-values').addEventListener('click', () => {
   valuesHidden = !valuesHidden;
   applyBlur();
 });
+
+/* ════════════════════════════════════════════════════════
+   TEMA (sincroniza claro/escuro com o painel principal)
+════════════════════════════════════════════════════════ */
+function setTheme(t) {
+  document.body.classList.toggle('light', t === 'light');
+  // Recria os gráficos com as cores do novo tema
+  if (chartBar || chartDoughnut || chartHBar || chartLine) updateCharts();
+}
+
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'theme') setTheme(e.data.value);
+});
+
+// Herda o tema atual do painel principal ao carregar
+try {
+  if (window.parent !== window && window.parent.document.body.classList.contains('light')) {
+    document.body.classList.add('light');
+  }
+} catch (e) {}
 
 /* ════════════════════════════════════════════════════════
    INIT
