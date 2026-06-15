@@ -333,11 +333,6 @@ body.light .filter-sel,.body.light .mf input,.body.light .mf select,.body.light 
 </head>
 <body>
 
-<!-- ── DIAG BANNER (removido após confirmar funcionamento) ───────────────── -->
-<div id="diag-banner" style="background:#1e3a1e;color:#4ade80;font-size:11px;padding:4px 16px;font-family:monospace;display:none">
-  ✅ JS v2 carregado · Firebase: <span id="diag-fb">aguardando…</span>
-</div>
-
 <!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
 <div class="mini-header">
   <div class="header-title">🏗 Operações</div>
@@ -1025,10 +1020,6 @@ let cacVinculos   = {};   // { ativId: { nomeComercial } }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 async function init() {
-  // Banner de diagnóstico — confirma que JS novo está rodando
-  const diagBanner = document.getElementById('diag-banner');
-  if (diagBanner) diagBanner.style.display = '';
-
   // Sincronizar theme com parent
   try {
     const p = window.parent.document.body;
@@ -1048,8 +1039,6 @@ async function init() {
   });
   db.ref('cac/ativacoes').on('value', s => {
     const v = s.val() || {};
-    const diagFb = document.getElementById('diag-fb');
-    if (diagFb) diagFb.textContent = `conectado · ${Object.keys(v).length} ativações`;
     // Fallback em criadoEm evita crash se alguma entrada antiga não tiver o campo
     allAtivacoes = Object.entries(v).map(([id,a])=>({...a,id}))
       .sort((a,b)=>(b.criadoEm||b.data||'').localeCompare(a.criadoEm||a.data||''));
