@@ -368,6 +368,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
         ⚙ Filtros <span class="filter-badge hidden" id="filter-count"></span>
       </button>
       <button class="btn-nova" id="btn-nova-venda" onclick="openVendaModal()" style="display:none">+ Nova venda</button>
+      <button class="btn-import" id="btn-sync-sgp" onclick="syncFromSGP()" style="display:none" title="Consulta o SGP e atualiza status dos contratos no dashboard">🔄 Sincronizar SGP</button>
       <button class="btn-import" id="btn-import" onclick="importFromSheet()" style="display:none" title="Importa as vendas da planilha para o sistema (uma vez)">⤓ Importar planilha</button>
     </div>
 
@@ -748,6 +749,29 @@ async function loadData(silent = false) {
   btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
 }
 
+// ── SINCRONIZAÇÃO COM O SGP (somente admin) ──
+// Chama o proxy Apps Script, que consulta o SGP e atualiza comercial/vendas.
+// O listener em tempo real do Firebase atualiza a tabela sozinho ao terminar.
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyynaq1tAnuW9lQjAIYQMABEu0T14JGMaR0pVxfjJxEMalDx9QnvWwhRvxxhioQlTEe/exec';
+async function syncFromSGP() {
+  if (!isAdmin()) { alert('Apenas o administrador pode sincronizar com o SGP.'); return; }
+  if (!confirm('Consultar o SGP agora e atualizar o status dos contratos no dashboard?')) return;
+  const btn = document.getElementById('btn-sync-sgp');
+  const txt = btn.textContent; btn.textContent = '⟳ Sincronizando…'; btn.style.pointerEvents = 'none';
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?action=sgp_sync&t=${Date.now()}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.erro || 'falha desconhecida');
+    logPortal('Sincronização SGP', `Atualizou ${data.atualizados} e adicionou ${data.novos} contratos`);
+    alert(`✅ SGP sincronizado!\n\n${data.total} contratos no SGP\n${data.atualizados} atualizados\n${data.novos} novos`);
+  } catch(e) {
+    console.error(e); alert('❌ Falha ao sincronizar com o SGP: ' + e.message);
+  } finally {
+    btn.textContent = txt; btn.style.pointerEvents = 'auto';
+  }
+}
+
 // ── IMPORTAÇÃO ÚNICA: planilha → Firebase (somente admin) ──
 async function importFromSheet() {
   if (!isAdmin()) { alert('Apenas o administrador pode importar a planilha.'); return; }
@@ -1070,9 +1094,11 @@ function applyRolePermissions() {
   const editor = canEdit();
   const nova = document.getElementById('btn-nova-venda');
   const imp  = document.getElementById('btn-import');
+  const sync = document.getElementById('btn-sync-sgp');
   const thA  = document.getElementById('th-acoes');
   if (nova) nova.style.display = editor ? '' : 'none';
   if (imp)  imp.style.display  = isAdmin() ? '' : 'none';
+  if (sync) sync.style.display = isAdmin() ? '' : 'none';
   if (thA)  thA.style.display  = editor ? '' : 'none';
 }
 

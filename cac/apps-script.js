@@ -1070,21 +1070,57 @@ function sgpSincronizarComercial(dataIni, dataFim, gravar) {
 
   if (!gravar) {
     Logger.log('🔎 DRY-RUN — nada foi gravado. Para aplicar: sgpSincronizarComercial(ini, fim, true)');
-    return;
+    return { ok: true, dryRun: true, total: sgpRecs.length, atualizados: nCasados, novos: nNovos };
   }
   const resp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/comercial/vendas.json`, {
     method: 'patch', contentType: 'application/json', muteHttpExceptions: true,
     payload: JSON.stringify(updates),
   });
-  Logger.log(`✅ PATCH Firebase → HTTP ${resp.getResponseCode()} | ${nCasados} atualizados, ${nNovos} novos`);
+  const http = resp.getResponseCode();
+  Logger.log(`✅ PATCH Firebase → HTTP ${http} | ${nCasados} atualizados, ${nNovos} novos`);
+  return { ok: http >= 200 && http < 300, http, total: sgpRecs.length, atualizados: nCasados, novos: nNovos };
+}
+
+/** Período padrão do sync: 01/01 do ano corrente até hoje (datas dinâmicas). */
+function _periodoSyncBR() {
+  const tz = 'America/Sao_Paulo';
+  const hoje = new Date();
+  const fim = Utilities.formatDate(hoje, tz, 'dd/MM/yyyy');
+  const ini = '01/01/' + Utilities.formatDate(hoje, tz, 'yyyy');
+  return { ini, fim };
 }
 
 /**
- * ATALHO p/ o editor: roda o sync de jan–jun GRAVANDO no Firebase (gravar=true).
- * Selecione esta função no dropdown e clique ▶ Executar para aplicar de verdade.
+ * ATALHO / handler do trigger: roda o sync do ano corrente GRAVANDO no Firebase.
+ * Selecione no dropdown e clique ▶ Executar para aplicar manualmente.
+ * Também é a função chamada pelo trigger diário e pelo endpoint sgp_sync.
  */
 function sgpAplicarSincronizacao() {
-  sgpSincronizarComercial('01/01/2026', '30/06/2026', true);
+  const p = _periodoSyncBR();
+  return sgpSincronizarComercial(p.ini, p.fim, true);
+}
+
+/**
+ * Cria (ou recria) o trigger diário que roda sgpAplicarSincronizacao todo dia.
+ * Rode UMA vez no editor. Remove triggers antigos do mesmo handler antes de criar.
+ * Ajuste a hora em atHour() se quiser (formato 24h, fuso do projeto).
+ */
+function criarTriggerDiarioSGP() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sgpAplicarSincronizacao') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sgpAplicarSincronizacao')
+    .timeBased().everyDays(1).atHour(6).create();
+  Logger.log('✅ Trigger diário criado: sgpAplicarSincronizacao roda todo dia entre 6h–7h.');
+}
+
+/** Remove o trigger diário do sync (caso queira desativar a automação). */
+function removerTriggersSGP() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'sgpAplicarSincronizacao') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  Logger.log(`🗑️ ${n} trigger(s) removido(s).`);
 }
 
 /**
@@ -1094,7 +1130,8 @@ function sgpAplicarSincronizacao() {
  * Selecione no dropdown e clique ▶ Executar (não grava nada).
  */
 function sgpAtivacoesPorMes() {
-  const dataIni = '01/01/2026', dataFim = '30/06/2026';
+  const p = _periodoSyncBR();
+  const dataIni = p.ini, dataFim = p.fim;
   const recs = sgpColetarAtivacoesComStatus(dataIni, dataFim);
   Logger.log(`SGP: ${recs.length} contratos no período ${dataIni}–${dataFim}\n`);
 
@@ -1125,7 +1162,15 @@ function doGet(e) {
     if (!ocId) return _resposta({ ok: false, erro: 'Informe ocorrencia_id' });
     return _resposta(sgpBuscarFotos(ocId));
   }
-  return _resposta({ ok: false, erro: 'Use ?action=sgp_fotos&ocorrencia_id=XXXX' });
+  if (action === 'sgp_sync') {
+    try {
+      const r = sgpAplicarSincronizacao();
+      return _resposta(Object.assign({ ok: true }, r));
+    } catch (err) {
+      return _resposta({ ok: false, erro: err.toString() });
+    }
+  }
+  return _resposta({ ok: false, erro: 'Use ?action=sgp_fotos&ocorrencia_id=XXXX ou ?action=sgp_sync' });
 }
 
 /**
