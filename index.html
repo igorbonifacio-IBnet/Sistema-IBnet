@@ -694,11 +694,24 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 
 <script>
 // ── USERS & ROLES ─────────────────────────────────────────────────────────
+// As senhas NÃO ficam no código (este arquivo é público). Guardamos apenas o
+// hash SHA-256 com salt. Para gerar o hash de uma senha nova, rode no console
+// do navegador: await hashSenha('NovaSenha')  e cole o resultado em "hash".
+// ⚠️ Stopgap: a autenticação ainda é no cliente. O reforço definitivo é migrar
+//    para Firebase Authentication (login validado no servidor) + regras de DB.
+const PWD_SALT = 'ibnet-2026::';
 const USERS = {
-  'igor':    { senha: 'Comdata12@',  role: 'admin',    nome: 'Igor',    email: 'igorbonifacio23@gmail.com' },
-  'matheus': { senha: 'Ibnet@2026',  role: 'comercial',nome: 'Matheus', email: 'matheushenrique161013@gmail.com' },
-  'rutiele': { senha: 'Rutiele@123', role: 'suporte',  nome: 'Rutiele', email: '' },
+  'igor':    { hash: '53daa15bbb75c973f1ae8945da904c5f51587315073281279315b597774dd16d', role: 'admin',     nome: 'Igor',    email: 'igorbonifacio23@gmail.com' },
+  'matheus': { hash: 'a084a58eeec9badbe033cf23def11aa2e7b9df73316ac3e9fdd7033506ab860f', role: 'comercial', nome: 'Matheus', email: 'matheushenrique161013@gmail.com' },
+  'rutiele': { hash: '3e4c930a5b5a3f5916f18d5f721912b6dab77238d50a487db2c840b9bb3f82ab', role: 'suporte',   nome: 'Rutiele', email: '' },
 };
+
+// Calcula SHA-256(salt + senha) em hex usando a Web Crypto API do navegador.
+async function hashSenha(senha) {
+  const dados = new TextEncoder().encode(PWD_SALT + senha);
+  const buf   = await crypto.subtle.digest('SHA-256', dados);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 const ROLE_ACCESS = {
   admin:      ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs'],
@@ -750,12 +763,13 @@ function canAccess(role, tab) {
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('li-user').value.trim().toLowerCase();
   const p = document.getElementById('li-pass').value;
   const err = document.getElementById('li-err');
   const user = USERS[u];
-  if (user && user.senha === p) {
+  const hashDigitado = p ? await hashSenha(p) : '';
+  if (user && hashDigitado === user.hash) {
     setSession({ username: u, role: user.role, nome: user.nome });
     logAction('Portal', 'Login', `Usuário ${user.nome} entrou na plataforma`);
     err.classList.remove('show');
@@ -997,35 +1011,19 @@ function closeResetModal() {
 async function sendReset() {
   const username = document.getElementById('reset-user').value.trim().toLowerCase();
   const msgEl = document.getElementById('reset-msg');
-  const btn = document.getElementById('btn-reset-send');
   const user = USERS[username];
 
-  if (!user || !user.email) {
+  if (!user) {
     msgEl.className = 'modal-msg err';
     msgEl.textContent = 'Usuário não encontrado.';
     return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Enviando…';
-  msgEl.className = 'modal-msg';
-
-  try {
-    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-      to_email: user.email,
-      to_name:  user.nome,
-      username: username,
-      senha:    user.senha,
-    });
-    msgEl.className = 'modal-msg ok';
-    msgEl.textContent = 'Senha enviada para ' + user.email;
-    btn.textContent = 'Enviado ✓';
-  } catch(e) {
-    msgEl.className = 'modal-msg err';
-    msgEl.textContent = 'Falha ao enviar. Verifique as configurações do EmailJS.';
-    btn.disabled = false;
-    btn.textContent = 'Enviar';
-  }
+  // Por segurança, a senha não é mais armazenada de forma reversível, então não
+  // pode ser reenviada por e-mail. A redefinição é feita pelo administrador.
+  msgEl.className = 'modal-msg ok';
+  msgEl.textContent = 'Por segurança, a senha não é enviada por e-mail. '
+    + 'Solicite a redefinição ao administrador (Igor).';
 }
 
 document.getElementById('reset-modal').addEventListener('click', function(e) {

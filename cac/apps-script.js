@@ -793,13 +793,30 @@ function testarEndpoint() {
  */
 
 const SGP_BASE = 'https://sbsginfo.sgp.tsmx.com.br';
-const SGP_USER = 'admin';
-const SGP_PASS = 'Info@2024';
 
-// Chave Anthropic — usada para ler S/N da ONT nas fotos do SGP via Claude Haiku
-const ANTHROPIC_KEY = 'sk-ant-api03-gSY4IEGHEkV_Zfa72oy6QNgTu6bBvDB'
-                    + 'hstyuBfdoraw3OPwozD1bU_4t68UzBy_7ZwdVSdA'
-                    + 'loEh1FUHLtWT0bQ-Bn1OMwAA';
+// ── CREDENCIAIS (NÃO ficam no código) ──────────────────────────────────────
+// Este arquivo é público (GitHub Pages), então segredos NUNCA podem estar aqui.
+// Configure uma única vez em:
+//   Apps Script → ⚙ Configurações do projeto → Propriedades do script → Adicionar:
+//     SGP_USER       → usuário do SGP
+//     SGP_PASS       → senha do SGP
+//     ANTHROPIC_KEY  → chave da API Anthropic (sk-ant-...)
+// Os valores são lidos com segurança em tempo de execução, sem aparecer no fonte.
+const _SCRIPT_PROPS = PropertiesService.getScriptProperties();
+const SGP_USER      = _SCRIPT_PROPS.getProperty('SGP_USER')      || '';
+const SGP_PASS      = _SCRIPT_PROPS.getProperty('SGP_PASS')      || '';
+const ANTHROPIC_KEY = _SCRIPT_PROPS.getProperty('ANTHROPIC_KEY') || '';
+
+/**
+ * Verifica (sem expor valores) quais credenciais já estão configuradas.
+ * Rode esta função no editor do Apps Script após cadastrar as propriedades.
+ */
+function verificarCredenciais() {
+  ['SGP_USER', 'SGP_PASS', 'ANTHROPIC_KEY'].forEach(nome => {
+    const v = _SCRIPT_PROPS.getProperty(nome);
+    Logger.log(`${nome}: ${v ? '✅ configurado (' + v.length + ' chars)' : '❌ FALTANDO'}`);
+  });
+}
 
 function doGet(e) {
   const action = (e.parameter.action || '').toLowerCase();
