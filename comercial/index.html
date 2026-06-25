@@ -243,6 +243,49 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
 .qf-btn.active[data-status="Cancelado"]{background:#64748b}
 .qf-btn.active[data-status="Isento"]{background:#3b82f6}
 .qf-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
+
+/* ── CRUD: botões da toolbar da tabela ── */
+.btn-nova,.btn-import{
+  border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12.5px;
+  cursor:pointer;font-family:inherit;font-weight:600;letter-spacing:.2px;
+  display:inline-flex;align-items:center;gap:6px;transition:opacity .15s,transform .05s;white-space:nowrap
+}
+.btn-nova{background:var(--green)}
+.btn-import{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-nova:hover{opacity:.9}
+.btn-import:hover{border-color:var(--accent);color:var(--text)}
+.btn-nova:active,.btn-import:active{transform:translateY(1px)}
+
+/* ── CRUD: ações na linha da tabela ── */
+.row-act{background:transparent;border:none;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:6px;opacity:.7;transition:opacity .15s,background .15s}
+.row-act:hover{opacity:1;background:rgba(127,127,127,.14)}
+
+/* ── CRUD: modal ── */
+.vmodal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;backdrop-filter:blur(2px)}
+.vmodal.hidden{display:none}
+.vmodal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.45)}
+.vmodal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.vmodal-head h3{font-size:16px;color:var(--text);font-weight:600}
+.vm-close{background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+.vm-close:hover{color:var(--text)}
+.vmodal-body{padding:18px 20px;overflow-y:auto}
+.vm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+.vm-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.vm-grid label.vm-full{grid-column:1 / -1}
+.vm-grid input,.vm-grid select,.vm-grid textarea{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:8px 10px;border-radius:8px;font-size:13px;font-family:inherit;width:100%
+}
+.vm-grid input:focus,.vm-grid select:focus,.vm-grid textarea:focus{outline:none;border-color:var(--accent)}
+.vm-err{color:var(--red);font-size:12.5px;margin-top:12px;min-height:16px}
+.vmodal-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border)}
+.vm-btn-cancel,.vm-btn-save{border:none;padding:8px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600}
+.vm-btn-cancel{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.vm-btn-cancel:hover{color:var(--text)}
+.vm-btn-save{background:var(--accent);color:#fff}
+.vm-btn-save:hover{opacity:.9}
+.vm-btn-save:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){.vm-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -311,6 +354,8 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
       <button class="btn-filter-toggle" id="btn-filter-toggle" onclick="toggleAdvFilters()">
         ⚙ Filtros <span class="filter-badge hidden" id="filter-count"></span>
       </button>
+      <button class="btn-nova" id="btn-nova-venda" onclick="openVendaModal()" style="display:none">+ Nova venda</button>
+      <button class="btn-import" id="btn-import" onclick="importFromSheet()" style="display:none" title="Importa as vendas da planilha para o sistema (uma vez)">⤓ Importar planilha</button>
     </div>
 
     <!-- PAINEL FILTROS AVANÇADOS -->
@@ -378,6 +423,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
           <th onclick="sortBy('motivo')">Motivo Churn ↕</th>
           <th>CAC / Payback</th>
           <th onclick="sortBy('sn')">S/N ONT ↕</th>
+          <th id="th-acoes" style="display:none">Ações</th>
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
@@ -389,12 +435,55 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
   </div>
 </main>
 
+<!-- ── MODAL: nova/editar venda ── -->
+<div id="venda-modal" class="vmodal hidden">
+  <div class="vmodal-box">
+    <div class="vmodal-head">
+      <h3 id="vm-title">Nova venda</h3>
+      <button class="vm-close" onclick="closeVendaModal()" aria-label="Fechar">✕</button>
+    </div>
+    <div class="vmodal-body">
+      <div class="vm-grid">
+        <label class="vm-full">Nome do Cliente *<input id="vm-nome" type="text" autocomplete="off"></label>
+        <label>Data da Venda<input id="vm-dataVenda" type="date"></label>
+        <label>Data de Vencimento<input id="vm-vencimento" type="date"></label>
+        <label>POP<input id="vm-pop" list="dl-pop" type="text" autocomplete="off"></label>
+        <label>Região/Bairro<input id="vm-bairro" list="dl-bairro" type="text" autocomplete="off"></label>
+        <label>Plano Contratado<input id="vm-plano" list="dl-plano" type="text" autocomplete="off"></label>
+        <label>Valor mensal (R$)<input id="vm-valor" type="number" step="0.01" min="0" placeholder="0,00"></label>
+        <label>Status do Pagamento<select id="vm-status">
+          <option>Pago</option><option>Pendente</option><option>Em atraso</option><option>Isento</option><option>Cancelado</option>
+        </select></label>
+        <label>Forma de Pagamento<input id="vm-formaPgto" list="dl-forma" type="text" autocomplete="off"></label>
+        <label>Responsável pela Venda<input id="vm-responsavel" list="dl-resp" type="text" autocomplete="off"></label>
+        <label>Churn<select id="vm-churn"><option>Não</option><option>Sim</option></select></label>
+        <label>Equipamento recolhido<select id="vm-equip"><option value="">—</option><option>Sim</option><option>Não</option></select></label>
+        <label>ID Venda (SGP)<input id="vm-id" type="text" placeholder="opcional" autocomplete="off"></label>
+        <label>Score Churn<input id="vm-scoreChurn" type="text" placeholder="opcional" autocomplete="off"></label>
+        <label class="vm-full">Motivo Churn<input id="vm-motivo" type="text" autocomplete="off"></label>
+        <label class="vm-full">Observações<textarea id="vm-obs" rows="2"></textarea></label>
+      </div>
+      <div id="vm-err" class="vm-err"></div>
+    </div>
+    <div class="vmodal-foot">
+      <button class="vm-btn-cancel" onclick="closeVendaModal()">Cancelar</button>
+      <button class="vm-btn-save" id="vm-save" onclick="saveVenda()">Salvar</button>
+    </div>
+  </div>
+  <datalist id="dl-pop"></datalist>
+  <datalist id="dl-bairro"></datalist>
+  <datalist id="dl-plano"></datalist>
+  <datalist id="dl-forma"></datalist>
+  <datalist id="dl-resp"></datalist>
+</div>
+
 <script>
 // Guard
 if (window.self === window.top) { window.location.href = '../'; }
 
+// Planilha — usada APENAS na importação inicial (botão "Importar planilha").
+// A fonte de verdade agora é o Firebase: comercial/vendas
 const SHEET_ID = '1Tw_1VOAC3lzm_cAIcPx9q8ekoJU4r7ZzJG9Qavov_Xo';
-const API_KEY  = 'AIzaSyAfCACaYIOsdc1cWWGr9YbGL3R-IxG9sx8';
 const SHEETS = [
   { name: 'JAN2026',  label: 'jan./2026' },
   { name: 'FEV2026',  label: 'fev./2026' },
@@ -403,6 +492,34 @@ const SHEETS = [
   { name: 'MAIO2026', label: 'mai./2026' },
 ];
 const ROWS_PER_PAGE = 20;
+const MES_ABBR = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
+
+// ── Firebase: nó das vendas ──
+const vendasRef = () => firebase.database().ref('comercial/vendas');
+
+// ── Sessão / permissões (sessionStorage é compartilhado com o portal, mesma origem) ──
+function getRole(){ try { return (JSON.parse(sessionStorage.getItem('ibnet_session')||'null')||{}).role || ''; } catch(e){ return ''; } }
+function canEdit(){ return ['admin','comercial'].includes(getRole()); }
+function isAdmin(){ return getRole()==='admin'; }
+function logPortal(acao, det){ try { window.parent && window.parent.logAction && window.parent.logAction('Comercial', acao, det||''); } catch(e){} }
+
+// ── Datas (planilha usa dd/mm/aaaa; input date usa aaaa-mm-dd) ──
+function parseBRDate(s){
+  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((s||'').toString().trim());
+  if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+  const d=new Date(s); return isNaN(d.getTime())?null:d;
+}
+function toBRDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim()); return m?`${m[3]}/${m[2]}/${m[1]}`:(iso||''); }
+function toISODate(br){ const d=parseBRDate(br); if(!d) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function mesLabelFromBR(s){ const d=parseBRDate(s); return d?`${MES_ABBR[d.getMonth()]}/${d.getFullYear()}`:''; }
+function mesRank(label){ const m=/^([a-zç]{3})\.\/(\d{4})$/i.exec((label||'').toString().trim()); if(!m) return 9e9; const mi=MES_ABBR.indexOf(m[1].toLowerCase()+'.'); return (+m[2])*12+(mi<0?11:mi); }
+function computeDiasAtraso(v){
+  if(['Pago','Cancelado','Isento'].includes(v.status)) return '0';
+  const venc=parseBRDate(v.vencimento); if(!venc) return (v.diasAtraso||'0').toString();
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const dias=Math.floor((hoje-venc)/86400000);
+  return String(dias>0?dias:0);
+}
 
 let allData = [], filteredData = [], currentPage = 1;
 let sortKey = 'mes', sortDir = 1;
@@ -521,24 +638,122 @@ async function fetchSheet(name, label) {
   return rows.map(r => ({...r, 'Mes': r['Mes'] || label}));
 }
 
+// ── Mapeamento Firebase <-> linha de exibição ──
+function vendaToRow(id, v) {
+  v = v || {};
+  return {
+    _id: id,
+    'ID Venda': v.id || '',
+    'Nome do Cliente': v.nome || '',
+    'Data da Venda': v.dataVenda || '',
+    'POP': v.pop || '',
+    'Região/Bairro': v.bairro || '',
+    'Plano Contratado': v.plano || '',
+    'Valor mensal num': v.valor || '',
+    'Data de Vencimento': v.vencimento || '',
+    'Status do Pagamento': v.status || '',
+    'Forma de Pagamento': v.formaPgto || '',
+    'Responsável pela Venda': v.responsavel || '',
+    'Responsável': v.responsavel || '',
+    'Churn': v.churn || '',
+    'Equipamento recolhido': v.equip || '',
+    'Motivo Churn': v.motivo || '',
+    'Observações': v.obs || '',
+    'Dias em atraso': v.diasAtraso || '',
+    'Mes': v.mes || '',
+    'Score Churn': v.scoreChurn || '',
+  };
+}
+function rowToVenda(r) {
+  return {
+    id: r['ID Venda'] || '',
+    nome: r['Nome do Cliente'] || '',
+    dataVenda: r['Data da Venda'] || '',
+    pop: r['POP'] || '',
+    bairro: r['Região/Bairro'] || r['Regiao/Bairro'] || '',
+    plano: r['Plano Contratado'] || '',
+    valor: r['Valor mensal num'] || r['Valor Mensal (R$)'] || '',
+    vencimento: r['Data de Vencimento'] || '',
+    status: r['Status do Pagamento'] || '',
+    formaPgto: r['Forma de Pagamento'] || '',
+    responsavel: r['Responsável pela Venda'] || '',
+    churn: getChurn(r),
+    equip: getEquip(r),
+    motivo: getMotivo(r),
+    obs: r['Observações'] || '',
+    diasAtraso: r['Dias em atraso'] || '',
+    mes: r['Mes'] || '',
+    scoreChurn: r['Score Churn'] || '',
+  };
+}
+
+function applyVendasSnapshot(obj) {
+  allData = Object.entries(obj || {}).map(([id, v]) => vendaToRow(id, v));
+  recomputeMesOrder();
+  populateFilters();
+  populateAdvFilters();
+  populateDatalists();
+  applyFilters();
+  refreshChartTheme();
+  document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+// Listener em tempo real — sincroniza entre dispositivos automaticamente
+let _vendasSubscribed = false;
+function subscribeVendas() {
+  if (_vendasSubscribed) return;
+  _vendasSubscribed = true;
+  vendasRef().on('value',
+    snap => applyVendasSnapshot(snap.val() || {}),
+    err  => { console.error('Firebase vendas:', err); document.getElementById('loading-overlay').classList.add('hidden'); }
+  );
+}
+
 async function loadData(silent = false) {
   const btn = document.getElementById('refresh-btn');
   btn.textContent = '⟳ Atualizando…'; btn.style.opacity = '.6'; btn.style.pointerEvents = 'none';
   if (!silent) document.getElementById('loading-overlay').classList.remove('hidden');
   try {
-    const results = await Promise.all(SHEETS.map(s => fetchSheet(s.name, s.label)));
-    allData = results.flat();
-    populateFilters();
-    populateAdvFilters();
-    applyFilters();
-    refreshChartTheme();
-    document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
-  } catch(e) { console.error(e); }
-  if (!silent) document.getElementById('loading-overlay').classList.add('hidden');
+    const snap = await vendasRef().once('value');
+    applyVendasSnapshot(snap.val() || {});
+  } catch(e) { console.error(e); document.getElementById('loading-overlay').classList.add('hidden'); }
   btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
 }
 
-const mesOrder = SHEETS.map(s => s.label);
+// ── IMPORTAÇÃO ÚNICA: planilha → Firebase (somente admin) ──
+async function importFromSheet() {
+  if (!isAdmin()) { alert('Apenas o administrador pode importar a planilha.'); return; }
+  const atuais = allData.length;
+  const aviso = atuais > 0
+    ? `Já existem ${atuais} vendas no sistema.\n\nA importação vai SUBSTITUIR tudo pelos dados atuais da planilha (jan–mai/2026). Deseja continuar?`
+    : 'Importar as vendas da planilha (jan–mai/2026) para o sistema?';
+  if (!confirm(aviso)) return;
+  const btn = document.getElementById('btn-import');
+  const txt = btn.textContent; btn.textContent = '⟳ Importando…'; btn.style.pointerEvents = 'none';
+  try {
+    const results = await Promise.all(SHEETS.map(s => fetchSheet(s.name, s.label)));
+    const rows = results.flat();
+    const obj = {};
+    rows.forEach(r => {
+      const v = rowToVenda(r);
+      if (!v.nome) return;                 // ignora linhas sem cliente
+      if (!v.mes) v.mes = mesLabelFromBR(v.dataVenda);
+      obj[ vendasRef().push().key ] = v;   // chave única por registro
+    });
+    await vendasRef().set(obj);            // espelha o estado atual da planilha
+    logPortal('Importação', `Importou ${Object.keys(obj).length} vendas da planilha`);
+    alert(`✅ Importado: ${Object.keys(obj).length} vendas para o sistema.`);
+  } catch(e) {
+    console.error(e); alert('❌ Falha na importação. Veja o console para detalhes.');
+  }
+  btn.textContent = txt; btn.style.pointerEvents = 'auto';
+}
+
+let mesOrder = [];
+function recomputeMesOrder() {
+  mesOrder = [...new Set(allData.map(r => r['Mes']).filter(Boolean))].sort((a,b) => mesRank(a)-mesRank(b));
+}
 function populateFilters() {
   const fields = {'f-mes':'Mes','f-status':'Status do Pagamento','f-pop':'POP','f-plano':'Plano Contratado','f-bairro':'Região/Bairro'};
   Object.entries(fields).forEach(([id, col]) => {
@@ -772,6 +987,10 @@ function renderTable() {
     <td><span class="motivo-churn" title="${motivo}">${motivo||'—'}</span></td>
     <td>${cacBadgeHTML(r['Nome do Cliente'], parseFloat((r['Valor mensal num']||'0').toString().replace(/[^0-9,.]/g,'').replace(',','.')) || 0)}</td>
     <td>${snBadgeHTML(r['Nome do Cliente'])}</td>
+    ${canEdit() ? `<td style="white-space:nowrap">
+      <button class="row-act" title="Editar"  onclick="openVendaModal('${r._id}')">✏️</button>
+      <button class="row-act" title="Excluir" onclick="deleteVenda('${r._id}')">🗑️</button>
+    </td>` : ''}
   </tr>`;
   }).join('');
   // pagination
@@ -810,7 +1029,114 @@ try {
     appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
   });
 } catch(e) {}
-loadCACData().then(() => loadData(false));
+applyRolePermissions();
+loadCACData().then(() => subscribeVendas());
+
+// ════════════════════════════════════════════════════════════════════════
+// CRUD — nova / editar / excluir venda (Firebase: comercial/vendas)
+// ════════════════════════════════════════════════════════════════════════
+function applyRolePermissions() {
+  const editor = canEdit();
+  const nova = document.getElementById('btn-nova-venda');
+  const imp  = document.getElementById('btn-import');
+  const thA  = document.getElementById('th-acoes');
+  if (nova) nova.style.display = editor ? '' : 'none';
+  if (imp)  imp.style.display  = isAdmin() ? '' : 'none';
+  if (thA)  thA.style.display  = editor ? '' : 'none';
+}
+
+function fillDatalist(id, col) {
+  const dl = document.getElementById(id); if (!dl) return;
+  const vals = [...new Set(allData.map(r => (r[col]||'').toString().trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
+  dl.innerHTML = vals.map(v => `<option value="${v.replace(/"/g,'&quot;')}"></option>`).join('');
+}
+function populateDatalists() {
+  fillDatalist('dl-pop',   'POP');
+  fillDatalist('dl-bairro','Região/Bairro');
+  fillDatalist('dl-plano', 'Plano Contratado');
+  fillDatalist('dl-forma', 'Forma de Pagamento');
+  fillDatalist('dl-resp',  'Responsável pela Venda');
+}
+
+let editingId = null;
+function openVendaModal(id) {
+  if (!canEdit()) return;
+  editingId = id || null;
+  populateDatalists();
+  const r = id ? allData.find(x => x._id === id) : null;
+  const g = (k) => r ? (r[k] || '') : '';
+  document.getElementById('vm-title').textContent = id ? 'Editar venda' : 'Nova venda';
+  document.getElementById('vm-nome').value        = g('Nome do Cliente');
+  document.getElementById('vm-dataVenda').value   = toISODate(g('Data da Venda'));
+  document.getElementById('vm-vencimento').value  = toISODate(g('Data de Vencimento'));
+  document.getElementById('vm-pop').value         = g('POP');
+  document.getElementById('vm-bairro').value      = g('Região/Bairro');
+  document.getElementById('vm-plano').value       = g('Plano Contratado');
+  document.getElementById('vm-valor').value       = r ? (parseValor(g('Valor mensal num')) || '') : '';
+  document.getElementById('vm-status').value      = g('Status do Pagamento') || 'Pendente';
+  document.getElementById('vm-formaPgto').value   = g('Forma de Pagamento');
+  document.getElementById('vm-responsavel').value = g('Responsável pela Venda');
+  document.getElementById('vm-churn').value       = (g('Churn') || 'Não');
+  document.getElementById('vm-equip').value       = g('Equipamento recolhido');
+  document.getElementById('vm-id').value          = g('ID Venda');
+  document.getElementById('vm-scoreChurn').value  = g('Score Churn');
+  document.getElementById('vm-motivo').value      = g('Motivo Churn');
+  document.getElementById('vm-obs').value         = g('Observações');
+  document.getElementById('vm-err').textContent   = '';
+  document.getElementById('venda-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('vm-nome').focus(), 50);
+}
+function closeVendaModal() {
+  document.getElementById('venda-modal').classList.add('hidden');
+  editingId = null;
+}
+function saveVenda() {
+  if (!canEdit()) return;
+  const val = (id) => document.getElementById(id).value.trim();
+  const nome = val('vm-nome');
+  const err = document.getElementById('vm-err');
+  if (!nome) { err.textContent = 'Informe o nome do cliente.'; document.getElementById('vm-nome').focus(); return; }
+  const valorNum = parseFloat(val('vm-valor'));
+  const v = {
+    id:          val('vm-id'),
+    nome,
+    dataVenda:   toBRDate(val('vm-dataVenda')),
+    pop:         val('vm-pop'),
+    bairro:      val('vm-bairro'),
+    plano:       val('vm-plano'),
+    valor:       isNaN(valorNum) ? '' : valorNum.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}),
+    vencimento:  toBRDate(val('vm-vencimento')),
+    status:      val('vm-status'),
+    formaPgto:   val('vm-formaPgto'),
+    responsavel: val('vm-responsavel'),
+    churn:       document.getElementById('vm-churn').value,
+    equip:       document.getElementById('vm-equip').value,
+    motivo:      val('vm-motivo'),
+    obs:         val('vm-obs'),
+    scoreChurn:  val('vm-scoreChurn'),
+  };
+  v.mes = mesLabelFromBR(v.dataVenda);
+  v.diasAtraso = computeDiasAtraso(v);
+  const save = document.getElementById('vm-save');
+  save.disabled = true; save.textContent = 'Salvando…';
+  const done = () => { save.disabled = false; save.textContent = 'Salvar'; closeVendaModal(); };
+  const fail = (e) => { console.error(e); save.disabled = false; save.textContent = 'Salvar'; err.textContent = 'Falha ao salvar. Tente novamente.'; };
+  if (editingId) {
+    vendasRef().child(editingId).update(v).then(() => { logPortal('Edição', `Editou venda: ${nome}`); done(); }).catch(fail);
+  } else {
+    vendasRef().push(v).then(() => { logPortal('Nova venda', `Cadastrou: ${nome}`); done(); }).catch(fail);
+  }
+}
+function deleteVenda(id) {
+  if (!canEdit()) return;
+  const r = allData.find(x => x._id === id);
+  const nome = r ? (r['Nome do Cliente'] || 'cliente') : 'cliente';
+  if (!confirm(`Excluir a venda de "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  vendasRef().child(id).remove().then(() => logPortal('Exclusão', `Excluiu venda: ${nome}`)).catch(e => { console.error(e); alert('Falha ao excluir.'); });
+}
+// Fecha o modal ao clicar fora ou apertar Esc
+document.getElementById('venda-modal').addEventListener('click', function(e){ if (e.target === this) closeVendaModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('venda-modal').classList.contains('hidden')) closeVendaModal(); });
 
 // ── AUTO-REFRESH SILENCIOSO ───────────────────────────────────────────────
 const AUTO_REFRESH_MS = 15 * 60 * 1000; // 15 minutos
