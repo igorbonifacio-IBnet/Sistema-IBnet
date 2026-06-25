@@ -818,6 +818,306 @@ function verificarCredenciais() {
   });
 }
 
+/**
+ * Testa o login no SGP com as credenciais atuais (SGP_USER/SGP_PASS).
+ * NÃO expõe a senha — apenas informa se a sessão foi aberta com sucesso.
+ * Rode no editor do Apps Script e veja o resultado em "Execução / Logs".
+ */
+function sgpTestarLogin() {
+  if (!SGP_USER || !SGP_PASS) {
+    Logger.log('❌ Configure SGP_USER e SGP_PASS em Propriedades do script antes de testar.');
+    return;
+  }
+  Logger.log(`Testando login SGP com usuário "${SGP_USER}" (senha: ${SGP_PASS.length} chars)…`);
+  try {
+    const cookie = sgpGetSession();
+    Logger.log(cookie.includes('sessionid')
+      ? '✅ Login OK — sessão autenticada (sessionid presente). Acesso do SGP válido.'
+      : '⚠️ Resposta sem sessionid — verifique se o usuário tem permissão de acesso.');
+  } catch (err) {
+    Logger.log('❌ Falha no login SGP: ' + err.message);
+  }
+}
+
+/**
+ * DEBUG (Fase 3): inspeciona o relatório de Ativações do SGP.
+ *   1) abre sessão  2) lê o formulário  3) lista os nomes dos campos
+ *   4) consulta o período e loga um trecho do HTML da tabela de resultados.
+ * Rode no editor: sgpInspecionarAtivacoes('01/06/2026','30/06/2026')
+ * e cole o Log aqui pra eu mapear as colunas e montar o parser.
+ */
+function sgpInspecionarAtivacoes(dataIni, dataFim) {
+  dataIni = dataIni || '01/06/2026';
+  dataFim = dataFim || '30/06/2026';
+  const RELAT  = SGP_BASE + '/admin/relatorios/contrato/ativacoes/';
+  const cookie = sgpGetSession();
+
+  // O relatório é consultado via GET com querystring (POST devolve 405).
+  const url = RELAT
+    + '?data_inicial=' + encodeURIComponent(dataIni)
+    + '&data_final='   + encodeURIComponent(dataFim);
+  const resp = UrlFetchApp.fetch(url, {
+    method: 'get', followRedirects: true, muteHttpExceptions: true,
+    headers: { Cookie: cookie, Referer: RELAT },
+  });
+  const out = resp.getContentText();
+  Logger.log(`GET (${dataIni}–${dataFim}) → HTTP ${resp.getResponseCode()} (${out.length} chars)`);
+  Logger.log(`Resultados na página? Total Receita: ${out.includes('Total Receita')} | Total de Contratos: ${out.includes('Total de Contratos')}`);
+  Logger.log(`Contagem → <table>: ${(out.match(/<table/gi)||[]).length} | <tr>: ${(out.match(/<tr/gi)||[]).length} | <th>: ${(out.match(/<th/gi)||[]).length} | <td>: ${(out.match(/<td/gi)||[]).length}`);
+
+  // loga as tabelas que parecem conter os resultados (cliente/contrato/plano/status)
+  const tabelas = out.match(/<table[\s\S]*?<\/table>/gi) || [];
+  let achou = false;
+  tabelas.forEach((t, i) => {
+    if (/contrato|cliente|nome|plano|status/i.test(t)) {
+      achou = true;
+      Logger.log(`TABELA ${i} (${t.length} chars):\n${t.substr(0, 2200)}`);
+    }
+  });
+  if (!achou) {
+    const tIdx = out.search(/<table/i);
+    Logger.log('Nenhuma tabela de resultados clara. 1ª <table>:\n' + (tIdx >= 0 ? out.substr(tIdx, 2000) : '(nenhuma <table>)'));
+  }
+}
+
+// ── Parser do relatório de Ativações ───────────────────────────────────────
+function _sgpStripTags(s) {
+  return (s || '').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ').trim();
+}
+function _sgpCell(raw) {
+  let c = (raw || '').replace(/<\/td>[\s\S]*$/i, ''); // corta o fechamento e o que vier depois
+  c = c.replace(/^[^>]*>/, '');                         // remove o resto do <td ...>
+  return _sgpStripTags(c);
+}
+
+/**
+ * Consulta o relatório de Ativações e devolve os registros estruturados.
+ * statusAtual (opcional) filtra pelo status atual do contrato.
+ */
+function sgpBuscarAtivacoes(dataIni, dataFim, statusAtual) {
+  const RELAT  = SGP_BASE + '/admin/relatorios/contrato/ativacoes/';
+  const cookie = sgpGetSession();
+  let url = RELAT
+    + '?data_inicial=' + encodeURIComponent(dataIni)
+    + '&data_final='   + encodeURIComponent(dataFim);
+  if (statusAtual) url += '&status_atual=' + encodeURIComponent(statusAtual);
+
+  const html = UrlFetchApp.fetch(url, {
+    method: 'get', followRedirects: true, muteHttpExceptions: true,
+    headers: { Cookie: cookie, Referer: RELAT },
+  }).getContentText();
+
+  const tabela = (html.match(/<table[^>]*class="tablelist[^"]*"[\s\S]*?<\/table>/i) || [])[0] || '';
+  const tbody  = (tabela.match(/<tbody[\s\S]*?<\/tbody>/i) || [])[0] || tabela;
+
+  const linhas = tbody.split(/<tr[\s>]/i).slice(1);
+  const registros = [];
+  linhas.forEach(linha => {
+    if (!/\/admin\/cliente\//i.test(linha)) return;               // só linhas de contrato
+    const cel = linha.split(/<td[\s>]/i).slice(1);
+    if (cel.length < 9) return;
+
+    // col 0 — Contrato: <a href="/admin/cliente/ID/contratos/">NUM - NOME</a>
+    const mCli      = cel[0].match(/\/admin\/cliente\/(\d+)\/contratos\/"?>([^<]*)</i);
+    const clienteId = mCli ? mCli[1] : '';
+    const txtLink   = mCli ? mCli[2].trim() : _sgpCell(cel[0]);
+    const mNum      = txtLink.match(/^(\d+)\s*-\s*([\s\S]+)$/);
+    const contrato  = mNum ? mNum[1] : '';
+    let   nome      = (mNum ? mNum[2] : txtLink).trim();
+    nome = nome.replace(/^[\d.\-\/]+\s+/, '').trim();   // remove CPF/CNPJ que às vezes precede o nome
+
+    const pop      = _sgpCell(cel[1]);
+    const planoRaw = _sgpCell(cel[2]);
+    const valores  = planoRaw.match(/R\$\s*([\d.]+,\d{2})/g) || [];
+    const valor    = valores.length ? valores[valores.length - 1].replace(/R\$\s*/, '') : '';
+    const plano    = planoRaw.replace(/^\d+\s*-\s*/, '').split(/\s*\/\//)[0].trim();
+
+    const tecnico  = _sgpCell(cel[4]);
+    const dataFin  = _sgpCell(cel[5]);
+    const motivo   = _sgpCell(cel[6]);
+    const usuario  = _sgpCell(cel[7]);
+    const dataAtiv = (_sgpCell(cel[8]).match(/\d{2}\/\d{2}\/\d{4}/) || [''])[0];
+
+    registros.push({
+      contrato, clienteId, nome, pop, plano, valor,
+      dataAtivacao: dataAtiv, tecnico, usuario,
+      dataFinalizacao: dataFin, motivo, statusAtual: statusAtual || '',
+    });
+  });
+  return registros;
+}
+
+/** DEBUG: roda o parser de junho + lista as opções do filtro status_atual. */
+function sgpDebugAtivacoes() {
+  const recs = sgpBuscarAtivacoes('01/06/2026', '30/06/2026');
+  Logger.log('Total parseado: ' + recs.length);
+  Logger.log('Amostra (3):\n' + JSON.stringify(recs.slice(0, 3), null, 2));
+
+  const cookie = sgpGetSession();
+  const html   = UrlFetchApp.fetch(SGP_BASE + '/admin/relatorios/contrato/ativacoes/', {
+    headers: { Cookie: cookie }, muteHttpExceptions: true,
+  }).getContentText();
+  const sel  = (html.match(/<select[^>]*name="status_atual"[\s\S]*?<\/select>/i) || [''])[0];
+  const opts = [...sel.matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]*)</gi)]
+    .map(m => `"${m[1]}" = ${m[2].trim()}`);
+  Logger.log('Opções status_atual (' + opts.length + '):\n' + opts.join('\n'));
+}
+
+// ── Sincronização SGP → Dashboard (comercial/vendas) ────────────────────────
+const SGP_STATUS = {
+  '1': 'Ativo', '7': 'Ativo V. Reduzida', '4': 'Suspenso',
+  '3': 'Cancelado', '2': 'Inativo', '6': 'Novo', '5': 'Inviabilidade Técnica',
+};
+const _MES_ABBR = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
+function _mesLabelBR(br) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((br || '').trim());
+  return m ? `${_MES_ABBR[+m[2] - 1]}/${m[3]}` : '';
+}
+function _normNome(s) {
+  return (s || '').toString().toUpperCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/** Coleta as ativações do período já com o status atual de cada contrato. */
+function sgpColetarAtivacoesComStatus(dataIni, dataFim) {
+  const mapa = {}; // contrato -> registro
+  Object.keys(SGP_STATUS).forEach(code => {
+    sgpBuscarAtivacoes(dataIni, dataFim, code).forEach(r => {
+      r.statusContrato = SGP_STATUS[code];
+      mapa[r.contrato] = r;
+    });
+  });
+  return Object.values(mapa);
+}
+
+/**
+ * Sincroniza as vendas do SGP com o dashboard (comercial/vendas no Firebase).
+ *   gravar = false  → DRY-RUN: só relata, não grava nada (padrão)
+ *   gravar = true   → aplica via PATCH (casa por nome, preserva campos manuais)
+ * Ex.: sgpSincronizarComercial('01/06/2026','30/06/2026')          // dry-run junho
+ *      sgpSincronizarComercial('01/01/2026','30/06/2026', true)    // aplica jan–jun
+ */
+function sgpSincronizarComercial(dataIni, dataFim, gravar) {
+  dataIni = dataIni || '01/01/2026';
+  dataFim = dataFim || '30/06/2026';
+
+  const sgpRecs = sgpColetarAtivacoesComStatus(dataIni, dataFim);
+  Logger.log(`SGP: ${sgpRecs.length} contratos no período ${dataIni}–${dataFim}`);
+
+  const atualRaw = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/comercial/vendas.json`, {
+    muteHttpExceptions: true,
+  }).getContentText();
+  const atual  = JSON.parse(atualRaw || '{}') || {};
+  // índices: por contrato (já sincronizado antes) e por nome (lista p/ consumir 1-a-1)
+  const porContrato = {}, porNome = {};
+  Object.entries(atual).forEach(([key, v]) => {
+    if (v.contrato) porContrato[v.contrato] = { key, v };
+    const n = _normNome(v.nome);
+    (porNome[n] = porNome[n] || []).push({ key, v });
+  });
+
+  const updates = {};
+  let nCasados = 0, nNovos = 0;
+  const novos = [], casados = [];
+
+  sgpRecs.forEach(r => {
+    const mesLabel  = _mesLabelBR(r.dataAtivacao);
+    const churn     = r.statusContrato === 'Cancelado' ? 'Sim' : null;
+
+    // casa 1º por número de contrato; depois por nome (consumindo da lista)
+    let match = porContrato[r.contrato] || null;
+    if (!match) {
+      const lista = porNome[_normNome(r.nome)];
+      if (lista && lista.length) match = lista.shift();
+    }
+
+    if (match) {
+      nCasados++;
+      const v = match.v;
+      updates[match.key] = Object.assign({}, v, {
+        id:    v.id || r.contrato,
+        contrato: r.contrato,
+        pop:   r.pop   || v.pop,
+        plano: r.plano || v.plano,
+        valor: r.valor || v.valor,
+        dataVenda: r.dataAtivacao || v.dataVenda,
+        mes:   v.mes || mesLabel,
+        statusContrato: r.statusContrato,
+        churn: churn || v.churn || 'Não',
+      });
+      casados.push(`${r.contrato} ↔ ${r.nome} (${r.statusContrato})`);
+    } else {
+      nNovos++;
+      updates['sgp_' + r.contrato] = {
+        id: r.contrato, contrato: r.contrato, nome: r.nome,
+        dataVenda: r.dataAtivacao, pop: r.pop, bairro: '',
+        plano: r.plano, valor: r.valor, vencimento: '',
+        status: '', formaPgto: '', responsavel: '',
+        churn: churn || 'Não', equip: '', motivo: '', obs: '',
+        diasAtraso: '', mes: mesLabel, scoreChurn: '',
+        statusContrato: r.statusContrato,
+      };
+      novos.push(`${r.contrato} - ${r.nome} (${r.statusContrato})`);
+    }
+  });
+
+  Logger.log(`Casados por nome (atualizar): ${nCasados} | Novos: ${nNovos}`);
+  if (novos.length)   Logger.log('NOVOS:\n'   + novos.slice(0, 60).join('\n'));
+  if (casados.length) Logger.log('CASADOS:\n' + casados.slice(0, 60).join('\n'));
+
+  if (!gravar) {
+    Logger.log('🔎 DRY-RUN — nada foi gravado. Para aplicar: sgpSincronizarComercial(ini, fim, true)');
+    return;
+  }
+  const resp = UrlFetchApp.fetch(`${FIREBASE_RTDB_URL}/comercial/vendas.json`, {
+    method: 'patch', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify(updates),
+  });
+  Logger.log(`✅ PATCH Firebase → HTTP ${resp.getResponseCode()} | ${nCasados} atualizados, ${nNovos} novos`);
+}
+
+/**
+ * ATALHO p/ o editor: roda o sync de jan–jun GRAVANDO no Firebase (gravar=true).
+ * Selecione esta função no dropdown e clique ▶ Executar para aplicar de verdade.
+ */
+function sgpAplicarSincronizacao() {
+  sgpSincronizarComercial('01/01/2026', '30/06/2026', true);
+}
+
+/**
+ * DIAGNÓSTICO: quebra as ativações do período por MÊS de ativação e por status.
+ * Use para conferir contra os números que o SGP mostra mês a mês
+ * (ex.: junho = quantos contratos realmente ativaram em junho).
+ * Selecione no dropdown e clique ▶ Executar (não grava nada).
+ */
+function sgpAtivacoesPorMes() {
+  const dataIni = '01/01/2026', dataFim = '30/06/2026';
+  const recs = sgpColetarAtivacoesComStatus(dataIni, dataFim);
+  Logger.log(`SGP: ${recs.length} contratos no período ${dataIni}–${dataFim}\n`);
+
+  const porMes = {};   // 'mm/aaaa' -> { total, status:{} }
+  let semData = 0;
+  recs.forEach(r => {
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((r.dataAtivacao || '').trim());
+    if (!m) { semData++; return; }
+    const chave = `${m[2].padStart(2, '0')}/${m[3]}`;
+    const bloco = porMes[chave] = porMes[chave] || { total: 0, status: {} };
+    bloco.total++;
+    const st = r.statusContrato || '—';
+    bloco.status[st] = (bloco.status[st] || 0) + 1;
+  });
+
+  Object.keys(porMes).sort().forEach(mes => {
+    const b = porMes[mes];
+    const det = Object.entries(b.status).map(([s, n]) => `${s}:${n}`).join('  ');
+    Logger.log(`${mes}  →  ${b.total} ativações   (${det})`);
+  });
+  if (semData) Logger.log(`(sem data de ativação: ${semData})`);
+}
+
 function doGet(e) {
   const action = (e.parameter.action || '').toLowerCase();
   if (action === 'sgp_fotos') {

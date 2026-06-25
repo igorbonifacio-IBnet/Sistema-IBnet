@@ -158,6 +158,12 @@ tr:hover td{background:rgba(59,130,246,.05)}
 .badge-churn-nao{background:rgba(34,197,94,.15);color:#22c55e}
 .badge-equip-sim{background:rgba(34,197,94,.15);color:#22c55e}
 .badge-equip-nao{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-sc-ativo{background:rgba(34,197,94,.15);color:#22c55e}
+.badge-sc-reduzida{background:rgba(20,184,166,.15);color:#14b8a6}
+.badge-sc-suspenso{background:rgba(249,115,22,.15);color:#f97316}
+.badge-sc-cancelado{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-sc-inativo{background:rgba(100,116,139,.15);color:#64748b}
+.badge-sc-novo{background:rgba(59,130,246,.15);color:#3b82f6}
 .motivo-churn{font-size:11px;color:var(--muted);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cac-badge{display:flex;flex-direction:column;gap:2px;min-width:90px}
 .cac-badge-val{font-size:11px;font-weight:700;color:#E8390E}
@@ -217,6 +223,12 @@ body.light .badge-churn-sim{background:#fee2e2;color:#b91c1c}
 body.light .badge-churn-nao{background:#dcfce7;color:#15803d}
 body.light .badge-equip-sim{background:#dcfce7;color:#15803d}
 body.light .badge-equip-nao{background:#fee2e2;color:#b91c1c}
+body.light .badge-sc-ativo{background:#dcfce7;color:#15803d}
+body.light .badge-sc-reduzida{background:#ccfbf1;color:#0f766e}
+body.light .badge-sc-suspenso{background:#ffedd5;color:#c2410c}
+body.light .badge-sc-cancelado{background:#fee2e2;color:#b91c1c}
+body.light .badge-sc-inativo{background:#f1f5f9;color:#475569}
+body.light .badge-sc-novo{background:#dbeafe;color:#1d4ed8}
 body.light .motivo-churn{color:#64748b}
 body.light .qf-bar{background:#f8fafc;border-bottom-color:#e8eef6}
 body.light .qf-btn{border-color:#dde6f0;color:#64748b;background:#ffffff}
@@ -307,7 +319,8 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
   <!-- Filters -->
   <div class="filters">
     <label>Mês<select id="f-mes"><option value="">Todos</option></select></label>
-    <label>Status<select id="f-status"><option value="">Todos</option></select></label>
+    <label>Status Contrato<select id="f-statusctr"><option value="">Todos</option></select></label>
+    <label>Status Pgto<select id="f-status"><option value="">Todos</option></select></label>
     <label>POP<select id="f-pop"><option value="">Todos</option></select></label>
     <label>Plano<select id="f-plano"><option value="">Todos</option></select></label>
     <label>Bairro<select id="f-bairro"><option value="">Todos</option></select></label>
@@ -415,7 +428,8 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
           <th onclick="sortBy('bairro')">Bairro ↕</th>
           <th onclick="sortBy('plano')">Plano ↕</th>
           <th onclick="sortBy('valor')">Valor ↕</th>
-          <th onclick="sortBy('status')">Status ↕</th>
+          <th onclick="sortBy('statusContrato')">Status Contrato ↕</th>
+          <th onclick="sortBy('status')">Status Pgto ↕</th>
           <th onclick="sortBy('venc')">Vencimento ↕</th>
           <th onclick="sortBy('dias')">Dias Atraso ↕</th>
           <th onclick="sortBy('churn')">Churn ↕</th>
@@ -610,6 +624,15 @@ function statusBadge(s) {
   const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
   return `<span class="badge badge-${map[s]||'pendente'}">${s||'—'}</span>`;
 }
+function statusContratoBadge(s) {
+  if (!s) return '—';
+  const map = {
+    'Ativo':'sc-ativo', 'Ativo V. Reduzida':'sc-reduzida', 'Suspenso':'sc-suspenso',
+    'Cancelado':'sc-cancelado', 'Inativo':'sc-inativo', 'Novo':'sc-novo',
+    'Inviabilidade Técnica':'sc-inativo',
+  };
+  return `<span class="badge badge-${map[s]||'sc-inativo'}">${s}</span>`;
+}
 function churnBadge(v) {
   if (!v) return '—';
   const upper = v.toString().toUpperCase().trim();
@@ -652,6 +675,8 @@ function vendaToRow(id, v) {
     'Valor mensal num': v.valor || '',
     'Data de Vencimento': v.vencimento || '',
     'Status do Pagamento': v.status || '',
+    'Status do Contrato': v.statusContrato || '',
+    'Nº Contrato': v.contrato || '',
     'Forma de Pagamento': v.formaPgto || '',
     'Responsável pela Venda': v.responsavel || '',
     'Responsável': v.responsavel || '',
@@ -675,6 +700,8 @@ function rowToVenda(r) {
     valor: r['Valor mensal num'] || r['Valor Mensal (R$)'] || '',
     vencimento: r['Data de Vencimento'] || '',
     status: r['Status do Pagamento'] || '',
+    statusContrato: r['Status do Contrato'] || '',
+    contrato: r['Nº Contrato'] || '',
     formaPgto: r['Forma de Pagamento'] || '',
     responsavel: r['Responsável pela Venda'] || '',
     churn: getChurn(r),
@@ -755,7 +782,7 @@ function recomputeMesOrder() {
   mesOrder = [...new Set(allData.map(r => r['Mes']).filter(Boolean))].sort((a,b) => mesRank(a)-mesRank(b));
 }
 function populateFilters() {
-  const fields = {'f-mes':'Mes','f-status':'Status do Pagamento','f-pop':'POP','f-plano':'Plano Contratado','f-bairro':'Região/Bairro'};
+  const fields = {'f-mes':'Mes','f-statusctr':'Status do Contrato','f-status':'Status do Pagamento','f-pop':'POP','f-plano':'Plano Contratado','f-bairro':'Região/Bairro'};
   Object.entries(fields).forEach(([id, col]) => {
     const sel = document.getElementById(id);
     let vals = [...new Set(allData.map(r => r[col]).filter(Boolean))];
@@ -768,15 +795,18 @@ function populateFilters() {
 
 function applyFilters() {
   const mes=document.getElementById('f-mes').value, status=document.getElementById('f-status').value,
+        statusCtr=document.getElementById('f-statusctr').value,
         pop=document.getElementById('f-pop').value, plano=document.getElementById('f-plano').value,
         bairro=document.getElementById('f-bairro').value;
   filteredData = allData.filter(r => {
     const rStatus = (r['Status do Pagamento']||'').trim();
+    const rStatusCtr = (r['Status do Contrato']||'').trim();
     const rPop    = (r['POP']||'').trim();
     const rPlano  = (r['Plano Contratado']||'').trim();
     const rBairro = (r['Região/Bairro']||r['Regiao/Bairro']||'').trim();
     return (!mes    || r['Mes']  === mes)   &&
            (!status || rStatus   === status) &&
+           (!statusCtr || rStatusCtr === statusCtr) &&
            (!pop    || rPop      === pop)    &&
            (!plano  || rPlano    === plano)  &&
            (!bairro || rBairro   === bairro);
@@ -786,7 +816,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-  ['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => document.getElementById(id).value = '');
+  ['f-mes','f-statusctr','f-status','f-pop','f-plano','f-bairro'].forEach(id => document.getElementById(id).value = '');
   applyFilters();
 }
 
@@ -953,7 +983,7 @@ function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key;
 
 function renderTable() {
   const search = document.getElementById('search-input').value.toLowerCase();
-  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn',sn:'_sn'};
+  const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',statusContrato:'Status do Contrato',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn',sn:'_sn'};
   let rows = getAdvFilteredRows([...filteredData]);
   if (search) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(search));
   rows.sort((a,b)=>{
@@ -979,6 +1009,7 @@ function renderTable() {
     <td>${r['Região/Bairro']||r['Regiao/Bairro']||'—'}</td>
     <td>${r['Plano Contratado']||'—'}</td>
     <td>${r['Valor mensal num']||r['Valor Mensal (R$)']||'—'}</td>
+    <td>${statusContratoBadge(r['Status do Contrato'])}</td>
     <td>${statusBadge(r['Status do Pagamento'])}</td>
     <td>${r['Data de Vencimento']||'—'}</td>
     <td>${r['Dias em atraso']||'0'}</td>
@@ -1014,7 +1045,7 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
   loadData(false);
   resetCountdown();
 });
-['f-mes','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
+['f-mes','f-statusctr','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { applyFilters(); syncQfBar(); });
 });
 // Inicializa Firebase e carrega CAC
