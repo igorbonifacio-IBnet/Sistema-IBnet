@@ -634,6 +634,27 @@ function normPagamento(s) {
   if (u === 'CANCELADO') return 'Cancelado';
   return t; // valor desconhecido: mantém como veio
 }
+// Plano: unifica a caixa da unidade de velocidade (700MB -> 700mb, 1000MB -> 1000mb).
+function normPlano(s) {
+  let t = (s || '').toString().trim();
+  if (!t) return '';
+  return t.replace(/(\d\s*)MB\b/gi, '$1mb').replace(/(\d\s*)GB\b/gi, '$1gb');
+}
+// Bairro: junta variações de acento/grafia mantendo a forma canônica (em CAIXA ALTA).
+const _BAIRRO_ALIAS = {
+  'CAMPOS ELISIOS':  'CAMPOS ELÍSIOS',
+  'PAPILON PARK':    'PAPILLON PARK',
+  'PAPILLON PARK':   'PAPILLON PARK',
+  'VILA DEL FIORE':  'VILA DEL FIORE',
+  'VILA DELFIORE':   'VILA DEL FIORE',
+  'VILLA DELFIORE':  'VILA DEL FIORE',
+};
+function normBairro(s) {
+  let t = (s || '').toString().trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  const key = t.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  return _BAIRRO_ALIAS[key] || t.toUpperCase();
+}
 function statusBadge(s) {
   const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
   return `<span class="badge badge-${map[s]||'pendente'}">${s||'—'}</span>`;
@@ -684,8 +705,8 @@ function vendaToRow(id, v) {
     'Nome do Cliente': v.nome || '',
     'Data da Venda': v.dataVenda || '',
     'POP': v.pop || '',
-    'Região/Bairro': v.bairro || '',
-    'Plano Contratado': v.plano || '',
+    'Região/Bairro': normBairro(v.bairro),
+    'Plano Contratado': normPlano(v.plano),
     'Valor mensal num': v.valor || '',
     'Data de Vencimento': v.vencimento || '',
     'Status do Pagamento': normPagamento(v.status),
