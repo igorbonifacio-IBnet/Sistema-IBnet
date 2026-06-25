@@ -61,19 +61,34 @@ main{padding:20px 24px;max-width:1440px;margin:0 auto}
 }
 .filter-reset:hover{border-color:var(--accent);color:var(--text)}
 
-/* KPI */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+/* divisor de seção — dá ritmo e separa zonas da página */
+.section-eyebrow{display:flex;align-items:center;gap:12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);margin:4px 2px 14px}
+.section-eyebrow::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* KPI — dois níveis: destaque + secundários */
+.kpi-hero-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.kpi-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
 .kpi-card{
-  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-  padding:18px 16px;position:relative;overflow:hidden;
-  transition:transform .2s,border-color .2s,box-shadow .2s;
-  box-shadow:0 1px 3px rgba(0,0,0,.2)
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:18px;display:flex;flex-direction:column;gap:12px;
+  transition:transform .18s,border-color .18s,box-shadow .18s
 }
-.kpi-card:hover{transform:translateY(-3px);border-color:var(--kpi-color,var(--accent));box-shadow:0 8px 24px rgba(0,0,0,.3)}
-.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
-.kpi-icon{font-size:22px;margin-bottom:10px;display:block}
-.kpi-value{font-size:26px;font-weight:700;color:var(--kpi-color,var(--text));line-height:1;margin-bottom:6px;letter-spacing:-.5px}
-.kpi-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
+.kpi-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--kpi-color,var(--accent)) 45%,var(--border));box-shadow:0 10px 26px rgba(0,0,0,.28)}
+.kpi-head{display:flex;align-items:center;gap:9px}
+.kpi-icon{
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;border-radius:10px;font-size:17px;
+  background:color-mix(in srgb,var(--kpi-color,var(--accent)) 16%,transparent)
+}
+.kpi-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;line-height:1.2}
+.kpi-value{font-size:30px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-.6px}
+/* nível secundário — mais compacto */
+.kpi-mini-grid .kpi-card{padding:14px;gap:9px}
+.kpi-mini-grid .kpi-icon{width:28px;height:28px;font-size:14px;border-radius:9px}
+.kpi-mini-grid .kpi-value{font-size:21px}
+.kpi-mini-grid .kpi-label{font-size:10px;letter-spacing:.4px}
+@media(max-width:900px){.kpi-hero-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.kpi-hero-grid{grid-template-columns:1fr}}
 
 /* CHARTS */
 .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
@@ -327,23 +342,29 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
     <button class="filter-reset" onclick="resetFilters()">✕ Limpar</button>
   </div>
 
-  <!-- KPIs -->
-  <div class="kpi-grid">
-    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-icon">👥</div><div class="kpi-value" id="k-total">—</div><div class="kpi-label">Total Clientes</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">💰</div><div class="kpi-value" id="k-mrr">—</div><div class="kpi-label">MRR Total</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--accent2)"><div class="kpi-icon">🎯</div><div class="kpi-value" id="k-ticket">—</div><div class="kpi-label">Ticket Médio</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">✅</div><div class="kpi-value" id="k-pagos">—</div><div class="kpi-label">Pagos</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-icon">⏳</div><div class="kpi-value" id="k-pendentes">—</div><div class="kpi-label">Pendentes</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">⚠️</div><div class="kpi-value" id="k-atraso">—</div><div class="kpi-label">Em Atraso</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">📊</div><div class="kpi-value" id="k-taxa-pag">—</div><div class="kpi-label">Taxa Pagamento</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">📉</div><div class="kpi-value" id="k-inadimp">—</div><div class="kpi-label">Inadimplência</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--orange)"><div class="kpi-icon">🔄</div><div class="kpi-value" id="k-churn">—</div><div class="kpi-label">Taxa Churn</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-icon">💵</div><div class="kpi-value" id="k-rec-real">—</div><div class="kpi-label">Receita Realizada</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-icon">🚨</div><div class="kpi-value" id="k-rec-risco">—</div><div class="kpi-label">Receita em Risco</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--gray)"><div class="kpi-icon">❌</div><div class="kpi-value" id="k-cancelados">—</div><div class="kpi-label">Cancelados</div></div>
+  <!-- KPIs em destaque -->
+  <div class="section-eyebrow">Indicadores</div>
+  <div class="kpi-hero-grid">
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-head"><span class="kpi-icon">👥</span><span class="kpi-label">Total Clientes</span></div><div class="kpi-value" id="k-total">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-head"><span class="kpi-icon">💰</span><span class="kpi-label">MRR Total</span></div><div class="kpi-value" id="k-mrr">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--accent2)"><div class="kpi-head"><span class="kpi-icon">🎯</span><span class="kpi-label">Ticket Médio</span></div><div class="kpi-value" id="k-ticket">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-head"><span class="kpi-icon">💵</span><span class="kpi-label">Receita Realizada</span></div><div class="kpi-value" id="k-rec-real">—</div></div>
+  </div>
+
+  <!-- KPIs secundários -->
+  <div class="kpi-mini-grid">
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-head"><span class="kpi-icon">✅</span><span class="kpi-label">Pagos</span></div><div class="kpi-value" id="k-pagos">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-head"><span class="kpi-icon">⏳</span><span class="kpi-label">Pendentes</span></div><div class="kpi-value" id="k-pendentes">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-head"><span class="kpi-icon">⚠️</span><span class="kpi-label">Em Atraso</span></div><div class="kpi-value" id="k-atraso">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--gray)"><div class="kpi-head"><span class="kpi-icon">❌</span><span class="kpi-label">Cancelados</span></div><div class="kpi-value" id="k-cancelados">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-head"><span class="kpi-icon">📊</span><span class="kpi-label">Taxa Pagamento</span></div><div class="kpi-value" id="k-taxa-pag">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-head"><span class="kpi-icon">📉</span><span class="kpi-label">Inadimplência</span></div><div class="kpi-value" id="k-inadimp">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--orange)"><div class="kpi-head"><span class="kpi-icon">🔄</span><span class="kpi-label">Taxa Churn</span></div><div class="kpi-value" id="k-churn">—</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-head"><span class="kpi-icon">🚨</span><span class="kpi-label">Receita em Risco</span></div><div class="kpi-value" id="k-rec-risco">—</div></div>
   </div>
 
   <!-- Charts -->
+  <div class="section-eyebrow">Análises</div>
   <div class="charts-grid">
     <div class="chart-card"><h3>📡 Vendas por POP</h3><canvas id="chart-pop"></canvas></div>
     <div class="chart-card chart-card-status">
