@@ -621,6 +621,19 @@ function fmtBRL(n) { return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDi
 function pct(n) { return (n * 100).toFixed(1) + '%'; }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
+// Normaliza o status de pagamento p/ uma forma única (resolve PAGO/Pago,
+// PENDENTE/PENDENTES/Pendente, CANCELADO/Cancelado etc. vindos da planilha).
+function normPagamento(s) {
+  const t = (s || '').toString().trim();
+  if (!t) return '';
+  const u = t.toUpperCase();
+  if (u === 'PAGO') return 'Pago';
+  if (u === 'PENDENTE' || u === 'PENDENTES') return 'Pendente';
+  if (u === 'EM ATRASO' || u === 'ATRASO' || u === 'ATRASADO' || u === 'EM ATRASADO') return 'Em atraso';
+  if (u === 'ISENTO') return 'Isento';
+  if (u === 'CANCELADO') return 'Cancelado';
+  return t; // valor desconhecido: mantém como veio
+}
 function statusBadge(s) {
   const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
   return `<span class="badge badge-${map[s]||'pendente'}">${s||'—'}</span>`;
@@ -675,7 +688,7 @@ function vendaToRow(id, v) {
     'Plano Contratado': v.plano || '',
     'Valor mensal num': v.valor || '',
     'Data de Vencimento': v.vencimento || '',
-    'Status do Pagamento': v.status || '',
+    'Status do Pagamento': normPagamento(v.status),
     'Status do Contrato': v.statusContrato || '',
     'Nº Contrato': v.contrato || '',
     'Forma de Pagamento': v.formaPgto || '',
