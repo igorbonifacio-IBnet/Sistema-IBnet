@@ -707,7 +707,8 @@ async function processarFotos(ativId) {
 }
 
 // ── LEITURA DE S/N POR IA (Claude Vision) ────────────────────────────────
-const ANTHROPIC_KEY = ['sk-ant-api03-gSY4IEGHEkV_Zfa72oy6QNgTu6bBvDB','hstyuBfdoraw3OPwozD1bU_4t68UzBy_7ZwdVSdA','loEh1FUHLtWT0bQ-Bn1OMwAA'].join('');
+// A chamada à IA é feita pelo Apps Script (servidor), que guarda a chave com
+// segurança. O navegador apenas envia a foto e recebe o S/N — nunca vê a chave.
 
 async function processSNPhoto(input) {
   if (!input.files.length) return;
@@ -735,38 +736,20 @@ async function processSNPhoto(input) {
     const compressed  = await compressImage(file, 1400, 0.88);
     const base64Data  = compressed.split(',')[1];
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // Envia a foto ao Apps Script (servidor) — a chave da IA fica só lá.
+    // text/plain evita o preflight de CORS; a resposta é lida normalmente.
+    const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: {
-        'x-api-key':                                      ANTHROPIC_KEY,
-        'anthropic-version':                              '2023-06-01',
-        'content-type':                                   'application/json',
-        'anthropic-dangerous-client-side-request-warning': 'I acknowledge the security risk of exposing my API key in client-side code for this internal tool.',
-      },
-      body: JSON.stringify({
-        model:      'claude-haiku-4-5',
-        max_tokens: 80,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: base64Data }
-            },
-            {
-              type: 'text',
-              text: 'Esta é a etiqueta traseira de um roteador/ONT de fibra óptica. Encontre o número de série principal — normalmente indicado como "S/N", "Serial Number", "SN" ou "Serial No". Responda APENAS com o número, sem nenhum texto adicional, sem rótulos, sem espaços extras. Se não conseguir identificar claramente, responda exatamente: NAO_ENCONTRADO'
-            }
-          ]
-        }]
-      })
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'sn_ocr', image: base64Data, mediaType: 'image/jpeg' })
     });
 
-    if (!res.ok) throw new Error(`API ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const sn   = (data.content?.[0]?.text || '').trim().replace(/\s+/g,'').toUpperCase();
+    if (!data.ok) throw new Error(data.erro || 'falha na leitura');
+    const sn = (data.sn || '').trim().replace(/\s+/g,'').toUpperCase();
 
-    if (!sn || sn === 'NAO_ENCONTRADO' || sn.length < 4) {
+    if (!sn || sn.length < 4) {
       statusEl.className  = 'lote-tip warn';
       statusEl.textContent = '⚠ S/N não detectado — verifique a etiqueta e preencha manualmente';
     } else {

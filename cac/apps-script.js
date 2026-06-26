@@ -619,6 +619,13 @@ function backupSemanal() {
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
+
+    // ── Leitura de S/N por IA (imagem enviada pelo app de ativação) ──────
+    // O navegador manda a foto em base64; a chave da IA fica só aqui (servidor).
+    if (payload.action === 'sn_ocr') {
+      return _resposta(_ocrSNdeBase64(payload.image, payload.mediaType));
+    }
+
     const { cliente, pppoe, contrato, sn, tipo, data, tecnico } = payload;
 
     if (!cliente) {
@@ -724,6 +731,55 @@ function _resposta(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Lê o S/N de uma etiqueta a partir de uma imagem em base64 (vinda do navegador).
+// A chave da Anthropic NUNCA sai do servidor — fica no PropertiesService.
+function _ocrSNdeBase64(b64, mediaType) {
+  try {
+    if (!b64)            return { ok: false, erro: 'imagem não enviada' };
+    if (!ANTHROPIC_KEY)  return { ok: false, erro: 'chave de IA não configurada' };
+    const ct = (mediaType || 'image/jpeg').split(';')[0].trim();
+
+    const aiResp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', muteHttpExceptions: true,
+      headers: {
+        'x-api-key':         ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      payload: JSON.stringify({
+        model:      'claude-haiku-4-5',
+        max_tokens: 80,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: ct, data: b64 } },
+            { type: 'text',  text:
+              'Esta é a etiqueta traseira de um roteador/ONT de fibra óptica. ' +
+              'Encontre o número de série principal — indicado como "S/N", "SN", "Serial Number" ou "Serial No". ' +
+              'Responda APENAS com o número/código, sem texto adicional. ' +
+              'Se não encontrar claramente, responda: NAO_ENCONTRADO'
+            }
+          ]
+        }]
+      }),
+    });
+
+    if (aiResp.getResponseCode() !== 200) {
+      return { ok: false, erro: 'IA HTTP ' + aiResp.getResponseCode() };
+    }
+    const aiData = JSON.parse(aiResp.getContentText());
+    const sn = (aiData.content && aiData.content[0] && aiData.content[0].text || '')
+                 .trim().replace(/\s+/g, '').toUpperCase();
+
+    if (!sn || sn === 'NAO_ENCONTRADO' || sn.length < 4 || sn.length > 30) {
+      return { ok: true, sn: '' };  // requisição ok, mas etiqueta ilegível
+    }
+    return { ok: true, sn: sn };
+  } catch (err) {
+    return { ok: false, erro: err.toString() };
+  }
 }
 
 // Encontra a linha de cabeçalho (primeira linha com "Nome" ou similar)
