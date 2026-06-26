@@ -663,18 +663,35 @@ function normPlano(s) {
 }
 // Bairro: junta variações de acento/grafia mantendo a forma canônica (em CAIXA ALTA).
 const _BAIRRO_ALIAS = {
-  'CAMPOS ELISIOS':  'CAMPOS ELÍSIOS',
-  'PAPILON PARK':    'PAPILLON PARK',
-  'PAPILLON PARK':   'PAPILLON PARK',
-  'VILA DEL FIORE':  'VILA DEL FIORE',
-  'VILA DELFIORE':   'VILA DEL FIORE',
-  'VILLA DELFIORE':  'VILA DEL FIORE',
+  'CAMPOS ELISIOS':        'CAMPOS ELÍSIOS',
+  'PAPILON PARK':          'PAPILLON PARK',
+  'PAPILLON PARK':         'PAPILLON PARK',
+  'VILA DEL FIORE':        'VILA DEL FIORE',
+  'VILA DELFIORE':         'VILA DEL FIORE',
+  'VILLA DELFIORE':        'VILA DEL FIORE',
+  'JARDIM BURITI SERENO':  'BURITI SERENO',
+  'JARDIM BOA ESPERANCA':  'BOA ESPERANÇA',
+  'CIDADE VERA CRUZ':      'CIDADE VERA CRUZ 1',
+  'JARDIM DAS CASCATAS':   'JARDIM CASCATA',
+  'BANDEIRANTES':          'SETOR DOS BANDEIRANTES',
 };
 function normBairro(s) {
   let t = (s || '').toString().trim().replace(/\s+/g, ' ');
   if (!t) return '';
   const key = t.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
   return _BAIRRO_ALIAS[key] || t.toUpperCase();
+}
+// POP: junta a forma curta com a forma canônica com sufixo -GO (mantém a grafia das demais).
+const _POP_ALIAS = {
+  'IBNET':             'IBNET TELECOM-GO',
+  'IBNET TELECOM-GO':  'IBNET TELECOM-GO',
+  'OPYT':              'OPYT APARECIDA-GO',
+  'OPYT APARECIDA-GO': 'OPYT APARECIDA-GO',
+};
+function normPop(s) {
+  let t = (s || '').toString().trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  return _POP_ALIAS[t.toUpperCase()] || t;
 }
 function statusBadge(s) {
   const map = {Pago:'pago',Pendente:'pendente','Em atraso':'atraso',Isento:'isento',Cancelado:'cancelado'};
@@ -725,7 +742,7 @@ function vendaToRow(id, v) {
     'ID Venda': v.id || '',
     'Nome do Cliente': v.nome || '',
     'Data da Venda': v.dataVenda || '',
-    'POP': v.pop || '',
+    'POP': normPop(v.pop),
     'Região/Bairro': normBairro(v.bairro),
     'Plano Contratado': normPlano(v.plano),
     'Valor mensal num': v.valor || '',
