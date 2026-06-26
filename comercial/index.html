@@ -254,6 +254,7 @@ body.light .qf-btn.active[data-status="Pendente"]{background:#ca8a04}
 body.light .qf-btn.active[data-status="Em atraso"]{background:#dc2626}
 body.light .qf-btn.active[data-status="Cancelado"]{background:#64748b}
 body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
+body.light .qf-btn.active[data-status="__SEM_STATUS__"]{background:#475569}
 
 /* ── QUICK STATUS FILTERS ───────────────────────────────────────────────── */
 .qf-bar{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)}
@@ -269,6 +270,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
 .qf-btn.active[data-status="Em atraso"]{background:#ef4444}
 .qf-btn.active[data-status="Cancelado"]{background:#64748b}
 .qf-btn.active[data-status="Isento"]{background:#3b82f6}
+.qf-btn.active[data-status="__SEM_STATUS__"]{background:#475569}
 .qf-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
 
 /* ── CRUD: botões da toolbar da tabela ── */
@@ -439,6 +441,7 @@ body.light .qf-btn.active[data-status="Isento"]{background:#2563eb}
       <button class="qf-btn"        data-status="Em atraso" onclick="qfFilter('Em atraso')">⚠️ Em Atraso</button>
       <button class="qf-btn"        data-status="Cancelado" onclick="qfFilter('Cancelado')">❌ Cancelado</button>
       <button class="qf-btn"        data-status="Isento"  onclick="qfFilter('Isento')">🔵 Isento</button>
+      <button class="qf-btn"        data-status="__SEM_STATUS__" onclick="qfFilter('__SEM_STATUS__')">⬜ Sem status</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -885,7 +888,12 @@ function populateFilters() {
     if (col === 'Mes') vals.sort((a,b)=>{const ai=mesOrder.indexOf(a),bi=mesOrder.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
     else vals.sort();
     const cur = sel.value;
-    sel.innerHTML = '<option value="">Todos</option>' + vals.map(v => `<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('');
+    let html = '<option value="">Todos</option>' + vals.map(v => `<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('');
+    // opção dedicada p/ contratos sem status de pagamento (ex.: vindos do SGP)
+    if (col === 'Status do Pagamento' && allData.some(r => !(r['Status do Pagamento']||'').toString().trim())) {
+      html += `<option value="__SEM_STATUS__"${cur==='__SEM_STATUS__'?' selected':''}>⬜ Sem status</option>`;
+    }
+    sel.innerHTML = html;
   });
 }
 
@@ -901,7 +909,7 @@ function applyFilters() {
     const rPlano  = (r['Plano Contratado']||'').trim();
     const rBairro = (r['Região/Bairro']||r['Regiao/Bairro']||'').trim();
     return (!mes    || r['Mes']  === mes)   &&
-           (!status || rStatus   === status) &&
+           (!status || (status === '__SEM_STATUS__' ? rStatus === '' : rStatus === status)) &&
            (!statusCtr || rStatusCtr === statusCtr) &&
            (!pop    || rPop      === pop)    &&
            (!plano  || rPlano    === plano)  &&
@@ -914,6 +922,7 @@ function applyFilters() {
 function resetFilters() {
   ['f-mes','f-statusctr','f-status','f-pop','f-plano','f-bairro'].forEach(id => document.getElementById(id).value = '');
   applyFilters();
+  syncQfBar();
 }
 
 function count(col, val) { return filteredData.filter(r => (r[col]||'').toString().trim() === val).length; }
