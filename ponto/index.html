@@ -77,9 +77,11 @@ main{padding:22px;max-width:1180px;margin:0 auto}
 .btn-secondary:hover{border-color:var(--red);color:var(--red)}
 .punch-hint{font-size:12px;color:var(--muted);margin-top:14px;min-height:16px}
 .done-msg{font-size:15px;color:var(--green);font-weight:700;padding:14px 0}
+.folga-note{font-size:13px;color:var(--muted);background:rgba(59,130,246,.08);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px}
 
 /* linha de batidas de hoje */
 .today-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:520px;margin:0 auto 20px}
+.today-row.cols-2{grid-template-columns:repeat(2,1fr);max-width:300px}
 .tp-cell{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center}
 .tp-cell .tp-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px}
 .tp-cell .tp-time{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -173,9 +175,14 @@ body.light .filters select,body.light .filters input{background:#f8fafc}
 //  Dados: Firebase Realtime Database → ponto/batidas
 // ══════════════════════════════════════════════════════════════════════════
 
-// ── CONFIG DA JORNADA (horário fixo p/ todos) ─────────────────────────────
-// ⚠️ CONFIRMAR com o Igor os horários reais e ajustar aqui:
-const JORNADA = { entrada:'08:00', almocoIni:'12:00', almocoFim:'13:00', saida:'18:00' };
+// ── CONFIG DA JORNADA (horário fixo p/ todos — varia por dia da semana) ────
+// Seg–Sex: 08:00–12:00 · almoço · 14:00–18:00 (8h) · 4 batidas
+// Sábado:  08:00–12:00 (4h) · 2 batidas · sem almoço
+// Domingo: folga
+const JORNADA = {
+  semana: { entrada:'08:00', almocoIni:'12:00', almocoFim:'14:00', saida:'18:00' },
+  sabado: { entrada:'08:00', saida:'12:00' },
+};
 const GPS_ON  = true;   // captura de localização na batida
 
 // ── Firebase ──────────────────────────────────────────────────────────────
@@ -216,8 +223,24 @@ const DIAS=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feir
 function dataExtenso(d){ return DIAS[d.getDay()]+', '+d.getDate()+' de '+MESES[d.getMonth()]; }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// jornada esperada (minutos trabalhados/dia) = (almoçoIni−entrada) + (saída−almoçoFim)
-const ESPERADO_MIN = (parseHM(JORNADA.almocoIni)-parseHM(JORNADA.entrada)) + (parseHM(JORNADA.saida)-parseHM(JORNADA.almocoFim));
+// ── Jornada por dia da semana ──────────────────────────────────────────────
+// dow: 0=domingo, 1=segunda … 5=sexta, 6=sábado
+function dowFromData(data){ const [y,m,d]=data.split('-').map(Number); return new Date(y,m-1,d).getDay(); }
+function jornadaDoDow(dow){
+  if(dow===0){ // domingo — folga; se bater, tudo é extra
+    return { folga:true, tipos:['entrada','saida'], esperado:0, sched:null };
+  }
+  if(dow===6){ // sábado — meio período, sem almoço
+    const s=JORNADA.sabado;
+    return { folga:false, tipos:['entrada','saida'], esperado:parseHM(s.saida)-parseHM(s.entrada), sched:s };
+  }
+  const s=JORNADA.semana; // seg–sex — 4 batidas
+  return { folga:false, tipos:['entrada','saida_almoco','volta_almoco','saida'],
+           esperado:(parseHM(s.almocoIni)-parseHM(s.entrada))+(parseHM(s.saida)-parseHM(s.almocoFim)), sched:s };
+}
+function jornadaDoData(data){ return jornadaDoDow(dowFromData(data)); }
+function esperadoDoData(data){ return jornadaDoData(data).esperado; }
+function tiposDoData(data){ return jornadaDoData(data).tipos; }
 
 // ── Estado + assinatura em tempo real ──────────────────────────────────────
 let allBatidas = [];   // [{_id, func, nome, tipo, ts, data, hora, lat, lng, accuracy}]
@@ -264,7 +287,13 @@ function statusDoDia(dia){
   if(dia.entrada) return {k:'trab', label:'Trabalhando', cls:'sp-trab'};
   return {k:'fora', label:'Fora do expediente', cls:'sp-fora'};
 }
-function proximaAcao(dia){
+function proximaAcao(dia, tipos){
+  tipos = tipos || ['entrada','saida_almoco','volta_almoco','saida'];
+  if(tipos.length===2){ // sábado/domingo — entrada → saída (sem almoço)
+    if(!dia.entrada) return {primary:'entrada'};
+    if(dia.saida)    return {done:true};
+    return {primary:'saida'};
+  }
   if(!dia.entrada) return {primary:'entrada'};
   if(dia.saida)    return {done:true};
   if(!dia.saida_almoco) return {primary:'saida_almoco', secondary:'saida'};
@@ -286,12 +315,13 @@ function render(){
 function renderFuncionario(func){
   func = func || meFunc;
   const hoje = ymd(new Date());
+  const jDia = jornadaDoData(hoje);
   const dia  = baterDoDia(func, hoje);
   const st   = statusDoDia(dia);
-  const prox = proximaAcao(dia);
+  const prox = proximaAcao(dia, jDia.tipos);
   const agoraMin = parseHM(hm(new Date()));
   const trabMin  = trabalhadoMin(dia, (st.k==='trab')?agoraMin:null);
-  const saldo    = dia.saida ? (trabMin - ESPERADO_MIN) : null;
+  const saldo    = dia.saida ? (trabMin - jDia.esperado) : null;
 
   const adminSwitch = isAdmin ? `
     <div class="view-switch">
@@ -299,12 +329,13 @@ function renderFuncionario(func){
       <button class="active" onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
     </div>` : '';
 
-  let acaoHtml;
+  let acaoHtml = (jDia.folga && !dia.saida)
+    ? `<div class="folga-note">🌴 Domingo é folga. Se você trabalhar hoje, a batida conta como hora extra.</div>` : '';
   if(prox.done){
-    acaoHtml = `<div class="done-msg">✅ Jornada de hoje encerrada. Bom descanso!</div>`;
+    acaoHtml += `<div class="done-msg">✅ Jornada de hoje encerrada. Bom descanso!</div>`;
   } else {
     const p = prox.primary;
-    acaoHtml = `<button class="btn-punch bp-${p}" id="btn-primary" onclick="baterPonto('${p}')">
+    acaoHtml += `<button class="btn-punch bp-${p}" id="btn-primary" onclick="baterPonto('${p}')">
         <span class="ico">${ICO[p]}</span> Registrar ${LABEL[p]}
       </button>`;
     if(prox.secondary){
@@ -312,7 +343,7 @@ function renderFuncionario(func){
     }
   }
 
-  const cells = TIPOS.map(t=>{
+  const cells = jDia.tipos.map(t=>{
     const filled = !!dia[t];
     return `<div class="tp-cell ${filled?'filled':''}">
       <div class="tp-label">${LSHORT[t]}</div>
@@ -330,11 +361,11 @@ function renderFuncionario(func){
       <div class="punch-hint" id="punch-hint">${GPS_ON?'📍 Sua localização será registrada na batida.':''}</div>
     </div>
 
-    <div class="today-row">${cells}</div>
+    <div class="today-row ${jDia.tipos.length===2?'cols-2':''}">${cells}</div>
 
     <div class="summary-bar">
       <div class="sb-box"><div class="sbv" id="today-total">${fmtDur(trabMin)}</div><div class="sbl">Trabalhado hoje</div></div>
-      <div class="sb-box"><div class="sbv">${fmtDur(ESPERADO_MIN)}</div><div class="sbl">Jornada prevista</div></div>
+      <div class="sb-box"><div class="sbv">${jDia.folga?'Folga':fmtDur(jDia.esperado)}</div><div class="sbl">Jornada prevista</div></div>
       <div class="sb-box"><div class="sbv ${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</div><div class="sbl">Saldo do dia</div></div>
     </div>
 
@@ -352,7 +383,7 @@ function renderEspelho(func, ano, mes){
     const dia = baterDoDia(func, data);
     const trab = trabalhadoMin(dia, null);
     const completo = dia.entrada && dia.saida;
-    const saldo = completo ? (trab-ESPERADO_MIN) : null;
+    const saldo = completo ? (trab - esperadoDoData(data)) : null;
     totTrab += trab; if(saldo!=null) totSaldo += saldo;
     const [y,m,d]=data.split('-');
     const dObj=new Date(+y,+m-1,+d);
@@ -420,7 +451,7 @@ function renderAdmin(){
       <button class="active" onclick="setAdminView('relatorios')">📊 Relatórios</button>
       <button onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
     </div>
-    <div class="jornada-note">Jornada configurada: <b>${JORNADA.entrada}</b> às <b>${JORNADA.almocoIni}</b> · almoço · <b>${JORNADA.almocoFim}</b> às <b>${JORNADA.saida}</b> — previsto <b>${fmtDur(ESPERADO_MIN)}</b>/dia. Saldo positivo = hora extra; negativo = a compensar.</div>
+    <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.</div>
     <div class="filters">
       <label>Funcionário
         <select id="f-func" onchange="window._fFunc=this.value;renderAdmin()">${opts}</select>
@@ -484,7 +515,7 @@ function exportarCSV(){
   funcs.forEach(([f,n])=>{
     diasComBatida(f,ano,mes-1).forEach(data=>{
       const dia=baterDoDia(f,data); const trab=trabalhadoMin(dia,null);
-      const completo=dia.entrada&&dia.saida; const saldo=completo?(trab-ESPERADO_MIN):null;
+      const completo=dia.entrada&&dia.saida; const saldo=completo?(trab-esperadoDoData(data)):null;
       linhas.push([n, data,
         dia.entrada?dia.entrada.hora:'', dia.saida_almoco?dia.saida_almoco.hora:'',
         dia.volta_almoco?dia.volta_almoco.hora:'', dia.saida?dia.saida.hora:'',
