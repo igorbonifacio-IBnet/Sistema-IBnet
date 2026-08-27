@@ -559,6 +559,12 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       <span class="sb-lock" id="sup-lock">🔒</span>
     </button>
 
+    <button class="sb-item" data-tab="ponto" id="sb-ponto">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+      Ponto Eletrônico
+      <span class="sb-lock" id="ponto-lock">🔒</span>
+    </button>
+
     <div class="sb-section">Financeiro</div>
 
     <button class="sb-item" data-tab="cac" id="sb-cac">
@@ -689,6 +695,9 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <div class="tab-panel" id="tab-logs">
       <iframe src="logs/index.html" id="iframe-logs" title="Log de Atividades"></iframe>
     </div>
+    <div class="tab-panel" id="tab-ponto">
+      <iframe src="ponto/index.html" id="iframe-ponto" title="Ponto Eletrônico"></iframe>
+    </div>
   </div>
 </div>
 
@@ -701,8 +710,9 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 //    para Firebase Authentication (login validado no servidor) + regras de DB.
 const PWD_SALT = 'ibnet-2026::';
 const USERS = {
-  'igor':    { hash: '313c4f9d23394ef057bba476dcd21bbb55b5316fee4906fe8f42603a30ceebb5', role: 'admin',   nome: 'Igor',    email: 'igorbonifacio23@gmail.com' },
-  'rutiele': { hash: '3e4c930a5b5a3f5916f18d5f721912b6dab77238d50a487db2c840b9bb3f82ab', role: 'suporte', nome: 'Rutiele', email: '' },
+  'igor':    { hash: '313c4f9d23394ef057bba476dcd21bbb55b5316fee4906fe8f42603a30ceebb5', role: 'admin',       nome: 'Igor',          email: 'igorbonifacio23@gmail.com' },
+  'rutiele': { hash: '3e4c930a5b5a3f5916f18d5f721912b6dab77238d50a487db2c840b9bb3f82ab', role: 'suporte',     nome: 'Rutiele',       email: '' },
+  'davi':    { hash: 'a4266796f268e3f5b8506af161d83a143c4691bf90eed42189e92e5a82185c13', role: 'funcionario', nome: 'Davi Henrique', email: '' },
 };
 
 // Calcula SHA-256(salt + senha) em hex usando a Web Crypto API do navegador.
@@ -713,14 +723,15 @@ async function hashSenha(senha) {
 }
 
 const ROLE_ACCESS = {
-  admin:      ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs'],
-  financeiro: ['home', 'comercial', 'financeiro', 'cac'],
-  comercial:  ['comercial'],
-  suporte:    ['suporte'],
+  admin:       ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs', 'ponto'],
+  financeiro:  ['home', 'comercial', 'financeiro', 'cac'],
+  comercial:   ['comercial'],
+  suporte:     ['suporte', 'ponto'],
+  funcionario: ['ponto'],
 };
 
 const ROLE_LABELS = {
-  admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial', suporte: 'Suporte'
+  admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial', suporte: 'Suporte', funcionario: 'Funcionário'
 };
 
 const TAB_META = {
@@ -730,6 +741,7 @@ const TAB_META = {
   suporte:    { title: 'Painel de Suporte',         badge: 'SUPORTE' },
   cac:        { title: 'Operações',                 badge: 'OPS' },
   logs:       { title: 'Log de Atividades',         badge: 'LOG' },
+  ponto:      { title: 'Ponto Eletrônico',          badge: 'PONTO' },
 };
 
 // ── LOG ───────────────────────────────────────────────────────────────────────
@@ -797,7 +809,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs'].forEach(tab => {
+  ['home', 'comercial', 'financeiro', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab);
@@ -860,7 +872,7 @@ function applyTheme(t) {
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-financeiro','iframe-suporte','iframe-logs'].forEach(id => {
+  ['iframe-comercial','iframe-financeiro','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -871,6 +883,7 @@ document.getElementById('iframe-comercial').addEventListener('load', () => apply
 document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-suporte').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-logs').addEventListener('load', () => applyTheme(currentTheme));
+document.getElementById('iframe-ponto').addEventListener('load', () => applyTheme(currentTheme));
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';

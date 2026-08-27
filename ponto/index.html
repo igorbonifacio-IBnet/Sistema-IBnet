@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ponto Eletrônico — IBnet</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#3b82f6;--accent2:#6366f1;--brand:#E8390E;
+  --green:#22c55e;--red:#ef4444;--orange:#f97316;--yellow:#eab308;--blue:#3b82f6;--gray:#64748b;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:14px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh}
+
+/* mini header */
+.mini-header{
+  background:#0d1018;border-bottom:1px solid var(--border);
+  padding:10px 22px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px
+}
+.mini-header .mh-left{display:flex;align-items:center;gap:12px}
+.mini-header h1{font-size:15px;font-weight:700;letter-spacing:.3px}
+.mini-header .mh-sub{font-size:12px;color:var(--muted)}
+.mh-clock{font-size:22px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.mh-date{font-size:11px;color:var(--muted);text-transform:capitalize}
+
+main{padding:22px;max-width:1180px;margin:0 auto}
+
+/* view switch (admin) */
+.view-switch{display:flex;gap:8px;margin-bottom:20px}
+.view-switch button{
+  background:var(--card);border:1px solid var(--border);color:var(--muted);
+  padding:9px 18px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s
+}
+.view-switch button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.view-switch button:hover:not(.active){border-color:var(--accent);color:var(--text)}
+
+/* ── FUNCIONÁRIO: cartão de ponto ─────────────────────────────────────── */
+.clock-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:26px;max-width:520px;margin:0 auto 20px;text-align:center;
+  box-shadow:0 4px 20px rgba(0,0,0,.25)
+}
+.clock-big{font-size:54px;font-weight:800;letter-spacing:1px;line-height:1;font-variant-numeric:tabular-nums;margin-bottom:6px}
+.clock-date{font-size:14px;color:var(--muted);text-transform:capitalize;margin-bottom:18px}
+.status-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:700;margin-bottom:22px}
+.status-pill .dot{width:9px;height:9px;border-radius:50%}
+.sp-fora{background:rgba(100,116,139,.16);color:#94a3b8}
+.sp-fora .dot{background:#94a3b8}
+.sp-trab{background:rgba(34,197,94,.15);color:#22c55e}
+.sp-trab .dot{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+.sp-almoco{background:rgba(249,115,22,.15);color:#f97316}
+.sp-almoco .dot{background:#f97316}
+.sp-fim{background:rgba(59,130,246,.15);color:#3b82f6}
+.sp-fim .dot{background:#3b82f6}
+
+.btn-punch{
+  width:100%;border:none;border-radius:14px;padding:20px;font-size:19px;font-weight:800;
+  cursor:pointer;font-family:inherit;color:#fff;letter-spacing:.4px;transition:transform .1s,filter .15s;
+  display:flex;align-items:center;justify-content:center;gap:10px
+}
+.btn-punch:active{transform:scale(.98)}
+.btn-punch:disabled{opacity:.55;cursor:not-allowed}
+.bp-entrada{background:linear-gradient(135deg,#16a34a,#22c55e)}
+.bp-saida_almoco{background:linear-gradient(135deg,#ea580c,#f97316)}
+.bp-volta_almoco{background:linear-gradient(135deg,#2563eb,#3b82f6)}
+.bp-saida{background:linear-gradient(135deg,#b91c1c,#ef4444)}
+.btn-punch .ico{font-size:24px}
+.btn-secondary{
+  width:100%;margin-top:10px;background:transparent;border:1px solid var(--border);
+  color:var(--muted);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit
+}
+.btn-secondary:hover{border-color:var(--red);color:var(--red)}
+.punch-hint{font-size:12px;color:var(--muted);margin-top:14px;min-height:16px}
+.done-msg{font-size:15px;color:var(--green);font-weight:700;padding:14px 0}
+
+/* linha de batidas de hoje */
+.today-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:520px;margin:0 auto 20px}
+.tp-cell{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center}
+.tp-cell .tp-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px}
+.tp-cell .tp-time{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+.tp-cell.filled{border-color:var(--accent)}
+.tp-cell .tp-time.empty{color:var(--border)}
+
+.summary-bar{
+  display:flex;gap:12px;max-width:520px;margin:0 auto 24px;flex-wrap:wrap
+}
+.summary-bar .sb-box{flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center}
+.sb-box .sbv{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb-box .sbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-top:3px}
+.saldo-pos{color:var(--green)} .saldo-neg{color:var(--red)}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+  background:#1e2230;border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:12px;
+  font-size:14px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:all .25s;z-index:999;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── seções / tabelas ─────────────────────────────────────────────────── */
+.section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin:26px 0 12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+.filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:flex;flex-direction:column;gap:5px}
+.filters select,.filters input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:9px;font-size:13px;font-family:inherit;cursor:pointer}
+.filters select:focus,.filters input:focus{outline:none;border-color:var(--accent)}
+.btn-export{background:var(--accent);border:none;color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.btn-export:hover{opacity:.88}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+th{padding:11px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);border-bottom:1px solid var(--border);background:rgba(0,0,0,.15)}
+td{padding:10px 14px;border-bottom:1px solid rgba(42,45,62,.4);vertical-align:middle;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(59,130,246,.05)}
+.day-sep td{background:rgba(255,255,255,.02);font-weight:700;color:var(--text);font-size:12px;text-transform:none;letter-spacing:0}
+.badge{padding:3px 9px;border-radius:7px;font-size:11px;font-weight:700}
+.b-ok{background:rgba(34,197,94,.15);color:#22c55e}
+.b-falta{background:rgba(239,68,68,.15);color:#ef4444}
+.b-parcial{background:rgba(234,179,8,.15);color:#eab308}
+.gps-link{color:var(--accent);text-decoration:none;font-size:12px}
+.gps-link:hover{text-decoration:underline}
+.gps-none{color:var(--muted);font-size:12px}
+.tot-row td{background:rgba(59,130,246,.07);font-weight:800;border-top:2px solid var(--border)}
+.empty-state{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+.jornada-note{font-size:12px;color:var(--muted);margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px}
+
+/* ── LIGHT THEME ───────────────────────────────────────────────────────── */
+body.light{
+  --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
+  --accent:#2563eb;--text:#1e293b;--muted:#64748b;
+}
+body.light .mini-header{background:#ffffff;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+body.light .clock-card{box-shadow:0 4px 20px rgba(0,0,0,.08)}
+body.light th{background:#f8fafc}
+body.light .filters select,body.light .filters input{background:#f8fafc}
+
+@media(max-width:560px){
+  main{padding:16px 14px}
+  .clock-big{font-size:44px}
+  .today-row{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="mini-header">
+  <div class="mh-left">
+    <div>
+      <h1>⏱️ Ponto Eletrônico</h1>
+      <div class="mh-sub" id="mh-user">—</div>
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div class="mh-clock" id="mh-clock">--:--</div>
+    <div class="mh-date" id="mh-date">—</div>
+  </div>
+</div>
+
+<main id="app">
+  <div class="empty-state">Carregando…</div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+//  PONTO ELETRÔNICO — IBnet
+//  4 batidas (CLT): Entrada · Saída p/ almoço · Volta do almoço · Saída
+//  Dados: Firebase Realtime Database → ponto/batidas
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── CONFIG DA JORNADA (horário fixo p/ todos) ─────────────────────────────
+// ⚠️ CONFIRMAR com o Igor os horários reais e ajustar aqui:
+const JORNADA = { entrada:'08:00', almocoIni:'12:00', almocoFim:'13:00', saida:'18:00' };
+const GPS_ON  = true;   // captura de localização na batida
+
+// ── Firebase ──────────────────────────────────────────────────────────────
+const fbCfg = {
+  apiKey:            "AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:        "ibnet-platform.firebaseapp.com",
+  databaseURL:       "https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:         "ibnet-platform",
+  storageBucket:     "ibnet-platform.firebasestorage.app",
+  messagingSenderId: "468380845527",
+  appId:             "1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+let _app;
+try { _app = firebase.app('ponto'); } catch(e){ _app = firebase.initializeApp(fbCfg,'ponto'); }
+const db   = firebase.database(_app);
+const bref = db.ref('ponto/batidas');
+
+// ── Sessão (sessionStorage compartilhado com o portal, mesma origem) ───────
+function getSession(){ try { return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); } catch(e){ return null; } }
+const session = getSession();
+const isAdmin = session && session.role === 'admin';
+const meFunc  = session ? session.username : '';
+const meNome  = session ? (session.nome || session.username) : '';
+
+// ── Constantes de batidas ──────────────────────────────────────────────────
+const TIPOS  = ['entrada','saida_almoco','volta_almoco','saida'];
+const LABEL  = { entrada:'Entrada', saida_almoco:'Saída p/ almoço', volta_almoco:'Volta do almoço', saida:'Saída' };
+const LSHORT = { entrada:'Entrada', saida_almoco:'S. Almoço', volta_almoco:'V. Almoço', saida:'Saída' };
+const ICO    = { entrada:'▶️', saida_almoco:'🍽️', volta_almoco:'↩️', saida:'⏹️' };
+
+// ── Utils de data/hora (horário local — equipe no Brasil) ──────────────────
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function hm(d){ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function parseHM(s){ if(!s) return null; const [h,m]=s.split(':').map(Number); return h*60+m; }
+function fmtDur(min){ if(min==null||isNaN(min)) return '—'; const s=min<0?'-':''; min=Math.abs(Math.round(min)); return s+Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'); }
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const DIAS=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+function dataExtenso(d){ return DIAS[d.getDay()]+', '+d.getDate()+' de '+MESES[d.getMonth()]; }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// jornada esperada (minutos trabalhados/dia) = (almoçoIni−entrada) + (saída−almoçoFim)
+const ESPERADO_MIN = (parseHM(JORNADA.almocoIni)-parseHM(JORNADA.entrada)) + (parseHM(JORNADA.saida)-parseHM(JORNADA.almocoFim));
+
+// ── Estado + assinatura em tempo real ──────────────────────────────────────
+let allBatidas = [];   // [{_id, func, nome, tipo, ts, data, hora, lat, lng, accuracy}]
+let adminView  = 'relatorios';  // 'relatorios' | 'registrar'  (só admin)
+
+bref.on('value', snap => {
+  const v = snap.val() || {};
+  allBatidas = Object.entries(v).map(([id,r]) => ({ _id:id, ...r }));
+  render();
+});
+
+// Agrupa batidas de um funcionário num dia → objeto com horários por tipo
+function baterDoDia(func, data){
+  const out = {};
+  allBatidas
+    .filter(b => b.func===func && b.data===data)
+    .forEach(b => { // se houver duplicata, mantém a primeira do tipo
+      if(!out[b.tipo]) out[b.tipo] = b;
+    });
+  return out;
+}
+// Minutos trabalhados a partir dos horários do dia (usa 'agora' p/ segmentos abertos)
+function trabalhadoMin(dia, agoraMin){
+  const t = k => dia[k] ? parseHM(dia[k].hora) : null;
+  const ent=t('entrada'), sa=t('saida_almoco'), va=t('volta_almoco'), sd=t('saida');
+  if(ent==null) return 0;
+  let total=0;
+  // 1º período: entrada → (saída almoço | saída | agora)
+  const fim1 = sa!=null ? sa : (va==null && sd!=null ? sd : (sa==null && va==null && sd==null ? agoraMin : sa));
+  if(sa!=null){ total += sa-ent; }
+  else if(sd!=null && va==null){ total += sd-ent; return Math.max(0,total); } // saiu sem almoço
+  else if(agoraMin!=null){ total += Math.max(0,agoraMin-ent); return total; } // ainda no 1º período
+  // 2º período: volta → (saída | agora)
+  if(va!=null){
+    const fim2 = sd!=null ? sd : (agoraMin!=null ? agoraMin : va);
+    total += Math.max(0, fim2-va);
+  }
+  return Math.max(0,total);
+}
+function statusDoDia(dia){
+  if(dia.saida) return {k:'fim',  label:'Jornada encerrada', cls:'sp-fim'};
+  if(dia.volta_almoco) return {k:'trab', label:'Trabalhando', cls:'sp-trab'};
+  if(dia.saida_almoco) return {k:'almoco', label:'Em almoço', cls:'sp-almoco'};
+  if(dia.entrada) return {k:'trab', label:'Trabalhando', cls:'sp-trab'};
+  return {k:'fora', label:'Fora do expediente', cls:'sp-fora'};
+}
+function proximaAcao(dia){
+  if(!dia.entrada) return {primary:'entrada'};
+  if(dia.saida)    return {done:true};
+  if(!dia.saida_almoco) return {primary:'saida_almoco', secondary:'saida'};
+  if(!dia.volta_almoco) return {primary:'volta_almoco'};
+  return {primary:'saida'};
+}
+
+// ══════════════ RENDER (roteia por papel) ══════════════
+function render(){
+  document.getElementById('mh-user').textContent =
+    (isAdmin ? 'Administrador · ' : 'Funcionário · ') + (meNome||'—');
+  if(!session){ document.getElementById('app').innerHTML =
+    '<div class="empty-state">Sessão não encontrada. Acesse pelo portal do sistema.</div>'; return; }
+  if(isAdmin && adminView==='relatorios') return renderAdmin();
+  return renderFuncionario(isAdmin ? null : meFunc);
+}
+
+// ── VISÃO FUNCIONÁRIO (bater ponto) ─────────────────────────────────────────
+function renderFuncionario(func){
+  func = func || meFunc;
+  const hoje = ymd(new Date());
+  const dia  = baterDoDia(func, hoje);
+  const st   = statusDoDia(dia);
+  const prox = proximaAcao(dia);
+  const agoraMin = parseHM(hm(new Date()));
+  const trabMin  = trabalhadoMin(dia, (st.k==='trab')?agoraMin:null);
+  const saldo    = dia.saida ? (trabMin - ESPERADO_MIN) : null;
+
+  const adminSwitch = isAdmin ? `
+    <div class="view-switch">
+      <button onclick="setAdminView('relatorios')">📊 Relatórios</button>
+      <button class="active" onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
+    </div>` : '';
+
+  let acaoHtml;
+  if(prox.done){
+    acaoHtml = `<div class="done-msg">✅ Jornada de hoje encerrada. Bom descanso!</div>`;
+  } else {
+    const p = prox.primary;
+    acaoHtml = `<button class="btn-punch bp-${p}" id="btn-primary" onclick="baterPonto('${p}')">
+        <span class="ico">${ICO[p]}</span> Registrar ${LABEL[p]}
+      </button>`;
+    if(prox.secondary){
+      acaoHtml += `<button class="btn-secondary" onclick="baterPonto('${prox.secondary}')">Encerrar dia sem almoço (${LABEL[prox.secondary]})</button>`;
+    }
+  }
+
+  const cells = TIPOS.map(t=>{
+    const filled = !!dia[t];
+    return `<div class="tp-cell ${filled?'filled':''}">
+      <div class="tp-label">${LSHORT[t]}</div>
+      <div class="tp-time ${filled?'':'empty'}">${filled?dia[t].hora:'--:--'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `
+    ${adminSwitch}
+    <div class="clock-card">
+      <div class="clock-big" id="live-clock">${hm(new Date())}</div>
+      <div class="clock-date">${dataExtenso(new Date())}</div>
+      <div><span class="status-pill ${st.cls}"><span class="dot"></span>${st.label}</span></div>
+      ${acaoHtml}
+      <div class="punch-hint" id="punch-hint">${GPS_ON?'📍 Sua localização será registrada na batida.':''}</div>
+    </div>
+
+    <div class="today-row">${cells}</div>
+
+    <div class="summary-bar">
+      <div class="sb-box"><div class="sbv" id="today-total">${fmtDur(trabMin)}</div><div class="sbl">Trabalhado hoje</div></div>
+      <div class="sb-box"><div class="sbv">${fmtDur(ESPERADO_MIN)}</div><div class="sbl">Jornada prevista</div></div>
+      <div class="sb-box"><div class="sbv ${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</div><div class="sbl">Saldo do dia</div></div>
+    </div>
+
+    <div class="section-title">Meu espelho — ${MESES[new Date().getMonth()]}</div>
+    ${renderEspelho(func, new Date().getFullYear(), new Date().getMonth())}
+  `;
+}
+
+// Espelho mensal de UM funcionário (usado pelo próprio e como sub-tabela)
+function renderEspelho(func, ano, mes){
+  const dias = diasComBatida(func, ano, mes);
+  if(!dias.length) return `<div class="card"><div class="empty-state">Nenhuma batida neste mês.</div></div>`;
+  let totTrab=0, totSaldo=0, rows='';
+  dias.forEach(data=>{
+    const dia = baterDoDia(func, data);
+    const trab = trabalhadoMin(dia, null);
+    const completo = dia.entrada && dia.saida;
+    const saldo = completo ? (trab-ESPERADO_MIN) : null;
+    totTrab += trab; if(saldo!=null) totSaldo += saldo;
+    const [y,m,d]=data.split('-');
+    const dObj=new Date(+y,+m-1,+d);
+    const st = completo ? '<span class="badge b-ok">completo</span>'
+                        : (dia.entrada ? '<span class="badge b-parcial">parcial</span>' : '<span class="badge b-falta">—</span>');
+    rows += `<tr>
+      <td>${d}/${m} <span style="color:var(--muted)">${DIAS[dObj.getDay()].slice(0,3)}</span></td>
+      <td>${dia.entrada?dia.entrada.hora:'—'}</td>
+      <td>${dia.saida_almoco?dia.saida_almoco.hora:'—'}</td>
+      <td>${dia.volta_almoco?dia.volta_almoco.hora:'—'}</td>
+      <td>${dia.saida?dia.saida.hora:'—'}</td>
+      <td>${fmtDur(trab)}</td>
+      <td class="${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</td>
+      <td>${st}</td>
+    </tr>`;
+  });
+  return `<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Dia</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Saldo</th><th>Situação</th></tr></thead>
+    <tbody>${rows}
+      <tr class="tot-row"><td colspan="5">TOTAL (${dias.length} dias)</td><td>${fmtDur(totTrab)}</td><td class="${totSaldo>=0?'saldo-pos':'saldo-neg'}">${(totSaldo>=0?'+':'')+fmtDur(totSaldo)}</td><td></td></tr>
+    </tbody></table></div></div>`;
+}
+
+function diasComBatida(func, ano, mes){
+  const set = new Set();
+  allBatidas.forEach(b=>{
+    if(b.func!==func || !b.data) return;
+    const [y,m]=b.data.split('-').map(Number);
+    if(y===ano && m===mes+1) set.add(b.data);
+  });
+  return [...set].sort();
+}
+
+// ── VISÃO ADMIN (relatórios de todos) ───────────────────────────────────────
+function funcionariosConhecidos(){
+  const map = new Map();
+  allBatidas.forEach(b=>{ if(b.func && !map.has(b.func)) map.set(b.func, b.nome||b.func); });
+  return [...map.entries()]; // [[func,nome],...]
+}
+
+function renderAdmin(){
+  const funcs = funcionariosConhecidos();
+  const now = new Date();
+  const curMonth = ymd(now).slice(0,7);
+  const selFunc  = window._fFunc || '';
+  const selMonth = window._fMonth || curMonth;
+
+  const opts = ['<option value="">Todos os funcionários</option>']
+    .concat(funcs.map(([f,n])=>`<option value="${escapeHtml(f)}" ${f===selFunc?'selected':''}>${escapeHtml(n)}</option>`)).join('');
+
+  const alvo = selFunc ? funcs.filter(([f])=>f===selFunc) : funcs;
+  const [ano,mes] = selMonth.split('-').map(Number);
+
+  let bodyHtml='';
+  if(!funcs.length){
+    bodyHtml = `<div class="card"><div class="empty-state">Ainda não há batidas registradas.</div></div>`;
+  } else {
+    alvo.forEach(([f,n])=>{
+      bodyHtml += `<div class="section-title">${escapeHtml(n)}</div>` + renderEspelho(f, ano, mes-1);
+    });
+  }
+
+  document.getElementById('app').innerHTML = `
+    <div class="view-switch">
+      <button class="active" onclick="setAdminView('relatorios')">📊 Relatórios</button>
+      <button onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
+    </div>
+    <div class="jornada-note">Jornada configurada: <b>${JORNADA.entrada}</b> às <b>${JORNADA.almocoIni}</b> · almoço · <b>${JORNADA.almocoFim}</b> às <b>${JORNADA.saida}</b> — previsto <b>${fmtDur(ESPERADO_MIN)}</b>/dia. Saldo positivo = hora extra; negativo = a compensar.</div>
+    <div class="filters">
+      <label>Funcionário
+        <select id="f-func" onchange="window._fFunc=this.value;renderAdmin()">${opts}</select>
+      </label>
+      <label>Mês
+        <input type="month" id="f-month" value="${selMonth}" onchange="window._fMonth=this.value;renderAdmin()"/>
+      </label>
+      <button class="btn-export" onclick="exportarCSV()">⬇️ Exportar CSV</button>
+    </div>
+    ${bodyHtml}
+  `;
+}
+
+function setAdminView(v){ adminView = v; render(); }
+
+// ── Bater ponto (grava no Firebase, com GPS best-effort) ───────────────────
+let saving=false;
+function getGPS(){
+  return new Promise(res=>{
+    if(!GPS_ON || !navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), accuracy:Math.round(p.coords.accuracy)}),
+      _=>res(null),
+      {enableHighAccuracy:true, timeout:8000, maximumAge:60000}
+    );
+  });
+}
+async function baterPonto(tipo){
+  if(saving) return;
+  const func = meFunc, nome = meNome;
+  const hoje = ymd(new Date());
+  const dia  = baterDoDia(func, hoje);
+  if(dia[tipo]){ toast('Essa batida já foi registrada hoje.'); return; }
+
+  saving=true;
+  const btn=document.getElementById('btn-primary'); if(btn){btn.disabled=true;}
+  const hint=document.getElementById('punch-hint'); if(hint && GPS_ON){hint.textContent='📍 Obtendo localização…';}
+
+  const pos = await getGPS();
+  const now = new Date();
+  const rec = { func, nome, tipo, ts:now.getTime(), data:ymd(now), hora:hm(now) };
+  if(pos){ rec.lat=pos.lat; rec.lng=pos.lng; rec.accuracy=pos.accuracy; }
+
+  try{
+    await bref.push(rec);
+    toast(`✅ ${LABEL[tipo]} registrada às ${rec.hora}${pos?'':' (sem GPS)'}`);
+    // re-render acontece pelo listener .on('value')
+  }catch(e){
+    console.error(e); toast('❌ Falha ao registrar: '+e.message);
+  }finally{
+    saving=false;
+  }
+}
+
+// ── Exportar CSV (espelho do mês filtrado) ──────────────────────────────────
+function exportarCSV(){
+  const selFunc = window._fFunc||''; const selMonth = window._fMonth||ymd(new Date()).slice(0,7);
+  const [ano,mes]=selMonth.split('-').map(Number);
+  const funcs = funcionariosConhecidos().filter(([f])=> !selFunc || f===selFunc);
+  const linhas = [['Funcionário','Data','Entrada','Saída Almoço','Volta Almoço','Saída','Trabalhado','Saldo','Situação']];
+  funcs.forEach(([f,n])=>{
+    diasComBatida(f,ano,mes-1).forEach(data=>{
+      const dia=baterDoDia(f,data); const trab=trabalhadoMin(dia,null);
+      const completo=dia.entrada&&dia.saida; const saldo=completo?(trab-ESPERADO_MIN):null;
+      linhas.push([n, data,
+        dia.entrada?dia.entrada.hora:'', dia.saida_almoco?dia.saida_almoco.hora:'',
+        dia.volta_almoco?dia.volta_almoco.hora:'', dia.saida?dia.saida.hora:'',
+        fmtDur(trab), saldo==null?'':(saldo>=0?'+':'')+fmtDur(saldo),
+        completo?'completo':(dia.entrada?'parcial':'—')]);
+    });
+  });
+  const csv = linhas.map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`espelho-ponto-${selMonth}${selFunc?'-'+selFunc:''}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg){
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+// ── Relógio ao vivo (header + cartão) ───────────────────────────────────────
+function tick(){
+  const now=new Date();
+  document.getElementById('mh-clock').textContent = hm(now);
+  document.getElementById('mh-date').textContent  = dataExtenso(now);
+  const lc=document.getElementById('live-clock'); if(lc) lc.textContent=hm(now);
+  // atualiza total trabalhado se estiver em jornada aberta
+  const tt=document.getElementById('today-total');
+  if(tt && !isAdmin){
+    const dia=baterDoDia(meFunc, ymd(now)); const st=statusDoDia(dia);
+    if(st.k==='trab') tt.textContent=fmtDur(trabalhadoMin(dia, parseHM(hm(now))));
+  }
+}
+setInterval(tick,1000); tick();
+
+// ── Tema (recebe do portal via postMessage) ────────────────────────────────
+window.addEventListener('message', e=>{
+  if(e.data && e.data.type==='theme'){
+    document.body.classList.toggle('light', e.data.value==='light');
+  }
+});
+
+// primeira renderização (caso o Firebase demore, mostra a UI base já)
+render();
+</script>
+</body>
+</html>
