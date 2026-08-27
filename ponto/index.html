@@ -111,6 +111,10 @@ main{padding:22px;max-width:1180px;margin:0 auto}
 .filters select:focus,.filters input:focus{outline:none;border-color:var(--accent)}
 .btn-export{background:var(--accent);border:none;color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
 .btn-export:hover{opacity:.88}
+.btn-add{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:9px 15px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.btn-add:hover{opacity:.8}
+.ed-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:3px 9px;border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}
+.ed-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
@@ -240,6 +244,29 @@ body.light .filters select,body.light .filters input{background:#f8fafc}
   </div>
 </div>
 
+<!-- Modal: edição administrativa de ponto (somente gestor/Igor) -->
+<div class="modal-ov" id="edit-modal">
+  <div class="modal-box">
+    <h2>🛠️ Editar ponto</h2>
+    <div class="mb-sub">Ajuste manual do gestor — vale imediatamente, sem aprovação.</div>
+    <div class="mb-field">
+      <label>Funcionário</label>
+      <select id="ed-func" onchange="onEdFuncChange()"></select>
+    </div>
+    <div class="mb-field">
+      <label>Dia</label>
+      <input type="date" id="ed-date" onchange="renderEdCampos()">
+      <div class="mb-hint" id="ed-date-label">—</div>
+    </div>
+    <div id="ed-campos"></div>
+    <div class="mb-hint">Deixe um horário em branco para <b>remover</b> aquela batida.</div>
+    <div class="mb-actions">
+      <button class="mb-cancel" onclick="fecharEdicao()">Cancelar</button>
+      <button class="mb-send" onclick="salvarEdicao()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -258,6 +285,21 @@ const JORNADA = {
   sabado: { entrada:'08:00', saida:'12:00' },
 };
 const GPS_ON  = true;   // captura de localização na batida
+
+// ── CERCA VIRTUAL (geofence) ────────────────────────────────────────────────
+// Só permite bater o ponto dentro do raio do trabalho.
+// Centro = IBnet · Av. R-009, qd 50 lt13 - St. Res. Campos Elíseos, Aparecida de Goiânia-GO.
+//   ativo:false  → desliga a checagem (aceita de qualquer lugar).
+//   raio         → metros a partir do centro (aumente se houver bloqueio indevido).
+//   tolerancia   → margem extra (m) para compensar imprecisão do GPS.
+// Se ativo:true e o aparelho não fornecer GPS, a batida é bloqueada (sem GPS não dá p/ validar).
+const GEOFENCE = {
+  ativo:      true,
+  lat:        -16.8059582,
+  lng:        -49.3157033,
+  raio:       200,
+  tolerancia: 80,
+};
 
 // ── Firebase ──────────────────────────────────────────────────────────────
 const fbCfg = {
@@ -479,12 +521,13 @@ function renderEspelho(func, ano, mes){
       <td>${fmtDur(trab)}</td>
       <td class="${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</td>
       <td>${st}</td>
+      ${isAdmin?`<td><button class="ed-btn" onclick="abrirEdicao('${func}','${data}')" title="Editar este dia">✏️</button></td>`:''}
     </tr>`;
   });
   return `<div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Dia</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Saldo</th><th>Situação</th></tr></thead>
+    <thead><tr><th>Dia</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Saldo</th><th>Situação</th>${isAdmin?'<th>Ações</th>':''}</tr></thead>
     <tbody>${rows}
-      <tr class="tot-row"><td colspan="5">TOTAL (${dias.length} dias)</td><td>${fmtDur(totTrab)}</td><td class="${totSaldo>=0?'saldo-pos':'saldo-neg'}">${(totSaldo>=0?'+':'')+fmtDur(totSaldo)}</td><td></td></tr>
+      <tr class="tot-row"><td colspan="5">TOTAL (${dias.length} dias)</td><td>${fmtDur(totTrab)}</td><td class="${totSaldo>=0?'saldo-pos':'saldo-neg'}">${(totSaldo>=0?'+':'')+fmtDur(totSaldo)}</td><td></td>${isAdmin?'<td></td>':''}</tr>
     </tbody></table></div></div>`;
 }
 
@@ -504,9 +547,17 @@ function funcionariosConhecidos(){
   allBatidas.forEach(b=>{ if(b.func && !map.has(b.func)) map.set(b.func, b.nome||b.func); });
   return [...map.entries()]; // [[func,nome],...]
 }
+// Roster fixo (espelha o portal) — garante que todos apareçam p/ edição do gestor
+// mesmo sem batidas ainda. Ao cadastrar novo funcionário no portal, inclua aqui também.
+const ROSTER = [ ['davi','Davi Henrique'], ['rutiele','Rutiele'] ];
+function rosterMerged(){
+  const map = new Map(ROSTER);
+  funcionariosConhecidos().forEach(([f,n])=>{ if(!map.has(f)) map.set(f,n); });
+  return [...map.entries()];
+}
 
 function renderAdmin(){
-  const funcs = funcionariosConhecidos();
+  const funcs = rosterMerged();
   const now = new Date();
   const curMonth = ymd(now).slice(0,7);
   const selFunc  = window._fFunc || '';
@@ -538,6 +589,7 @@ function renderAdmin(){
         <input type="month" id="f-month" value="${selMonth}" onchange="window._fMonth=this.value;renderAdmin()"/>
       </label>
       <button class="btn-export" onclick="exportarCSV()">⬇️ Exportar CSV</button>
+      <button class="btn-add" onclick="abrirEdicaoNovo()">➕ Lançar / editar dia</button>
     </div>
     ${bodyHtml}
   `;
@@ -707,6 +759,66 @@ async function recusarSolic(id){
   }catch(e){ console.error(e); toast('❌ Falha ao recusar: '+e.message); }
 }
 
+// ── EDIÇÃO MANUAL DO GESTOR (Igor ajusta o ponto de qualquer funcionário) ───
+function abrirEdicao(func, data){
+  if(!isAdmin) return;
+  const sel = document.getElementById('ed-func');
+  sel.innerHTML = rosterMerged().map(([f,n])=>`<option value="${escapeHtml(f)}" ${f===func?'selected':''}>${escapeHtml(n)}</option>`).join('');
+  document.getElementById('ed-date').value = data || ymd(new Date());
+  renderEdCampos();
+  document.getElementById('edit-modal').classList.add('show');
+}
+function abrirEdicaoNovo(){
+  const f = window._fFunc || (rosterMerged()[0]||['davi'])[0];
+  abrirEdicao(f, ymd(new Date()));
+}
+function onEdFuncChange(){ renderEdCampos(); }
+function fecharEdicao(){ document.getElementById('edit-modal').classList.remove('show'); }
+function renderEdCampos(){
+  const func = document.getElementById('ed-func').value;
+  const data = document.getElementById('ed-date').value;
+  const box  = document.getElementById('ed-campos');
+  if(!func || !data){ box.innerHTML=''; document.getElementById('ed-date-label').textContent='—'; return; }
+  const jd  = jornadaDoData(data);
+  const dia = baterDoDia(func, data);
+  document.getElementById('ed-date-label').textContent =
+    DIAS[dowFromData(data)] + (jd.folga?' · folga' : ` · esperado ${fmtDur(jd.esperado)}`);
+  box.innerHTML = jd.tipos.map(tp=>`
+    <div class="mb-field">
+      <label>${LABEL[tp]}</label>
+      <input type="time" id="ed-t-${tp}" value="${dia[tp]?dia[tp].hora:''}">
+    </div>`).join('');
+}
+async function salvarEdicao(){
+  const func = document.getElementById('ed-func').value;
+  const data = document.getElementById('ed-date').value;
+  if(!func || !data){ toast('Selecione funcionário e dia.'); return; }
+  const nome = (rosterMerged().find(([f])=>f===func)||[func,func])[1];
+  const jd   = jornadaDoData(data);
+  const dia  = baterDoDia(func, data);
+  const [y,m,d] = data.split('-').map(Number);
+  const ops=[]; let mudou=0;
+  jd.tipos.forEach(tp=>{
+    const el = document.getElementById('ed-t-'+tp); if(!el) return;
+    const hora = el.value;                        // '' ou 'HH:MM'
+    const ex   = dia[tp];
+    if(!hora){ if(ex){ ops.push(db.ref('ponto/batidas/'+ex._id).remove()); mudou++; } return; }
+    const [hh,mm] = hora.split(':').map(Number);
+    const ts = new Date(y, m-1, d, hh, mm).getTime();
+    if(ex){
+      if(ex.hora!==hora){ ops.push(db.ref('ponto/batidas/'+ex._id).update({hora, ts, origem:'edicao_admin', editadoPor:meFunc, editadoTs:Date.now()})); mudou++; }
+    } else {
+      ops.push(bref.push({func, nome, tipo:tp, data, hora, ts, origem:'edicao_admin', editadoPor:meFunc, editadoTs:Date.now()})); mudou++;
+    }
+  });
+  if(!mudou){ toast('Nada foi alterado.'); fecharEdicao(); return; }
+  try{
+    await Promise.all(ops);
+    toast('✅ Ponto atualizado.');
+  }catch(e){ console.error(e); toast('❌ Falha ao salvar: '+e.message); }
+  fecharEdicao();
+}
+
 // ── Bater ponto (grava no Firebase, com GPS best-effort) ───────────────────
 let saving=false;
 function getGPS(){
@@ -718,6 +830,13 @@ function getGPS(){
       {enableHighAccuracy:true, timeout:8000, maximumAge:60000}
     );
   });
+}
+// Distância em metros entre dois pontos (fórmula de haversine)
+function distanciaMetros(lat1,lng1,lat2,lng2){
+  const R=6371000, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
 }
 async function baterPonto(tipo){
   if(saving) return;
@@ -731,9 +850,24 @@ async function baterPonto(tipo){
   const hint=document.getElementById('punch-hint'); if(hint && GPS_ON){hint.textContent='📍 Obtendo localização…';}
 
   const pos = await getGPS();
+
+  // ── Cerca virtual: precisa estar dentro do raio do trabalho ──
+  let distGeo = null;
+  if(GEOFENCE.ativo){
+    const liberar=()=>{ if(btn){btn.disabled=false;} if(hint){hint.textContent='';} saving=false; };
+    if(!pos){ liberar(); toast('📍 Ative a localização (GPS) do aparelho para bater o ponto.'); return; }
+    distGeo = distanciaMetros(pos.lat,pos.lng, GEOFENCE.lat,GEOFENCE.lng);
+    const margem = Math.min(pos.accuracy||0, GEOFENCE.tolerancia);
+    if(distGeo > GEOFENCE.raio + margem){
+      liberar();
+      toast(`🚫 Fora do local de trabalho (${Math.round(distGeo)} m). Aproxime-se para bater o ponto.`);
+      return;
+    }
+  }
+
   const now = new Date();
   const rec = { func, nome, tipo, ts:now.getTime(), data:ymd(now), hora:hm(now) };
-  if(pos){ rec.lat=pos.lat; rec.lng=pos.lng; rec.accuracy=pos.accuracy; }
+  if(pos){ rec.lat=pos.lat; rec.lng=pos.lng; rec.accuracy=pos.accuracy; if(distGeo!=null) rec.distancia=Math.round(distGeo); }
 
   try{
     await bref.push(rec);
