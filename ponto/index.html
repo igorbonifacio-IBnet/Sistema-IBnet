@@ -31,7 +31,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 main{padding:22px;max-width:1180px;margin:0 auto}
 
 /* view switch (admin) */
-.view-switch{display:flex;gap:8px;margin-bottom:20px}
+.view-switch{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
 .view-switch button{
   background:var(--card);border:1px solid var(--border);color:var(--muted);
   padding:9px 18px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s
@@ -130,6 +130,44 @@ tbody tr:hover td{background:rgba(59,130,246,.05)}
 .empty-state{padding:40px;text-align:center;color:var(--muted);font-size:14px}
 .jornada-note{font-size:12px;color:var(--muted);margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px}
 
+/* ── solicitações de alteração ─────────────────────────────────────────── */
+.btn-solic{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;width:100%;justify-content:center}
+.btn-solic:hover{border-color:var(--accent);color:var(--accent)}
+.solic-wrap{max-width:520px;margin:0 auto}
+.vs-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;background:var(--red);color:#fff;border-radius:9px;font-size:11px;font-weight:800;line-height:1}
+.sol-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.sol-card.pend{border-left:3px solid var(--yellow)}
+.sol-card.aprov{border-left:3px solid var(--green)}
+.sol-card.recus{border-left:3px solid var(--red)}
+.sol-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.sol-who{font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px}
+.sol-meta{font-size:12px;color:var(--muted);margin-bottom:8px}
+.sol-motivo{font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word}
+.sol-actions{display:flex;gap:8px;flex-wrap:wrap}
+.sol-btn{border:none;padding:8px 15px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.sol-aprovar{background:var(--green);color:#fff}
+.sol-recusar{background:transparent;border:1px solid var(--red);color:var(--red)}
+.b-pend{background:rgba(234,179,8,.15);color:#eab308}
+.b-aprov{background:rgba(34,197,94,.15);color:#22c55e}
+.b-recus{background:rgba(239,68,68,.15);color:#ef4444}
+/* modal */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.modal-ov.show{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-box h2{font-size:17px;margin-bottom:4px}
+.modal-box .mb-sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+.mb-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.mb-field label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.mb-field input,.mb-field select,.mb-field textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:9px;font-size:14px;font-family:inherit}
+.mb-field input:focus,.mb-field select:focus,.mb-field textarea:focus{outline:none;border-color:var(--accent)}
+.mb-field textarea{resize:vertical;min-height:70px}
+.mb-hint{font-size:12px;color:var(--muted)}
+.mb-actions{display:flex;gap:10px;margin-top:6px}
+.mb-actions button{flex:1;padding:11px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
+.mb-cancel{background:transparent;border:1px solid var(--border);color:var(--text)}
+.mb-send{background:var(--accent);color:#fff}
+body.light .modal-box .mb-field input,body.light .modal-box .mb-field select,body.light .modal-box .mb-field textarea{background:#f8fafc}
+
 /* ── LIGHT THEME ───────────────────────────────────────────────────────── */
 body.light{
   --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
@@ -166,6 +204,42 @@ body.light .filters select,body.light .filters input{background:#f8fafc}
   <div class="empty-state">Carregando…</div>
 </main>
 
+<!-- Modal: solicitar alteração de ponto -->
+<div class="modal-ov" id="solic-modal">
+  <div class="modal-box">
+    <h2>✏️ Solicitar alteração</h2>
+    <div class="mb-sub">Sua solicitação fica pendente até a aprovação do gestor.</div>
+    <div class="mb-field">
+      <label>Dia</label>
+      <input type="date" id="sol-data" onchange="onSolDataChange()">
+    </div>
+    <div class="mb-field">
+      <label>O que você precisa?</label>
+      <select id="sol-acao" onchange="onSolAcaoChange()">
+        <option value="corrigir">Corrigir / adicionar um horário</option>
+        <option value="remover">Remover uma batida errada</option>
+      </select>
+    </div>
+    <div class="mb-field">
+      <label>Batida</label>
+      <select id="sol-tipo" onchange="onSolTipoChange()"></select>
+      <div class="mb-hint" id="sol-atual">—</div>
+    </div>
+    <div class="mb-field" id="sol-hora-field">
+      <label>Horário correto</label>
+      <input type="time" id="sol-hora">
+    </div>
+    <div class="mb-field">
+      <label>Motivo (obrigatório)</label>
+      <textarea id="sol-motivo" placeholder="Ex.: Esqueci de registrar a saída, encerrei às 18:00."></textarea>
+    </div>
+    <div class="mb-actions">
+      <button class="mb-cancel" onclick="fecharSolic()">Cancelar</button>
+      <button class="mb-send" onclick="enviarSolic()">Enviar solicitação</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -199,6 +273,7 @@ let _app;
 try { _app = firebase.app('ponto'); } catch(e){ _app = firebase.initializeApp(fbCfg,'ponto'); }
 const db   = firebase.database(_app);
 const bref = db.ref('ponto/batidas');
+const sref = db.ref('ponto/solicitacoes');
 
 // ── Sessão (sessionStorage compartilhado com o portal, mesma origem) ───────
 function getSession(){ try { return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); } catch(e){ return null; } }
@@ -244,11 +319,17 @@ function tiposDoData(data){ return jornadaDoData(data).tipos; }
 
 // ── Estado + assinatura em tempo real ──────────────────────────────────────
 let allBatidas = [];   // [{_id, func, nome, tipo, ts, data, hora, lat, lng, accuracy}]
-let adminView  = 'relatorios';  // 'relatorios' | 'registrar'  (só admin)
+let allSolic   = [];   // [{_id, func, nome, data, acao, tipo, horaAtual, horaSolicitada, motivo, status, ...}]
+let adminView  = 'relatorios';  // 'relatorios' | 'solicitacoes' | 'registrar'  (só admin)
 
 bref.on('value', snap => {
   const v = snap.val() || {};
   allBatidas = Object.entries(v).map(([id,r]) => ({ _id:id, ...r }));
+  render();
+});
+sref.on('value', snap => {
+  const v = snap.val() || {};
+  allSolic = Object.entries(v).map(([id,r]) => ({ _id:id, ...r }));
   render();
 });
 
@@ -307,7 +388,8 @@ function render(){
     (isAdmin ? 'Administrador · ' : 'Funcionário · ') + (meNome||'—');
   if(!session){ document.getElementById('app').innerHTML =
     '<div class="empty-state">Sessão não encontrada. Acesse pelo portal do sistema.</div>'; return; }
-  if(isAdmin && adminView==='relatorios') return renderAdmin();
+  if(isAdmin && adminView==='relatorios')   return renderAdmin();
+  if(isAdmin && adminView==='solicitacoes') return renderSolicitacoes();
   return renderFuncionario(isAdmin ? null : meFunc);
 }
 
@@ -323,11 +405,7 @@ function renderFuncionario(func){
   const trabMin  = trabalhadoMin(dia, (st.k==='trab')?agoraMin:null);
   const saldo    = dia.saida ? (trabMin - jDia.esperado) : null;
 
-  const adminSwitch = isAdmin ? `
-    <div class="view-switch">
-      <button onclick="setAdminView('relatorios')">📊 Relatórios</button>
-      <button class="active" onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
-    </div>` : '';
+  const adminSwitch = isAdmin ? adminViewSwitch('registrar') : '';
 
   let acaoHtml = (jDia.folga && !dia.saida)
     ? `<div class="folga-note">🌴 Domingo é folga. Se você trabalhar hoje, a batida conta como hora extra.</div>` : '';
@@ -369,8 +447,11 @@ function renderFuncionario(func){
       <div class="sb-box"><div class="sbv ${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</div><div class="sbl">Saldo do dia</div></div>
     </div>
 
+    <div class="solic-wrap" style="margin-bottom:8px"><button class="btn-solic" onclick="abrirSolic()">✏️ Solicitar alteração de ponto</button></div>
+
     <div class="section-title">Meu espelho — ${MESES[new Date().getMonth()]}</div>
     ${renderEspelho(func, new Date().getFullYear(), new Date().getMonth())}
+    ${renderMinhasSolic(meFunc)}
   `;
 }
 
@@ -447,10 +528,7 @@ function renderAdmin(){
   }
 
   document.getElementById('app').innerHTML = `
-    <div class="view-switch">
-      <button class="active" onclick="setAdminView('relatorios')">📊 Relatórios</button>
-      <button onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
-    </div>
+    ${adminViewSwitch('relatorios')}
     <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.</div>
     <div class="filters">
       <label>Funcionário
@@ -466,6 +544,168 @@ function renderAdmin(){
 }
 
 function setAdminView(v){ adminView = v; render(); }
+
+// ══════════════ SOLICITAÇÕES DE ALTERAÇÃO ══════════════
+function solPendentes(){ return allSolic.filter(s=>s.status==='pendente'); }
+
+// Switch de visões do admin (Relatórios · Solicitações · Bater ponto)
+function adminViewSwitch(active){
+  const pend = solPendentes().length;
+  const badge = pend ? `<span class="vs-badge">${pend}</span>` : '';
+  return `<div class="view-switch">
+    <button class="${active==='relatorios'?'active':''}" onclick="setAdminView('relatorios')">📊 Relatórios</button>
+    <button class="${active==='solicitacoes'?'active':''}" onclick="setAdminView('solicitacoes')">📝 Solicitações${badge}</button>
+    <button class="${active==='registrar'?'active':''}" onclick="setAdminView('registrar')">⏱️ Bater ponto</button>
+  </div>`;
+}
+
+function statusBadge(s){
+  if(s==='aprovada') return '<span class="badge b-aprov">aprovada</span>';
+  if(s==='recusada') return '<span class="badge b-recus">recusada</span>';
+  return '<span class="badge b-pend">pendente</span>';
+}
+function acaoLabel(sol){
+  if(sol.acao==='remover') return `Remover a batida de <b>${LABEL[sol.tipo]||sol.tipo}</b>`;
+  const verbo = sol.horaAtual ? 'Corrigir' : 'Adicionar';
+  const de = sol.horaAtual ? ` (hoje: ${sol.horaAtual})` : '';
+  return `${verbo} <b>${LABEL[sol.tipo]||sol.tipo}</b>${de} → <b>${sol.horaSolicitada}</b>`;
+}
+function solCardHtml(sol, admin){
+  const cls = sol.status==='aprovada'?'aprov':(sol.status==='recusada'?'recus':'pend');
+  const dia = (sol.data||'').split('-').reverse().join('/');
+  const enviado = ((sol.criadoData||'').split('-').reverse().join('/')) + (sol.criadoHora?(' '+sol.criadoHora):'');
+  const actions = (admin && sol.status==='pendente') ? `
+    <div class="sol-actions">
+      <button class="sol-btn sol-aprovar" onclick="aprovarSolic('${sol._id}')">✅ Aprovar</button>
+      <button class="sol-btn sol-recusar" onclick="recusarSolic('${sol._id}')">✕ Recusar</button>
+    </div>` : '';
+  const resp = (sol.status==='recusada' && sol.respostaGestor) ? `<div class="sol-meta">↳ Gestor: ${escapeHtml(sol.respostaGestor)}</div>` : '';
+  const topo = admin ? escapeHtml(sol.nome||sol.func) : `Dia ${dia}`;
+  return `<div class="sol-card ${cls}">
+    <div class="sol-head"><div class="sol-who">${topo} ${statusBadge(sol.status)}</div></div>
+    <div class="sol-meta">${admin?('Dia '+dia+' · '):''}${acaoLabel(sol)}</div>
+    <div class="sol-motivo">${escapeHtml(sol.motivo||'')}</div>
+    ${admin?`<div class="sol-meta">Enviado em ${enviado}</div>`:''}
+    ${resp}
+    ${actions}
+  </div>`;
+}
+
+// Visão admin — fila de aprovação
+function renderSolicitacoes(){
+  const pend = solPendentes().sort((a,b)=>(a.criadoTs||0)-(b.criadoTs||0));
+  const dec  = allSolic.filter(s=>s.status!=='pendente').sort((a,b)=>(b.decididoTs||0)-(a.decididoTs||0));
+  let html = adminViewSwitch('solicitacoes');
+  html += `<div class="section-title">Pendentes (${pend.length})</div>`;
+  html += pend.length
+    ? `<div class="solic-wrap">${pend.map(s=>solCardHtml(s,true)).join('')}</div>`
+    : `<div class="card"><div class="empty-state">Nenhuma solicitação pendente. 🎉</div></div>`;
+  if(dec.length){
+    html += `<div class="section-title">Histórico (${dec.length})</div>
+      <div class="solic-wrap">${dec.slice(0,30).map(s=>solCardHtml(s,true)).join('')}</div>`;
+  }
+  document.getElementById('app').innerHTML = html;
+}
+
+// Lista "Minhas solicitações" (funcionário)
+function renderMinhasSolic(func){
+  const mine = allSolic.filter(s=>s.func===func).sort((a,b)=>(b.criadoTs||0)-(a.criadoTs||0));
+  if(!mine.length) return '';
+  return `<div class="section-title">Minhas solicitações</div>
+    <div class="solic-wrap">${mine.slice(0,15).map(s=>solCardHtml(s,false)).join('')}</div>`;
+}
+
+// ── Modal de solicitação ────────────────────────────────────────────────────
+function abrirSolic(){
+  const hoje = ymd(new Date());
+  const di = document.getElementById('sol-data');
+  di.value = hoje; di.max = hoje;
+  document.getElementById('sol-acao').value = 'corrigir';
+  document.getElementById('sol-hora').value = '';
+  document.getElementById('sol-motivo').value = '';
+  popularSolTipos(); onSolAcaoChange(); atualizarSolAtual();
+  document.getElementById('solic-modal').classList.add('show');
+}
+function fecharSolic(){ document.getElementById('solic-modal').classList.remove('show'); }
+function popularSolTipos(){
+  const data = document.getElementById('sol-data').value || ymd(new Date());
+  const sel  = document.getElementById('sol-tipo');
+  sel.innerHTML = tiposDoData(data).map(t=>`<option value="${t}">${LABEL[t]}</option>`).join('');
+}
+function onSolDataChange(){ popularSolTipos(); atualizarSolAtual(); }
+function onSolTipoChange(){ atualizarSolAtual(); }
+function onSolAcaoChange(){
+  const acao = document.getElementById('sol-acao').value;
+  document.getElementById('sol-hora-field').style.display = (acao==='remover') ? 'none' : 'flex';
+}
+function atualizarSolAtual(){
+  const data = document.getElementById('sol-data').value;
+  const tipo = document.getElementById('sol-tipo').value;
+  const hint = document.getElementById('sol-atual');
+  if(!data || !tipo){ hint.textContent=''; return; }
+  const dia = baterDoDia(meFunc, data);
+  hint.textContent = dia[tipo] ? `Registrado hoje: ${dia[tipo].hora}` : 'Nenhuma batida registrada nesse campo.';
+}
+async function enviarSolic(){
+  const data   = document.getElementById('sol-data').value;
+  const acao   = document.getElementById('sol-acao').value;
+  const tipo   = document.getElementById('sol-tipo').value;
+  const hora   = document.getElementById('sol-hora').value;
+  const motivo = document.getElementById('sol-motivo').value.trim();
+  if(!data){ toast('Escolha o dia.'); return; }
+  if(!tipo){ toast('Escolha a batida.'); return; }
+  if(acao==='corrigir' && !hora){ toast('Informe o horário correto.'); return; }
+  if(motivo.length < 5){ toast('Descreva o motivo da alteração.'); return; }
+  const dia = baterDoDia(meFunc, data);
+  const now = new Date();
+  const rec = {
+    func:meFunc, nome:meNome, data, acao, tipo,
+    horaAtual: dia[tipo] ? dia[tipo].hora : '',
+    horaSolicitada: acao==='corrigir' ? hora : '',
+    motivo, status:'pendente',
+    criadoTs:now.getTime(), criadoData:ymd(now), criadoHora:hm(now)
+  };
+  try{
+    await sref.push(rec);
+    fecharSolic();
+    toast('✅ Solicitação enviada. Aguarde a aprovação do gestor.');
+  }catch(e){ console.error(e); toast('❌ Falha ao enviar: '+e.message); }
+}
+
+// ── Decisão do gestor (aplica a alteração no ponto) ─────────────────────────
+async function aplicarAjuste(sol){
+  const existente = baterDoDia(sol.func, sol.data)[sol.tipo];
+  if(sol.acao==='remover'){
+    if(existente) await db.ref('ponto/batidas/'+existente._id).remove();
+    return;
+  }
+  const [y,m,d]   = sol.data.split('-').map(Number);
+  const [hh,mm]   = sol.horaSolicitada.split(':').map(Number);
+  const ts = new Date(y, m-1, d, hh, mm).getTime();
+  if(existente){
+    await db.ref('ponto/batidas/'+existente._id).update({ hora:sol.horaSolicitada, ts, origem:'ajuste' });
+  } else {
+    await bref.push({ func:sol.func, nome:sol.nome, tipo:sol.tipo, data:sol.data, hora:sol.horaSolicitada, ts, origem:'ajuste' });
+  }
+}
+async function aprovarSolic(id){
+  const sol = allSolic.find(s=>s._id===id); if(!sol) return;
+  if(!confirm('Aprovar esta solicitação e aplicar a alteração no ponto?')) return;
+  try{
+    await aplicarAjuste(sol);
+    await db.ref('ponto/solicitacoes/'+id).update({ status:'aprovada', decididoPor:meFunc, decididoNome:meNome, decididoTs:Date.now() });
+    toast('✅ Solicitação aprovada e aplicada.');
+  }catch(e){ console.error(e); toast('❌ Falha ao aprovar: '+e.message); }
+}
+async function recusarSolic(id){
+  const sol = allSolic.find(s=>s._id===id); if(!sol) return;
+  const resp = prompt('Motivo da recusa (opcional, o funcionário verá):', '');
+  if(resp===null) return;
+  try{
+    await db.ref('ponto/solicitacoes/'+id).update({ status:'recusada', decididoPor:meFunc, decididoNome:meNome, decididoTs:Date.now(), respostaGestor:resp||'' });
+    toast('Solicitação recusada.');
+  }catch(e){ console.error(e); toast('❌ Falha ao recusar: '+e.message); }
+}
 
 // ── Bater ponto (grava no Firebase, com GPS best-effort) ───────────────────
 let saving=false;
