@@ -9,10 +9,10 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
-  --accent:#E8390E;
-  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;
-  --text:#e2e8f0;--muted:#94a3b8;--radius:10px;
+  --bg:#0f1115;--card:#161922;--border:#242936;
+  --accent:#d9542e;
+  --green:#6bbf8a;--red:#cf8080;--yellow:#c6a667;--blue:#6b8cce;--purple:#9a8fce;
+  --text:#dfe3ea;--muted:#8b94a7;--radius: 10px;
   --font:'Segoe UI',system-ui,sans-serif;
 }
 body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
@@ -24,18 +24,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   background:var(--bg);z-index:9999
 }
 #access-denied.hidden{display:none}
-#access-denied .ad-icon{font-size:48px}
-#access-denied h2{font-size:18px;font-weight:700;color:var(--red)}
+#access-denied .ad-icon{font-size:33px}
+#access-denied h2{font-size:16px;font-weight:600;color:var(--red)}
 #access-denied p{font-size:13px;color:var(--muted)}
 
 /* ── HEADER ────────────────────────────────────────────────────────────────── */
 .log-header{
-  background:#0d1018;border-bottom:1px solid var(--border);
+  background:#0c0f15;border-bottom:1px solid var(--border);
   padding:12px 24px;display:flex;align-items:center;gap:12px;
   position:sticky;top:0;z-index:100;flex-wrap:wrap
 }
-.log-header h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
-.log-header h1 span{font-size:18px}
+.log-header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.log-header h1 span{font-size:16px}
 .header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
 .hdr-btn{
   background:transparent;border:1px solid var(--border);color:var(--muted);
@@ -47,7 +47,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 .hdr-btn-danger:hover{border-color:var(--red)!important;color:var(--red)!important}
 .hdr-btn-warn:hover{border-color:var(--yellow)!important;color:var(--yellow)!important}
 .auto-refresh-badge{
-  font-size:10px;background:rgba(34,197,94,.12);color:var(--green);
+  font-size:10px;background:rgba(107,191,138,.12);color:var(--green);
   padding:2px 8px;border-radius:10px;font-weight:600
 }
 
@@ -60,7 +60,7 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
   background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
   padding:12px 18px;display:flex;flex-direction:column;gap:3px;min-width:120px
 }
-.stat-chip .sv{font-size:22px;font-weight:700;line-height:1}
+.stat-chip .sv{font-size:18px;font-weight:600;line-height:1}
 .stat-chip .sl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
 .chip-total  .sv{color:var(--blue)}
 .chip-today  .sv{color:var(--green)}
@@ -95,7 +95,7 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
 }
 .log-table{width:100%;border-collapse:collapse}
 .log-table th{
-  background:#0d1018;padding:10px 14px;font-size:10px;font-weight:700;
+  background:#0c0f15;padding:10px 14px;font-size:10px;font-weight:600;
   text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
   text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)
 }
@@ -108,13 +108,13 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
 .log-ts{color:var(--muted);font-size:11px;font-family:monospace;white-space:nowrap}
 .log-user{font-weight:600}
 .mod-badge{
-  display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;
+  display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;
   text-transform:uppercase;letter-spacing:.5px
 }
-.mod-portal   {background:rgba(232,57,14,.15);color:#f97316}
-.mod-suporte  {background:rgba(59,130,246,.15);color:#3b82f6}
-.mod-comercial{background:rgba(34,197,94,.15);color:#22c55e}
-.mod-financeiro{background:rgba(139,92,246,.15);color:#8b5cf6}
+.mod-portal   {background:rgba(217,84,46,.15);color:#d08a5a}
+.mod-suporte  {background:rgba(107,140,206,.15);color:#6b8cce}
+.mod-comercial{background:rgba(107,191,138,.15);color:#6bbf8a}
+.mod-financeiro{background:rgba(154,143,206,.15);color:#9a8fce}
 .log-acao{font-weight:500}
 .log-det{color:var(--muted);font-size:11px}
 .log-empty{text-align:center;color:var(--muted);padding:40px 24px;font-size:13px}
@@ -130,7 +130,7 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
 }
 .page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--text)}
 .page-btn:disabled{opacity:.35;cursor:default}
-.page-btn.active{background:rgba(232,57,14,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+.page-btn.active{background:rgba(217,84,46,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
 
 /* ── CONFIRM MODAL ─────────────────────────────────────────────────────────── */
 .modal-overlay{
@@ -143,9 +143,9 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
   background:var(--card);border:1px solid var(--border);border-radius:14px;
   padding:28px 24px;width:100%;max-width:340px;
   display:flex;flex-direction:column;gap:14px;
-  box-shadow:0 24px 64px rgba(0,0,0,.6)
+  box-shadow:0 24px 64px rgba(0,0,0,0.33)
 }
-.modal-title{font-size:15px;font-weight:700}
+.modal-title{font-size:15px;font-weight:600}
 .modal-desc{font-size:13px;color:var(--muted);line-height:1.5}
 .modal-actions{display:flex;gap:8px}
 .btn-cancel{
@@ -163,20 +163,21 @@ main{padding:20px 24px;max-width:1400px;margin:0 auto}
 
 /* ── LIGHT THEME ───────────────────────────────────────────────────────────── */
 body.light{
-  --bg:#f1f5fb;--card:#ffffff;--border:#e2e8f0;
-  --text:#1e293b;--muted:#64748b
+  --bg:#f4f6fa;--card:#ffffff;--border:#dfe3ea;
+  --text:#2b3444;--muted:#78839a
 }
 body.light .log-header{background:#ffffff}
 body.light .log-table th{background:#f8fafc}
 body.light .log-table td{border-bottom-color:#f1f5f9}
 body.light .log-table tr:hover td{background:rgba(0,0,0,.02)}
-body.light .filter-input,body.light .filter-select{background:#f8fafc;border-color:#e2e8f0;color:#1e293b}
+body.light .filter-input,body.light .filter-select{background:#f8fafc;border-color:#dfe3ea;color:#2b3444}
 
 /* ── SCROLLBAR ─────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 </style>
+  <!-- ibnet-design:clean-v2 -->
 </head>
 <body>
 
@@ -282,7 +283,7 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
   <div class="modal-box">
     <div class="modal-title">🧹 Purgar logs antigos</div>
     <div class="modal-desc">Remove permanentemente todos os registros com <strong>mais de 30 dias</strong>. Os logs recentes não serão afetados.</div>
-    <div id="purge-count-info" style="font-size:13px;color:var(--yellow);padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:7px">Calculando…</div>
+    <div id="purge-count-info" style="font-size:13px;color:var(--yellow);padding:8px 12px;background:rgba(198,166,103,.08);border:1px solid rgba(198,166,103,.2);border-radius:7px">Calculando…</div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closePurgeModal()">Cancelar</button>
       <button class="btn-confirm" id="btn-confirm-purge" onclick="confirmPurge()" style="background:var(--yellow);color:#000">Purgar</button>

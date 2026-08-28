@@ -9,9 +9,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
-  --accent:#E8390E;--green:#22c55e;--red:#ef4444;
-  --text:#e2e8f0;--muted:#94a3b8;
+  --bg:#0f1115;--card:#161922;--border:#242936;
+  --accent:#d9542e;--green:#6bbf8a;--red:#cf8080;
+  --text:#dfe3ea;--muted:#8b94a7;
 }
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 
@@ -21,48 +21,48 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 
 /* ── PIN ─────────────────────────────────────────────────────────────────── */
 .pin-logo{width:130px;height:auto;margin-bottom:28px;border-radius:8px}
-.pin-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:6px}
+.pin-title{font-size:17px;font-weight:600;text-align:center;margin-bottom:6px}
 .pin-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:32px}
 .pin-display{display:flex;gap:14px;margin-bottom:34px}
 .pd{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all .15s}
 .pd.on{background:var(--accent);border-color:var(--accent);transform:scale(1.2)}
 .pd.err{background:var(--red);border-color:var(--red)}
 .pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:270px}
-.pk{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:26px;font-weight:600;padding:17px 10px;border-radius:14px;cursor:pointer;font-family:inherit;transition:all .1s;-webkit-user-select:none;user-select:none;line-height:1;text-align:center}
+.pk{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:20px;font-weight:600;padding:17px 10px;border-radius:14px;cursor:pointer;font-family:inherit;transition:all .1s;-webkit-user-select:none;user-select:none;line-height:1;text-align:center}
 .pk:active{transform:scale(.88);background:var(--accent);border-color:var(--accent);color:#fff}
 .pk.ghost{visibility:hidden}
-.pk.del{font-size:20px;color:var(--muted)}
+.pk.del{font-size:17px;color:var(--muted)}
 .pin-err{font-size:13px;color:var(--red);text-align:center;margin-top:16px;min-height:20px}
 
 /* ── FORM ────────────────────────────────────────────────────────────────── */
 .form-wrap{width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px;padding-bottom:32px}
-.form-greeting{font-size:22px;font-weight:700;margin-bottom:2px}
+.form-greeting{font-size:18px;font-weight:600;margin-bottom:2px}
 .form-datestr{font-size:12px;color:var(--muted)}
 .ff{display:flex;flex-direction:column;gap:6px}
-.ff label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.7px}
-.ff input{background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:10px;font-size:16px;font-family:inherit;width:100%;transition:border-color .2s;-webkit-appearance:none}
+.ff label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
+.ff input{background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:10px;font-size:15px;font-family:inherit;width:100%;transition:border-color .2s;-webkit-appearance:none}
 .ff input:focus{outline:none;border-color:var(--accent)}
 
 /* Item cards */
 .icard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
 .icard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.icard-name{font-size:15px;font-weight:700}
+.icard-name{font-size:15px;font-weight:600}
 .icard-pinfo{font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:3px 9px;border-radius:20px}
 .icard-row{display:flex;align-items:center;gap:10px}
-.qty-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:10px;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;-webkit-user-select:none;user-select:none;transition:all .1s;line-height:1}
+.qty-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:10px;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;-webkit-user-select:none;user-select:none;transition:all .1s;line-height:1}
 .qty-btn:active{transform:scale(.88);background:var(--accent);border-color:var(--accent);color:#fff}
-.icard-row input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 6px;border-radius:8px;font-size:24px;font-weight:700;font-family:inherit;text-align:center;width:100%;-webkit-appearance:none}
+.icard-row input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 6px;border-radius:8px;font-size:19px;font-weight:600;font-family:inherit;text-align:center;width:100%;-webkit-appearance:none}
 .icard-row input:focus{outline:none;border-color:var(--accent)}
 .icard-sub{font-size:12px;color:var(--muted);text-align:right;margin-top:8px}
 .icard-sub strong{color:var(--green);font-weight:600}
 
 /* CAC total */
-.cac-card{background:linear-gradient(135deg,rgba(232,57,14,.13),rgba(204,34,0,.04));border:2px solid rgba(232,57,14,.3);border-radius:16px;padding:20px;text-align:center}
-.cac-lbl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
-.cac-val{font-size:42px;font-weight:700;color:#E8390E;letter-spacing:-1.5px;line-height:1}
+.cac-card{background:linear-gradient(135deg,rgba(217,84,46,.13),rgba(217,84,46,.04));border:2px solid rgba(217,84,46,.3);border-radius:16px;padding:20px;text-align:center}
+.cac-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.cac-val{font-size:30px;font-weight:600;color:#d9542e;letter-spacing:-1.5px;line-height:1}
 
 /* Botões */
-.btn-submit{background:#E8390E;border:none;color:#fff;padding:17px;border-radius:14px;font-size:17px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;margin-top:4px;transition:opacity .15s;letter-spacing:.2px}
+.btn-submit{background:#d9542e;border:none;color:#fff;padding:17px;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;margin-top:4px;transition:opacity .15s;letter-spacing:.2px}
 .btn-submit:hover{opacity:.88}
 .btn-submit:disabled{opacity:.45;cursor:default}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;width:100%;transition:all .15s}
@@ -71,10 +71,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 /* ── FOTOS ───────────────────────────────────────────────────────────────── */
 .foto-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
 .foto-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.foto-card-name{font-size:15px;font-weight:700}
+.foto-card-name{font-size:15px;font-weight:600}
 .foto-card-count{font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:3px 9px;border-radius:20px}
 .foto-add-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;border:2px dashed var(--border);border-radius:10px;background:transparent;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;-webkit-user-select:none;user-select:none}
-.foto-add-btn:active{border-color:var(--accent);color:var(--accent);background:rgba(232,57,14,.06)}
+.foto-add-btn:active{border-color:var(--accent);color:var(--accent);background:rgba(217,84,46,.06)}
 .foto-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .foto-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#000}
 .foto-thumb img{width:100%;height:100%;object-fit:cover;display:block}
@@ -87,29 +87,30 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 
 /* ── LOTE SELECTOR ───────────────────────────────────────────────────────── */
 .lote-sel-wrap{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
-.lote-sel-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;display:block}
+.lote-sel-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;display:block}
 .lote-select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:13px;font-family:inherit;width:100%;-webkit-appearance:none;appearance:none;cursor:pointer;transition:border-color .2s}
 .lote-select:focus{outline:none;border-color:var(--accent)}
 .lote-select:disabled{opacity:.4;cursor:not-allowed}
 .lote-tip{font-size:10px;color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:4px}
-.lote-tip.ok{color:#22c55e}
-.lote-tip.warn{color:#eab308}
+.lote-tip.ok{color:#6bbf8a}
+.lote-tip.warn{color:#c6a667}
 
 /* ── TIPO DE ATIVIDADE ───────────────────────────────────────────────────── */
 .tipo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tipo-btn{background:var(--card);border:2px solid var(--border);color:var(--muted);padding:14px 8px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none;line-height:1.4}
-.tipo-btn.active{border-color:var(--accent);color:var(--text);background:rgba(232,57,14,.09)}
+.tipo-btn.active{border-color:var(--accent);color:var(--text);background:rgba(217,84,46,.09)}
 .tipo-btn:active{transform:scale(.93)}
 
 /* ── SUCESSO ─────────────────────────────────────────────────────────────── */
 .suc-icon{font-size:80px;margin-bottom:18px;animation:pop .45s cubic-bezier(.175,.885,.32,1.275)}
 @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
-.suc-title{font-size:26px;font-weight:700;margin-bottom:8px;text-align:center}
+.suc-title{font-size:20px;font-weight:600;margin-bottom:8px;text-align:center}
 .suc-cliente{font-size:15px;color:var(--muted);text-align:center;margin-bottom:4px}
-.suc-cac{font-size:40px;font-weight:700;color:var(--green);letter-spacing:-1px;margin:14px 0 8px;text-align:center}
+.suc-cac{font-size:28px;font-weight:600;color:var(--green);letter-spacing:-1px;margin:14px 0 8px;text-align:center}
 .suc-note{font-size:11px;color:var(--muted);text-align:center;margin-bottom:28px;line-height:1.5}
 .suc-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px}
 </style>
+  <!-- ibnet-design:clean-v2 -->
 </head>
 <body>
 
@@ -205,7 +206,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
                  oninput="this.value=this.value.toUpperCase()"
                  style="font-family:monospace;letter-spacing:.5px;flex:1"/>
           <button type="button" id="btn-scan-sn" onclick="document.getElementById('sn-photo-input').click()"
-                  style="background:var(--accent);border:none;color:#fff;padding:10px 13px;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0;transition:opacity .15s"
+                  style="background:var(--accent);border:none;color:#fff;padding:10px 13px;border-radius:8px;font-size:16px;cursor:pointer;flex-shrink:0;transition:opacity .15s"
                   title="Tirar foto da etiqueta — IA lê o S/N automaticamente">📷</button>
         </div>
         <!-- input oculto que abre câmera traseira do celular -->
@@ -222,7 +223,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
         <div class="icard-name">🔌 DROP (cabo)</div>
       </div>
       <div class="icard-row">
-        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="0" oninput="calcLoteTip('drop')" style="font-size:22px;font-weight:700"/>
+        <input type="number" id="f-drop" value="" min="0" step="1" inputmode="numeric" placeholder="0" oninput="calcLoteTip('drop')" style="font-size:18px;font-weight:600"/>
       </div>
       <div class="icard-sub" style="color:var(--muted)">metros utilizados</div>
       <div class="lote-sel-wrap" id="lote-wrap-drop">
