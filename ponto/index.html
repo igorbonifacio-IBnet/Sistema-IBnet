@@ -115,6 +115,15 @@ main{padding:22px;max-width:1180px;margin:0 auto}
 .btn-add:hover{opacity:.8}
 .ed-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:3px 9px;border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}
 .ed-btn:hover{border-color:var(--accent);color:var(--accent)}
+.banco-card{border-radius:14px;padding:15px 18px;margin-bottom:14px;text-align:center;border:1px solid var(--border)}
+.banco-card .banco-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;opacity:.8}
+.banco-card .banco-val{font-size:34px;font-weight:800;line-height:1.15;margin:2px 0}
+.banco-card .banco-sub{font-size:12px;opacity:.85}
+.banco-pos{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#16a34a}
+.banco-neg{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.4);color:#dc2626}
+.banco-tag{font-size:12.5px;font-weight:800;padding:2px 10px;border-radius:8px;margin-left:8px;vertical-align:middle}
+.banco-tag.saldo-pos{background:rgba(34,197,94,.15);color:#16a34a}
+.banco-tag.saldo-neg{background:rgba(239,68,68,.15);color:#dc2626}
 
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
@@ -489,12 +498,44 @@ function renderFuncionario(func){
       <div class="sb-box"><div class="sbv ${saldo==null?'':(saldo>=0?'saldo-pos':'saldo-neg')}">${saldo==null?'—':(saldo>=0?'+':'')+fmtDur(saldo)}</div><div class="sbl">Saldo do dia</div></div>
     </div>
 
+    ${bancoHtml(func)}
+
     <div class="solic-wrap" style="margin-bottom:8px"><button class="btn-solic" onclick="abrirSolic()">✏️ Solicitar alteração de ponto</button></div>
 
     <div class="section-title">Meu espelho — ${MESES[new Date().getMonth()]}</div>
     ${renderEspelho(func, new Date().getFullYear(), new Date().getMonth())}
     ${renderMinhasSolic(meFunc)}
   `;
+}
+
+// ── Banco de horas (saldo acumulado) ───────────────────────────────────────
+// Conta todo dia ENCERRADO (passado, ou já com saída hoje) que tenha entrada,
+// mesmo parcial. saldo = trabalhado − jornada prevista. Dia de hoje ainda
+// aberto não entra (evita saldo negativo enquanto a pessoa está trabalhando).
+function diaEncerrado(dia, data){ return (data < ymd(new Date())) || !!dia.saida; }
+function saldoDoDia(func, data){
+  const dia = baterDoDia(func, data);
+  if(!dia.entrada) return null;
+  if(!diaEncerrado(dia, data)) return null;
+  return trabalhadoMin(dia, null) - esperadoDoData(data);
+}
+function saldoAcumulado(func){
+  let tot=0;
+  const datas = new Set(allBatidas.filter(b=>b.func===func && b.data).map(b=>b.data));
+  datas.forEach(d=>{ const s=saldoDoDia(func,d); if(s!=null) tot+=s; });
+  return tot;
+}
+function bancoHtml(func){
+  const s = saldoAcumulado(func), cls = s>=0?'banco-pos':'banco-neg', sig = s>=0?'+':'';
+  return `<div class="banco-card ${cls}">
+    <div class="banco-lbl">🏦 Banco de horas (acumulado)</div>
+    <div class="banco-val">${sig}${fmtDur(s)}</div>
+    <div class="banco-sub">${s>=0?'horas a favor (extra)':'horas a compensar'}</div>
+  </div>`;
+}
+function bancoInline(func){
+  const s=saldoAcumulado(func), cls=s>=0?'saldo-pos':'saldo-neg';
+  return `<span class="banco-tag ${cls}">Banco: ${s>=0?'+':''}${fmtDur(s)}</span>`;
 }
 
 // Espelho mensal de UM funcionário (usado pelo próprio e como sub-tabela)
@@ -506,7 +547,7 @@ function renderEspelho(func, ano, mes){
     const dia = baterDoDia(func, data);
     const trab = trabalhadoMin(dia, null);
     const completo = dia.entrada && dia.saida;
-    const saldo = completo ? (trab - esperadoDoData(data)) : null;
+    const saldo = saldoDoDia(func, data);
     totTrab += trab; if(saldo!=null) totSaldo += saldo;
     const [y,m,d]=data.split('-');
     const dObj=new Date(+y,+m-1,+d);
@@ -574,7 +615,7 @@ function renderAdmin(){
     bodyHtml = `<div class="card"><div class="empty-state">Ainda não há batidas registradas.</div></div>`;
   } else {
     alvo.forEach(([f,n])=>{
-      bodyHtml += `<div class="section-title">${escapeHtml(n)}</div>` + renderEspelho(f, ano, mes-1);
+      bodyHtml += `<div class="section-title">${escapeHtml(n)} ${bancoInline(f)}</div>` + renderEspelho(f, ano, mes-1);
     });
   }
 
