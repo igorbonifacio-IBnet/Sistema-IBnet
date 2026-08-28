@@ -844,6 +844,7 @@ function switchTab(tab) {
   if (currentTab && currentTab !== tab) logAction('Portal', 'Navegação', `Acessou aba: ${meta.title}`);
   currentTab = tab;
   if (tab === 'home') renderHome();
+  if (tab === 'ponto') postSessionToPonto();
 }
 
 document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
@@ -879,11 +880,18 @@ function applyTheme(t) {
 
 function toggleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); }
 
+// O módulo de Ponto (iframe) carrega antes do login, então precisa receber a
+// sessão via postMessage assim que o usuário entra / abre a aba / o iframe recarrega.
+function postSessionToPonto() {
+  const s = getSession();
+  try { document.getElementById('iframe-ponto')?.contentWindow?.postMessage({ type: 'session', value: s }, '*'); } catch (e) {}
+}
+
 document.getElementById('iframe-comercial').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-suporte').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-logs').addEventListener('load', () => applyTheme(currentTheme));
-document.getElementById('iframe-ponto').addEventListener('load', () => applyTheme(currentTheme));
+document.getElementById('iframe-ponto').addEventListener('load', () => { applyTheme(currentTheme); postSessionToPonto(); });
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';

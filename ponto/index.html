@@ -328,10 +328,10 @@ const sref = db.ref('ponto/solicitacoes');
 
 // ── Sessão (sessionStorage compartilhado com o portal, mesma origem) ───────
 function getSession(){ try { return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); } catch(e){ return null; } }
-const session = getSession();
-const isAdmin = session && session.role === 'admin';
-const meFunc  = session ? session.username : '';
-const meNome  = session ? (session.nome || session.username) : '';
+let session = getSession();
+let isAdmin = session && session.role === 'admin';
+let meFunc  = session ? session.username : '';
+let meNome  = session ? (session.nome || session.username) : '';
 
 // ── Constantes de batidas ──────────────────────────────────────────────────
 const TIPOS  = ['entrada','saida_almoco','volta_almoco','saida'];
@@ -967,10 +967,23 @@ function tick(){
 }
 setInterval(tick,1000); tick();
 
-// ── Tema (recebe do portal via postMessage) ────────────────────────────────
+// ── Mensagens do portal (tema + sessão) via postMessage ────────────────────
+// O iframe carrega ANTES do login, então a sessão chega por aqui depois que o
+// usuário entra / abre a aba. Atualiza quem sou eu e re-renderiza.
 window.addEventListener('message', e=>{
-  if(e.data && e.data.type==='theme'){
+  if(!e.data) return;
+  if(e.data.type==='theme'){
     document.body.classList.toggle('light', e.data.value==='light');
+  }
+  if(e.data.type==='session' && e.data.value){
+    const s = e.data.value;
+    if(!session || session.username!==s.username || session.role!==s.role || meNome!==(s.nome||s.username)){
+      session = s;
+      isAdmin = s.role==='admin';
+      meFunc  = s.username;
+      meNome  = s.nome || s.username;
+      render();
+    }
   }
 });
 
