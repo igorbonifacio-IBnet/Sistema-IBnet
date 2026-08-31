@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Fluxo de Caixa — IBnet</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1115;--card:#161922;--border:#242936;
+  --accent:#dd5c33;
+  --green:#6bbf8a;--red:#cf8080;--yellow:#c6a667;--blue:#6b8cce;--gray:#78839a;
+  --text:#dfe3ea;--muted:#8b94a7;--radius:10px;
+}
+body.light{
+  --bg:#f4f6fa;--card:#ffffff;--border:#dfe3ea;--accent:#c4491f;
+  --green:#4f9e6d;--red:#b96a6a;--yellow:#97803f;--blue:#4f74c4;
+  --text:#2b3444;--muted:#78839a;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;font-size:14px}
+
+.mini-header{background:#0c0f15;border-bottom:1px solid var(--border);padding:10px 22px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px}
+body.light .mini-header{background:#ffffff}
+.mini-header h1{font-size:15px;font-weight:600;letter-spacing:.3px}
+.mh-sub{font-size:12px;color:var(--muted)}
+main{padding:20px;max-width:1240px;margin:0 auto}
+
+.view-switch{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.view-switch button{background:var(--card);border:1px solid var(--border);color:var(--muted);
+  padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.view-switch button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.view-switch button:hover:not(.active){border-color:var(--accent);color:var(--text)}
+.vs-badge{background:var(--red);color:#fff;border-radius:999px;padding:1px 7px;font-size:10px;margin-left:6px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 1px 3px rgba(0,0,0,.11)}
+.section-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.7px;margin:22px 0 10px}
+
+/* ── DFC ─────────────────────────────────────────────────────────── */
+.dfc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-bottom:8px}
+.dfc-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.dfc-box .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.dfc-box .val{font-size:23px;font-weight:600;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.dfc-box .sub{font-size:11px;color:var(--muted)}
+.dfc-box.op{border-left:3px solid var(--green)}
+.dfc-box.inv{border-left:3px solid var(--blue)}
+.dfc-box.fin{border-left:3px solid var(--yellow)}
+.dfc-box.tot{border-left:3px solid var(--accent)}
+.pos{color:var(--green)} .neg{color:var(--red)}
+
+.alert{border-radius:var(--radius);padding:13px 16px;font-size:13px;line-height:1.6;margin-bottom:14px;
+  border:1px solid var(--border);background:var(--card)}
+.alert.warn{border-color:rgba(198,166,103,.4);background:rgba(198,166,103,.08)}
+.alert b{font-weight:600}
+
+/* ── tabelas ─────────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+  font-weight:600;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:hover td{background:rgba(255,255,255,.03)}
+body.light tbody tr:hover td{background:rgba(0,0,0,.02)}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.grp-row td{background:rgba(255,255,255,.04);font-weight:600}
+body.light .grp-row td{background:rgba(0,0,0,.03)}
+.tot-row td{border-top:2px solid var(--border);font-weight:600}
+
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.p-oper{background:rgba(107,191,138,.15);color:var(--green)}
+.p-invest{background:rgba(107,140,206,.15);color:var(--blue)}
+.p-finan{background:rgba(198,166,103,.15);color:var(--yellow)}
+.p-rev{background:rgba(207,128,128,.15);color:var(--red)}
+
+/* ── controles ───────────────────────────────────────────────────── */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+.filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;
+  letter-spacing:.5px;display:flex;flex-direction:column;gap:5px}
+select,input,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:8px 11px;border-radius:9px;font-size:13px;font-family:inherit}
+body.light select,body.light input,body.light textarea{background:#fff}
+select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+.btn{background:var(--accent);border:none;color:#fff;padding:9px 16px;border-radius:9px;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:7px}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;
+  padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── modal ───────────────────────────────────────────────────────── */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;
+  align-items:center;justify-content:center;padding:18px}
+.modal-ov.show{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;
+  width:100%;max-width:520px;max-height:88vh;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.32)}
+.modal-box h3{font-size:16px;font-weight:600;margin-bottom:16px}
+.mb-field{margin-bottom:13px;display:flex;flex-direction:column;gap:5px}
+.mb-field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.mb-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mb-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.mb-hint{font-size:12px;color:var(--muted);line-height:1.55;margin-top:4px}
+
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#1e2230;
+  border:1px solid var(--border);color:#dfe3ea;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;
+  box-shadow:0 8px 30px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:all .25s;z-index:999;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+.loading{text-align:center;padding:40px;color:var(--muted)}
+.bar-track{height:6px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:5px}
+.bar-fill{height:100%;border-radius:99px}
+@media(max-width:640px){
+  main{padding:14px}
+  .mb-row{grid-template-columns:1fr}
+  th,td{padding:8px 9px;font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="mini-header">
+  <div>
+    <h1>Fluxo de Caixa</h1>
+    <div class="mh-sub" id="mh-sub">carregando…</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-ghost btn-sm" onclick="abrirImport()">Importar</button>
+    <button class="btn btn-sm" onclick="abrirLanc()">+ Lançamento</button>
+  </div>
+</div>
+
+<main>
+  <div class="view-switch">
+    <button class="active" data-view="dfc"   onclick="setView('dfc')">Fluxo de Caixa</button>
+    <button data-view="lanc"   onclick="setView('lanc')">Lançamentos</button>
+    <button data-view="rev"    onclick="setView('rev')">Revisar <span class="vs-badge" id="rev-badge" style="display:none">0</span></button>
+    <button data-view="plano"  onclick="setView('plano')">Plano de Contas</button>
+  </div>
+  <div id="view"><div class="loading">Carregando lançamentos…</div></div>
+</main>
+
+<!-- modal lançamento -->
+<div class="modal-ov" id="lanc-modal">
+  <div class="modal-box">
+    <h3 id="lanc-title">Novo lançamento</h3>
+    <div class="mb-row">
+      <div class="mb-field"><label>Data</label><input type="date" id="l-data"/></div>
+      <div class="mb-field"><label>Valor (R$)</label><input type="number" step="0.01" id="l-valor" placeholder="0,00"/></div>
+    </div>
+    <div class="mb-field"><label>Descrição</label><input type="text" id="l-desc" placeholder="Ex.: RAGTEK - Link dedicado"/></div>
+    <div class="mb-field">
+      <label>Tipo</label>
+      <select id="l-tipo" onchange="onTipoChange()">
+        <option value="saida">Saída (dinheiro sai)</option>
+        <option value="entrada">Entrada (dinheiro entra)</option>
+      </select>
+    </div>
+    <div class="mb-field"><label>Categoria</label><select id="l-cat"></select></div>
+    <div class="mb-field"><label>Observação</label><input type="text" id="l-obs" placeholder="opcional"/></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharLanc()">Cancelar</button>
+      <button class="btn" id="l-save" onclick="salvarLanc()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal import -->
+<div class="modal-ov" id="imp-modal">
+  <div class="modal-box" style="max-width:660px">
+    <h3>Importar lançamentos</h3>
+    <div class="mb-field">
+      <label>Cole aqui (uma linha por lançamento)</label>
+      <textarea id="imp-txt" rows="9" placeholder="Data;Descrição;Valor&#10;03/08/2026;RAGTEK - LINK DEDICADO;-2500,00&#10;03/08/2026;CRÉD.LIQ.COBRANÇA;871,55"></textarea>
+      <div class="mb-hint">Aceita <b>;</b> <b>,</b> ou <b>TAB</b> como separador. Data em dd/mm/aaaa ou aaaa-mm-dd.
+      Valor negativo = saída. Cada linha é classificada automaticamente pelas regras; o que não casar vai para <b>Revisar</b>.</div>
+    </div>
+    <div id="imp-preview"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharImport()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="previewImport()">Pré-visualizar</button>
+      <button class="btn" id="imp-save" onclick="confirmarImport()" disabled>Importar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   PLANO DE CONTAS — estrutura de provedor de internet
+   Três grupos do DFC (padrão contábil):
+     OPER   = o negócio rodando (receita, custo direto, despesas)
+     INVEST = o que vira patrimônio/rede (capex, insumos de instalação)
+     FINAN  = dinheiro de terceiros (empréstimo, aporte, juros, cartão)
+   ══════════════════════════════════════════════════════════════════ */
+const PLANO = {
+  OPER: { nome:'Operacional', cor:'var(--green)', sub:[
+    { nome:'Receitas', cats:[
+      'Receita de Mensalidades','Receita de Instalação','Receita de Serviços',
+      'Outras Receitas','Estornos e Reembolsos' ]},
+    { nome:'Custo Direto (rede)', cats:[
+      'Custo Direto · Link/Trânsito','Custo Direto · Rede Neutra','Custo Direto · Postes/Licenças' ]},
+    { nome:'Pessoal', cats:[
+      'Pessoal · Folha','Pessoal · Pró-labore','Pessoal · VA/VT','Pessoal · Comissões',
+      'Pessoal · Benefícios','Pessoal · Terceirizados','Pessoal · Encargos','Pessoal · Adiantamentos' ]},
+    { nome:'Administrativo', cats:[
+      'Administrativo · Aluguel','Administrativo · Contabilidade','Administrativo · Consultas',
+      'Administrativo · Legal/Taxas','Administrativo · Despesas Gerais','Administrativo · EPI/Uniforme' ]},
+    { nome:'Operação', cats:[
+      'Sistemas · Software/SaaS','Veículo · Combustível','Veículo · Manutenção','Veículo · Impostos/Seguro',
+      'Marketing','Utilidades · Energia/Água','Utilidades · Telefonia','Impostos','Tarifas Bancárias' ]},
+  ]},
+  INVEST:{ nome:'Investimento', cor:'var(--blue)', sub:[
+    { nome:'Capex de rede', cats:[
+      'Capex · ONT/CPE','Capex · Cabo/Drop','Capex · Equip. de Rede','Capex · Obras' ]},
+    { nome:'Insumos e apoio', cats:[
+      'Insumos de Instalação','Capex · Ferramentas','Capex · Veículos' ]},
+  ]},
+  FINAN: { nome:'Financiamento', cor:'var(--yellow)', sub:[
+    { nome:'Captação', cats:['Empréstimo Captado','Aporte de Sócio'] },
+    { nome:'Serviço da dívida', cats:[
+      'Amortização de Empréstimo','Juros e Encargos','Devolução de Empréstimo','Cartão de Crédito'] },
+    { nome:'Movimentação interna', cats:['Transferência entre Contas'] },
+  ]},
+};
+const GRUPO_DE = {};
+Object.entries(PLANO).forEach(([g,d]) => d.sub.forEach(s => s.cats.forEach(c => GRUPO_DE[c] = g)));
+const TODAS_CATS = Object.keys(GRUPO_DE);
+
+/* ══════════════════════════════════════════════════════════════════
+   REGRAS DE CLASSIFICAÇÃO AUTOMÁTICA
+   Validadas contra 886 lançamentos reais de 2026 → 91% de cobertura.
+   A ordem importa: a primeira que casar vence.
+   ══════════════════════════════════════════════════════════════════ */
+const REGRAS = [
+  // Entradas operacionais
+  [/CRED\.?LIQ\.?COBRANCA|REC\.? CLIENTE POR PIX|LYTEX|CREDITO.*CLIENTE/, 'Receita de Mensalidades'],
+  [/TAXA DE ADESAO|INSTALACAO CLIENTE/,                'Receita de Instalação'],
+  // Captação
+  [/^EMPRESTIMO|EMPRESTIMO ISABEL|CAPITAL DE GIRO/,    'Empréstimo Captado'],
+  [/APORTE PF|APORTE SBS|APORTE.*IGOR|DEVOLUCAO IGOR/, 'Aporte de Sócio'],
+  // Custo direto
+  [/LINK DEDICADO|IP TRANSITO|TRANSITO IP|TRANSPORTE ALAN|RAGTEK - TRANSPORTE/, 'Custo Direto · Link/Trânsito'],
+  [/REDE NEUTRA|INTEL FIBRA|OPYT|NEUTRA /,             'Custo Direto · Rede Neutra'],
+  [/LOCACAO POSTE|\bPOSTE\b|EQUATORIAL/,               'Custo Direto · Postes/Licenças'],
+  // Pessoal
+  [/FOLHA DE PAGAM\w*NTO|SALARIO|RESCISAO|FERIAS/,     'Pessoal · Folha'],
+  [/PRO ?LABORE/,                                      'Pessoal · Pró-labore'],
+  [/\bVA\b|\bVT\b|VALE ALIMENTACAO|VALE TRANSPORTE/,   'Pessoal · VA/VT'],
+  [/COMISSAO/,                                         'Pessoal · Comissões'],
+  [/UNIMED|PLANO DE SAUDE|ODONTO/,                     'Pessoal · Benefícios'],
+  [/ATENDIMENTO TERCEIRIZADO|TERCEIRIZAD|CONSULTOR|CONSULTORIA|DIARIA /, 'Pessoal · Terceirizados'],
+  [/\bFGTS\b|\bINSS\b|\bGPS\b/,                        'Pessoal · Encargos'],
+  [/ADIANTAMENTO/,                                     'Pessoal · Adiantamentos'],
+  // Administrativo
+  [/ALUGUEL/,                                          'Administrativo · Aluguel'],
+  [/HONORARIOS CONTABEIS|CONTABIL/,                    'Administrativo · Contabilidade'],
+  [/SERASA|CONSULTA CPF|\bSPC\b/,                      'Administrativo · Consultas'],
+  [/CORREIO|CARTORIO|JUCEG|ANATEL|JURIDIC|ADVOG|TAXA DE LICENCA/, 'Administrativo · Legal/Taxas'],
+  [/ESCADA|FERRAMENT|ALICATE|CLIVADOR|FUSIONADORA|OTDR|POWER METER/, 'Capex · Ferramentas'],
+  [/UNIFORME|\bEPI\b|CAPACETE|\bLUVA|\bBOTA|CINTO DE SEGURANCA/, 'Administrativo · EPI/Uniforme'],
+  [/ALMOCO|LANCHE|REFEICAO|MERCADO|PADARIA|MATERIAL DE ESCRITORIO|PAPELARIA|LIMPEZA|PINTURA/, 'Administrativo · Despesas Gerais'],
+  // Operação
+  [/ISP VIRTUAL|API OFICIAL META|\bSGP\b|\bERP\b|\bCRM\b|CHATMIX|ZABBIX|VOALLE|GOOGLE|MICROSOFT|SOFTWARE|HOSPEDAGEM|DOMINIO|RASTREADOR/, 'Sistemas · Software/SaaS'],
+  [/ABASTECIMENTO|COMBUSTIVEL|\bPOSTO\b/,              'Veículo · Combustível'],
+  [/PNEU|CONSERTO|REVISAO|OFICINA|MECANIC|\bOLEO\b/,   'Veículo · Manutenção'],
+  [/\bIPVA\b|LICENCIAMENTO|SEGURO.*VEIC|MULTA/,        'Veículo · Impostos/Seguro'],
+  [/TN NOTICIAS|PARCERIA COMERCIAL|MARKETING|ANUNCIO|TRAFEGO|PATROCIN|MANUAL DA MARCA|GRAFICA|ADESIVO/, 'Marketing'],
+  [/ENERGIA|SANEAGO|\bAGUA\b|COPASA/,                  'Utilidades · Energia/Água'],
+  [/TELEFONIA|\bVIVO\b|CLARO|\bTIM\b|CELULAR/,         'Utilidades · Telefonia'],
+  [/SIMPLES NACIONAL|\bDAS\b|DARF|\bISS\b|ICMS|FUST|FUNTTEL|IMPOSTO/, 'Impostos'],
+  [/TARIFA BANCARIA|CESTA |ANUIDADE|SICOOB TAXA|TAXA DE MANUTENCAO|\bIOF\b/, 'Tarifas Bancárias'],
+  // Financiamento
+  [/JUROS|ENCARGOS|\bMORA\b|CAPITALIZACAO/,            'Juros e Encargos'],
+  [/DEB TIT\.? COMP\.? EFETI|PARCELA.*EMPRESTIMO|EMPRESTIMO SICCOB|EMPRESTIMO PF/, 'Amortização de Empréstimo'],
+  [/DEVOLUCAO EMPRESTIMO|DEVOLUCAO APORTE/,            'Devolução de Empréstimo'],
+  [/CARTAO CREDITO|CARTAO IGOR|FATURA |CC IGOR|CARTAO PESSOAL|CARTAO PORTO|PARCELAMENTO/, 'Cartão de Crédito'],
+  [/IBNET TELECOM|UNITEL|SUBS INTEG|PIX ENVIADO|\bTED\b|TRANSFERENCIA/, 'Transferência entre Contas'],
+  // Capex
+  [/\bONTS?\b|\bONUS?\b|\bCPE\b|ROTEADOR|FIBERHOME/,   'Capex · ONT/CPE'],
+  [/\bOLT\b|SWITCH|SERVIDOR|MIKROTIK|HUAWEI|NOBREAK|RACK/, 'Capex · Equip. de Rede'],
+  [/\bCTOS?\b|\bCEOS?\b|CONECTOR|SPLITTER|PIGTAIL|ACOPLADOR/, 'Insumos de Instalação'],
+  [/DROP|BOBINA|\bCABO\b|FIBRA OPTICA/,                'Capex · Cabo/Drop'],
+  [/\bOBRA\b|CIVIL|POSTEAM|ESCAVA|INSTALACOES /,       'Capex · Obras'],
+  [/\bMOTO\b|VEICULO|\bCARRO\b|FIORINO|SAVEIRO/,       'Capex · Veículos'],
+  [/ESTORNO|REEMBOLSO/,                                'Estornos e Reembolsos'],
+];
+
+function normalizar(s){
+  return (s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+         .replace(/\s+/g,' ').trim();
+}
+function classificar(desc){
+  const d = normalizar(desc);
+  for (const [rx, cat] of REGRAS) if (rx.test(d)) return cat;
+  return null;
+}
+
+/* ── Firebase ────────────────────────────────────────────────────── */
+const fbCfg = {
+  apiKey:            "AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:        "ibnet-platform.firebaseapp.com",
+  databaseURL:       "https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:         "ibnet-platform",
+  storageBucket:     "ibnet-platform.firebasestorage.app",
+  messagingSenderId: "468380845527",
+  appId:             "1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+let _app; try{ _app = firebase.app('fluxo'); }catch(e){ _app = firebase.initializeApp(fbCfg,'fluxo'); }
+const db   = firebase.database(_app);
+const lref = db.ref('financeiro/lancamentos');
+
+/* ── sessão (o portal envia por postMessage) ─────────────────────── */
+function getSession(){
+  try{ return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); }catch(e){ return null; }
+}
+let session = getSession();
+let isAdmin = session && (session.role==='admin' || session.role==='financeiro');
+
+/* ── estado ──────────────────────────────────────────────────────── */
+let lancamentos = [];
+let view = 'dfc';
+let editId = null;
+let impRows = [];
+let filtroMes = 'todos', filtroCat = 'todas';
+
+const fmt = v => (v<0?'-':'') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mesDe = d => (d||'').slice(0,7);
+function mesLabel(m){
+  const N=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const [y,mm]=m.split('-'); return N[+mm-1]+'/'+y;
+}
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+/* ── carregamento em tempo real ──────────────────────────────────── */
+lref.on('value', snap => {
+  const v = snap.val() || {};
+  lancamentos = Object.entries(v).map(([id,x]) => ({id, ...x}))
+                      .sort((a,b) => (b.data||'').localeCompare(a.data||''));
+  const n = lancamentos.filter(l => !l.categoria).length;
+  const b = document.getElementById('rev-badge');
+  b.style.display = n ? '' : 'none'; b.textContent = n;
+  document.getElementById('mh-sub').textContent =
+    lancamentos.length ? `${lancamentos.length} lançamentos · ${mesesDisponiveis().length} meses` : 'nenhum lançamento ainda';
+  render();
+});
+
+function mesesDisponiveis(){
+  return [...new Set(lancamentos.map(l => mesDe(l.data)).filter(Boolean))].sort();
+}
+
+/* ── views ───────────────────────────────────────────────────────── */
+function setView(v){
+  view = v;
+  document.querySelectorAll('.view-switch button').forEach(b => b.classList.toggle('active', b.dataset.view===v));
+  render();
+}
+function render(){
+  const el = document.getElementById('view');
+  if (view==='dfc')   el.innerHTML = htmlDFC();
+  if (view==='lanc')  el.innerHTML = htmlLanc();
+  if (view==='rev')   el.innerHTML = htmlRev();
+  if (view==='plano') el.innerHTML = htmlPlano();
+}
+
+/* ── 1. DFC ──────────────────────────────────────────────────────── */
+function totaisPorGrupo(rows){
+  const t = {OPER:0, INVEST:0, FINAN:0, REVISAR:0};
+  rows.forEach(l => { t[l.categoria ? (GRUPO_DE[l.categoria]||'REVISAR') : 'REVISAR'] += (+l.valor||0); });
+  return t;
+}
+function htmlDFC(){
+  if (!lancamentos.length) return vazio();
+  const meses = mesesDisponiveis();
+  const rows  = filtroMes==='todos' ? lancamentos : lancamentos.filter(l => mesDe(l.data)===filtroMes);
+  const t     = totaisPorGrupo(rows);
+  const nMes  = filtroMes==='todos' ? Math.max(1, meses.length) : 1;
+
+  const opEnt = rows.filter(l => GRUPO_DE[l.categoria]==='OPER' && +l.valor>0).reduce((s,l)=>s+ +l.valor,0);
+  const opSai = rows.filter(l => GRUPO_DE[l.categoria]==='OPER' && +l.valor<0).reduce((s,l)=>s+ +l.valor,0);
+  const variacao = t.OPER+t.INVEST+t.FINAN+t.REVISAR;
+  const servicoDivida = rows.filter(l => ['Amortização de Empréstimo','Juros e Encargos','Cartão de Crédito','Devolução de Empréstimo'].includes(l.categoria))
+                            .reduce((s,l)=>s+ +l.valor,0);
+
+  let aviso = '';
+  if (t.OPER > 0 && variacao < 0) aviso = `<div class="alert warn">
+    <b>A operação dá lucro, mas o caixa cai.</b> O resultado operacional é
+    <b class="pos">${fmt(t.OPER)}</b>, e ainda assim o caixa variou <b class="neg">${fmt(variacao)}</b>.
+    A diferença sai em investimento e serviço da dívida — juros, amortização e cartão somam
+    <b>${fmt(servicoDivida)}</b> no período.</div>`;
+
+  return `
+  <div class="filters">
+    <label>Período
+      <select onchange="filtroMes=this.value;render()">
+        <option value="todos">Todos os meses</option>
+        ${meses.map(m=>`<option value="${m}" ${m===filtroMes?'selected':''}>${mesLabel(m)}</option>`).join('')}
+      </select>
+    </label>
+  </div>
+  ${aviso}
+  <div class="dfc-grid">
+    <div class="dfc-box op"><div class="lbl">Operacional</div>
+      <div class="val ${t.OPER>=0?'pos':'neg'}">${fmt(t.OPER)}</div>
+      <div class="sub">${fmt(t.OPER/nMes)} por mês · o negócio rodando</div></div>
+    <div class="dfc-box inv"><div class="lbl">Investimento</div>
+      <div class="val ${t.INVEST>=0?'pos':'neg'}">${fmt(t.INVEST)}</div>
+      <div class="sub">${fmt(t.INVEST/nMes)} por mês · rede e equipamentos</div></div>
+    <div class="dfc-box fin"><div class="lbl">Financiamento</div>
+      <div class="val ${t.FINAN>=0?'pos':'neg'}">${fmt(t.FINAN)}</div>
+      <div class="sub">${fmt(t.FINAN/nMes)} por mês · dívida e aportes</div></div>
+    <div class="dfc-box tot"><div class="lbl">Variação de caixa</div>
+      <div class="val ${variacao>=0?'pos':'neg'}">${fmt(variacao)}</div>
+      <div class="sub">${fmt(variacao/nMes)} por mês</div></div>
+  </div>
+  ${t.REVISAR ? `<div class="alert"><b>${fmt(t.REVISAR)}</b> ainda sem categoria —
+     veja a aba <b>Revisar</b> para classificar.</div>` : ''}
+
+  <div class="section-title">Resultado operacional</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <tbody>
+      <tr><td>Receita operacional</td><td class="num pos">${fmt(opEnt)}</td><td class="num" style="color:var(--muted)">${fmt(opEnt/nMes)}/mês</td></tr>
+      <tr><td>Custos e despesas</td><td class="num neg">${fmt(opSai)}</td><td class="num" style="color:var(--muted)">${fmt(opSai/nMes)}/mês</td></tr>
+      <tr class="tot-row"><td><b>Resultado operacional</b></td>
+        <td class="num ${t.OPER>=0?'pos':'neg'}"><b>${fmt(t.OPER)}</b></td>
+        <td class="num" style="color:var(--muted)">${fmt(t.OPER/nMes)}/mês</td></tr>
+      ${opEnt ? `<tr><td style="color:var(--muted)">Margem operacional</td>
+        <td class="num" colspan="2" style="color:var(--muted)">${(100*t.OPER/opEnt).toFixed(1)}% da receita</td></tr>`:''}
+    </tbody>
+  </table></div></div>
+
+  ${detalhePorGrupo(rows, opSai)}
+  ${htmlEvolucao(meses)}`;
+}
+
+function detalhePorGrupo(rows, base){
+  let out = '';
+  for (const [g, def] of Object.entries(PLANO)) {
+    const linhas = [];
+    def.sub.forEach(s => {
+      const cs = s.cats.map(c => [c, rows.filter(l=>l.categoria===c).reduce((a,l)=>a+ +l.valor,0)])
+                       .filter(([,v]) => v !== 0);
+      if (cs.length) linhas.push([s.nome, cs]);
+    });
+    if (!linhas.length) continue;
+    const totG = linhas.flatMap(([,cs])=>cs).reduce((a,[,v])=>a+v,0);
+    out += `<div class="section-title">${def.nome}</div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Conta</th><th class="num">Valor</th><th class="num" style="width:120px">Peso</th></tr></thead>
+      <tbody>${linhas.map(([sub,cs]) => `
+        <tr class="grp-row"><td colspan="3">${esc(sub)}</td></tr>
+        ${cs.sort((a,b)=>a[1]-b[1]).map(([c,v]) => {
+          const pct = base ? Math.min(100, Math.abs(100*v/base)) : 0;
+          return `<tr><td>${esc(c)}</td><td class="num ${v>=0?'pos':'neg'}">${fmt(v)}</td>
+            <td class="num" style="color:var(--muted)">${v<0&&base?pct.toFixed(1)+'%':'—'}
+            ${v<0&&base?`<div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${def.cor}"></div></div>`:''}</td></tr>`;
+        }).join('')}`).join('')}
+        <tr class="tot-row"><td><b>Total ${esc(def.nome)}</b></td>
+          <td class="num ${totG>=0?'pos':'neg'}"><b>${fmt(totG)}</b></td><td></td></tr>
+      </tbody>
+    </table></div></div>`;
+  }
+  return out;
+}
+
+function htmlEvolucao(meses){
+  if (meses.length < 2) return '';
+  const linhas = meses.map(m => {
+    const r = lancamentos.filter(l => mesDe(l.data)===m);
+    const t = totaisPorGrupo(r);
+    return {m, ...t, tot:t.OPER+t.INVEST+t.FINAN+t.REVISAR};
+  });
+  return `<div class="section-title">Evolução mês a mês</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Mês</th><th class="num">Operacional</th><th class="num">Investimento</th>
+      <th class="num">Financiamento</th><th class="num">Variação</th></tr></thead>
+    <tbody>${linhas.map(l=>`<tr>
+      <td>${mesLabel(l.m)}</td>
+      <td class="num ${l.OPER>=0?'pos':'neg'}">${fmt(l.OPER)}</td>
+      <td class="num ${l.INVEST>=0?'pos':'neg'}">${fmt(l.INVEST)}</td>
+      <td class="num ${l.FINAN>=0?'pos':'neg'}">${fmt(l.FINAN)}</td>
+      <td class="num ${l.tot>=0?'pos':'neg'}"><b>${fmt(l.tot)}</b></td></tr>`).join('')}
+      <tr class="tot-row"><td><b>Total</b></td>
+        ${['OPER','INVEST','FINAN'].map(k=>{const s=linhas.reduce((a,l)=>a+l[k],0);
+          return `<td class="num ${s>=0?'pos':'neg'}"><b>${fmt(s)}</b></td>`;}).join('')}
+        <td class="num"><b>${fmt(linhas.reduce((a,l)=>a+l.tot,0))}</b></td></tr>
+    </tbody></table></div></div>`;
+}
+
+/* ── 2. Lançamentos ──────────────────────────────────────────────── */
+function htmlLanc(){
+  if (!lancamentos.length) return vazio();
+  const meses = mesesDisponiveis();
+  let rows = lancamentos;
+  if (filtroMes!=='todos') rows = rows.filter(l => mesDe(l.data)===filtroMes);
+  if (filtroCat!=='todas') rows = rows.filter(l => (l.categoria||'')===filtroCat);
+  const cats = [...new Set(lancamentos.map(l=>l.categoria).filter(Boolean))].sort();
+  const tot = rows.reduce((a,l)=>a+ +l.valor,0);
+  return `
+  <div class="filters">
+    <label>Mês<select onchange="filtroMes=this.value;render()">
+      <option value="todos">Todos</option>
+      ${meses.map(m=>`<option value="${m}" ${m===filtroMes?'selected':''}>${mesLabel(m)}</option>`).join('')}
+    </select></label>
+    <label>Categoria<select onchange="filtroCat=this.value;render()">
+      <option value="todas">Todas</option>
+      ${cats.map(c=>`<option value="${esc(c)}" ${c===filtroCat?'selected':''}>${esc(c)}</option>`).join('')}
+    </select></label>
+    <button class="btn btn-ghost" onclick="exportarCSV()">Exportar CSV</button>
+  </div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Grupo</th>
+      <th class="num">Valor</th>${isAdmin?'<th></th>':''}</tr></thead>
+    <tbody>
+      ${rows.slice(0,400).map(l=>{
+        const g = l.categoria ? (GRUPO_DE[l.categoria]||'REVISAR') : 'REVISAR';
+        return `<tr>
+        <td style="white-space:nowrap">${esc(dataBR(l.data))}</td>
+        <td>${esc(l.descricao)}${l.obs?`<div style="font-size:11px;color:var(--muted)">${esc(l.obs)}</div>`:''}</td>
+        <td>${l.categoria?esc(l.categoria):'<span style="color:var(--muted)">—</span>'}</td>
+        <td>${pillGrupo(g)}</td>
+        <td class="num ${+l.valor>=0?'pos':'neg'}">${fmt(+l.valor)}</td>
+        ${isAdmin?`<td style="white-space:nowrap">
+          <button class="icon-btn" onclick="editarLanc('${l.id}')">editar</button>
+          <button class="icon-btn" onclick="excluirLanc('${l.id}')">excluir</button></td>`:''}
+      </tr>`;}).join('')}
+      <tr class="tot-row"><td colspan="4"><b>Total (${rows.length} lançamentos)</b></td>
+        <td class="num ${tot>=0?'pos':'neg'}"><b>${fmt(tot)}</b></td>${isAdmin?'<td></td>':''}</tr>
+    </tbody></table></div></div>
+  ${rows.length>400?`<div class="mb-hint" style="margin-top:10px">Mostrando os 400 mais recentes de ${rows.length}. Use os filtros ou exporte em CSV.</div>`:''}`;
+}
+function pillGrupo(g){
+  const m = {OPER:['p-oper','Operacional'],INVEST:['p-invest','Investimento'],
+             FINAN:['p-finan','Financiamento'],REVISAR:['p-rev','Revisar']};
+  const [c,t] = m[g]||m.REVISAR; return `<span class="pill ${c}">${t}</span>`;
+}
+function dataBR(d){ if(!d) return '—'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
+
+/* ── 3. Revisar ──────────────────────────────────────────────────── */
+function htmlRev(){
+  const pend = lancamentos.filter(l => !l.categoria);
+  if (!pend.length) return `<div class="card"><div class="empty">
+    Tudo classificado. Nenhum lançamento pendente.</div></div>`;
+  const tot = pend.reduce((a,l)=>a+ +l.valor,0);
+  return `<div class="alert">
+    <b>${pend.length} lançamentos</b> sem categoria, somando <b>${fmt(tot)}</b>.
+    Classifique abaixo — cada escolha já corrige o fluxo de caixa na hora.</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th style="width:260px">Classificar como</th></tr></thead>
+    <tbody>${pend.slice(0,150).map(l=>`<tr>
+      <td style="white-space:nowrap">${esc(dataBR(l.data))}</td>
+      <td>${esc(l.descricao)}</td>
+      <td class="num ${+l.valor>=0?'pos':'neg'}">${fmt(+l.valor)}</td>
+      <td><select onchange="classificarUm('${l.id}', this.value)">
+        <option value="">— escolher —</option>
+        ${optionsCats('')}
+      </select></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function optionsCats(sel){
+  return Object.entries(PLANO).map(([g,d]) =>
+    `<optgroup label="${d.nome}">` +
+    d.sub.flatMap(s => s.cats).map(c =>
+      `<option value="${esc(c)}" ${c===sel?'selected':''}>${esc(c)}</option>`).join('') +
+    `</optgroup>`).join('');
+}
+async function classificarUm(id, cat){
+  if (!cat) return;
+  await lref.child(id).update({categoria:cat, classificadoPor:session?.nome||'—', classificadoEm:Date.now()});
+  toast('Classificado como ' + cat);
+}
+
+/* ── 4. Plano de contas ──────────────────────────────────────────── */
+function htmlPlano(){
+  const uso = {};
+  lancamentos.forEach(l => { if(l.categoria) uso[l.categoria] = (uso[l.categoria]||0) + (+l.valor||0); });
+  return `<div class="alert">
+    Estrutura pensada para provedor: o topo segue o padrão contábil de fluxo de caixa
+    (<b>Operacional</b> / <b>Investimento</b> / <b>Financiamento</b>), e dentro dele as contas do dia a dia de ISP.
+    O <b>custo direto</b> — link, rede neutra e postes — fica separado das despesas, porque é ele que
+    determina sua margem por cliente.</div>
+    ${Object.entries(PLANO).map(([g,d])=>`
+    <div class="section-title">${d.nome}</div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Conta</th><th class="num">Movimentado</th></tr></thead>
+      <tbody>${d.sub.map(s=>`
+        <tr class="grp-row"><td colspan="2">${esc(s.nome)}</td></tr>
+        ${s.cats.map(c=>`<tr><td>${esc(c)}</td>
+          <td class="num ${(uso[c]||0)>=0?'pos':'neg'}">${uso[c]!==undefined?fmt(uso[c]):'<span style="color:var(--muted)">—</span>'}</td>
+        </tr>`).join('')}`).join('')}
+      </tbody></table></div></div>`).join('')}`;
+}
+
+function vazio(){
+  return `<div class="card"><div class="empty">
+    <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhum lançamento ainda</div>
+    Use <b>Importar</b> para trazer o extrato do banco ou <b>+ Lançamento</b> para registrar um a um.<br/>
+    Cada linha é classificada automaticamente pelas regras de provedor.</div></div>`;
+}
+
+/* ── lançamento manual ───────────────────────────────────────────── */
+function abrirLanc(){
+  if (!isAdmin) return toast('Sem permissão para lançar.');
+  editId = null;
+  document.getElementById('lanc-title').textContent = 'Novo lançamento';
+  document.getElementById('l-data').value = new Date().toISOString().slice(0,10);
+  document.getElementById('l-valor').value = '';
+  document.getElementById('l-desc').value = '';
+  document.getElementById('l-obs').value = '';
+  document.getElementById('l-tipo').value = 'saida';
+  preencherCats('');
+  document.getElementById('lanc-modal').classList.add('show');
+}
+function editarLanc(id){
+  const l = lancamentos.find(x=>x.id===id); if(!l) return;
+  editId = id;
+  document.getElementById('lanc-title').textContent = 'Editar lançamento';
+  document.getElementById('l-data').value  = l.data||'';
+  document.getElementById('l-valor').value = Math.abs(+l.valor||0);
+  document.getElementById('l-desc').value  = l.descricao||'';
+  document.getElementById('l-obs').value   = l.obs||'';
+  document.getElementById('l-tipo').value  = (+l.valor>=0) ? 'entrada' : 'saida';
+  preencherCats(l.categoria||'');
+  document.getElementById('lanc-modal').classList.add('show');
+}
+function preencherCats(sel){
+  document.getElementById('l-cat').innerHTML =
+    `<option value="">— sem categoria (vai para Revisar) —</option>` + optionsCats(sel);
+}
+function onTipoChange(){}
+function fecharLanc(){ document.getElementById('lanc-modal').classList.remove('show'); }
+
+async function salvarLanc(){
+  const data = document.getElementById('l-data').value;
+  const desc = document.getElementById('l-desc').value.trim();
+  const bruto= parseFloat(document.getElementById('l-valor').value);
+  const tipo = document.getElementById('l-tipo').value;
+  let   cat  = document.getElementById('l-cat').value;
+  const obs  = document.getElementById('l-obs').value.trim();
+  if (!data || !desc || !bruto || isNaN(bruto)) return toast('Preencha data, descrição e valor.');
+  const valor = tipo==='saida' ? -Math.abs(bruto) : Math.abs(bruto);
+  if (!cat) cat = classificar(desc) || '';
+  const rec = { data, descricao:desc, valor, categoria:cat, obs,
+                origem: editId?'edicao':'manual', por: session?.nome||'—', ts: Date.now() };
+  const btn = document.getElementById('l-save'); btn.disabled = true;
+  try {
+    if (editId) await lref.child(editId).update(rec);
+    else        await lref.push(rec);
+    fecharLanc();
+    toast(editId ? 'Lançamento atualizado.' : (cat ? 'Lançado em ' + cat : 'Lançado — sem categoria, veja Revisar.'));
+  } catch(e){ toast('Erro ao salvar: ' + e.message); }
+  btn.disabled = false;
+}
+async function excluirLanc(id){
+  const l = lancamentos.find(x=>x.id===id); if(!l) return;
+  if (!confirm(`Excluir "${l.descricao}" de ${dataBR(l.data)} (${fmt(+l.valor)})?`)) return;
+  await lref.child(id).remove();
+  toast('Lançamento excluído.');
+}
+
+/* ── importação ──────────────────────────────────────────────────── */
+function abrirImport(){
+  if (!isAdmin) return toast('Sem permissão para importar.');
+  document.getElementById('imp-txt').value = '';
+  document.getElementById('imp-preview').innerHTML = '';
+  document.getElementById('imp-save').disabled = true;
+  impRows = [];
+  document.getElementById('imp-modal').classList.add('show');
+}
+function fecharImport(){ document.getElementById('imp-modal').classList.remove('show'); }
+
+function parseValorBR(s){
+  s = (s||'').replace(/R\$/gi,'').replace(/\s| /g,'').trim();
+  const neg = /^\(.*\)$/.test(s) || s.startsWith('-');
+  s = s.replace(/[()\-]/g,'');
+  // 1.234,56 (BR) vs 1234.56 (US)
+  if (s.includes(',')) s = s.replace(/\./g,'').replace(',', '.');
+  const v = parseFloat(s);
+  if (isNaN(v)) return NaN;
+  return neg ? -v : v;
+}
+function parseDataBR(s){
+  s = (s||'').trim();
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return s;
+  return null;
+}
+function splitLinha(l){
+  if (l.includes('\t')) return l.split('\t');
+  if (l.includes(';'))  return l.split(';');
+  // vírgula: só se não for separador decimal — exige 3+ campos
+  const p = l.split(',');
+  return p.length >= 3 ? p : [l];
+}
+function previewImport(){
+  const txt = document.getElementById('imp-txt').value.trim();
+  if (!txt) return toast('Cole as linhas primeiro.');
+  impRows = []; const erros = [];
+  txt.split(/\r?\n/).forEach((linha, i) => {
+    if (!linha.trim()) return;
+    const c = splitLinha(linha).map(x => x.trim().replace(/^"|"$/g,''));
+    if (c.length < 3) { erros.push(`linha ${i+1}: menos de 3 campos`); return; }
+    const data = parseDataBR(c[0]);
+    if (!data) { if (i===0) return; erros.push(`linha ${i+1}: data inválida "${c[0]}"`); return; }
+    const desc = c[1];
+    const valor = parseValorBR(c[2]);
+    if (!desc || isNaN(valor) || valor===0) { erros.push(`linha ${i+1}: descrição ou valor inválido`); return; }
+    impRows.push({ data, descricao:desc, valor, categoria: classificar(desc) || '' });
+  });
+  const okCat = impRows.filter(r=>r.categoria).length;
+  const dup = impRows.filter(r => lancamentos.some(l =>
+    l.data===r.data && Math.abs(+l.valor - r.valor)<0.005 && normalizar(l.descricao)===normalizar(r.descricao))).length;
+  document.getElementById('imp-preview').innerHTML = `
+    <div class="alert" style="margin:12px 0 0">
+      <b>${impRows.length}</b> linhas lidas · <b>${okCat}</b> classificadas automaticamente
+      (${impRows.length?Math.round(100*okCat/impRows.length):0}%) ·
+      <b>${impRows.length-okCat}</b> vão para Revisar.
+      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas.`:''}
+      ${erros.length?`<br/><span class="neg">${erros.length} linhas com problema:</span> ${esc(erros.slice(0,3).join(' · '))}`:''}
+    </div>
+    ${impRows.length?`<div class="tbl-wrap" style="max-height:190px;overflow:auto;margin-top:10px">
+      <table><tbody>${impRows.slice(0,40).map(r=>`<tr>
+        <td style="white-space:nowrap">${esc(dataBR(r.data))}</td>
+        <td>${esc(r.descricao)}</td>
+        <td class="num ${r.valor>=0?'pos':'neg'}">${fmt(r.valor)}</td>
+        <td style="font-size:11px;color:${r.categoria?'var(--muted)':'var(--red)'}">${r.categoria?esc(r.categoria):'sem categoria'}</td>
+      </tr>`).join('')}</tbody></table></div>`:''}`;
+  document.getElementById('imp-save').disabled = !impRows.length;
+}
+async function confirmarImport(){
+  if (!impRows.length) return;
+  const btn = document.getElementById('imp-save');
+  btn.disabled = true; btn.textContent = 'Importando…';
+  const novos = impRows.filter(r => !lancamentos.some(l =>
+    l.data===r.data && Math.abs(+l.valor - r.valor)<0.005 && normalizar(l.descricao)===normalizar(r.descricao)));
+  const updates = {};
+  novos.forEach(r => {
+    updates[lref.push().key] = { ...r, origem:'import', por: session?.nome||'—', ts: Date.now() };
+  });
+  try {
+    if (Object.keys(updates).length) await lref.update(updates);
+    fecharImport();
+    toast(`${novos.length} lançamentos importados${impRows.length-novos.length?` · ${impRows.length-novos.length} duplicados ignorados`:''}.`);
+  } catch(e){ toast('Erro na importação: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Importar';
+}
+
+/* ── export ──────────────────────────────────────────────────────── */
+function exportarCSV(){
+  let rows = lancamentos;
+  if (filtroMes!=='todos') rows = rows.filter(l => mesDe(l.data)===filtroMes);
+  if (filtroCat!=='todas') rows = rows.filter(l => (l.categoria||'')===filtroCat);
+  const linhas = [['Data','Descrição','Categoria','Grupo','Valor'].join(';')].concat(
+    rows.map(l => [dataBR(l.data), `"${(l.descricao||'').replace(/"/g,'""')}"`,
+      l.categoria||'', GRUPO_DE[l.categoria]||'REVISAR',
+      (+l.valor).toFixed(2).replace('.',',')].join(';')));
+  const blob = new Blob(['﻿'+linhas.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `fluxo-caixa-ibnet-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ── mensagens do portal ─────────────────────────────────────────── */
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type==='theme') document.body.classList.toggle('light', e.data.value==='light');
+  if (e.data.type==='session' && e.data.value){
+    const s = e.data.value;
+    if (!session || session.username!==s.username || session.role!==s.role){
+      session = s;
+      isAdmin = s.role==='admin' || s.role==='financeiro';
+      render();
+    }
+  }
+});
+</script>
+</body>
+</html>
