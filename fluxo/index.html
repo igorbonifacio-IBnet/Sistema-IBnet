@@ -322,8 +322,15 @@ const lref = db.ref('financeiro/lancamentos');
 function getSession(){
   try{ return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); }catch(e){ return null; }
 }
+// Quem pode abrir este módulo. Precisa bater usuário E papel.
+const USUARIOS_AUTORIZADOS = ['igor'];
+function autorizado(s){
+  return !!s && s.role === 'admin'
+      && USUARIOS_AUTORIZADOS.includes(String(s.username||'').toLowerCase());
+}
+
 let session = getSession();
-let isAdmin = session && (session.role==='admin' || session.role==='financeiro');
+let isAdmin = autorizado(session);
 
 /* ── estado ──────────────────────────────────────────────────────── */
 let lancamentos = [];
@@ -345,17 +352,24 @@ function toast(msg){
 }
 
 /* ── carregamento em tempo real ──────────────────────────────────── */
-lref.on('value', snap => {
-  const v = snap.val() || {};
-  lancamentos = Object.entries(v).map(([id,x]) => ({id, ...x}))
-                      .sort((a,b) => (b.data||'').localeCompare(a.data||''));
-  const n = lancamentos.filter(l => !l.categoria).length;
-  const b = document.getElementById('rev-badge');
-  b.style.display = n ? '' : 'none'; b.textContent = n;
-  document.getElementById('mh-sub').textContent =
-    lancamentos.length ? `${lancamentos.length} lançamentos · ${mesesDisponiveis().length} meses` : 'nenhum lançamento ainda';
-  render();
-});
+// A assinatura do Firebase só é aberta depois de autorizar o usuário.
+// Antes disso nenhum dado financeiro chega ao navegador.
+let _inscrito = false;
+function iniciarDados(){
+  if (_inscrito || !autorizado(session)) return;
+  _inscrito = true;
+  lref.on('value', snap => {
+    const v = snap.val() || {};
+    lancamentos = Object.entries(v).map(([id,x]) => ({id, ...x}))
+                        .sort((a,b) => (b.data||'').localeCompare(a.data||''));
+    const n = lancamentos.filter(l => !l.categoria).length;
+    const b = document.getElementById('rev-badge');
+    b.style.display = n ? '' : 'none'; b.textContent = n;
+    document.getElementById('mh-sub').textContent =
+      lancamentos.length ? `${lancamentos.length} lançamentos · ${mesesDisponiveis().length} meses` : 'nenhum lançamento ainda';
+    render();
+  });
+}
 
 function mesesDisponiveis(){
   return [...new Set(lancamentos.map(l => mesDe(l.data)).filter(Boolean))].sort();
@@ -369,6 +383,19 @@ function setView(v){
 }
 function render(){
   const el = document.getElementById('view');
+  if (!autorizado(session)){
+    lancamentos = [];
+    document.querySelector('.view-switch')?.style.setProperty('display','none');
+    document.getElementById('mh-sub').textContent = 'acesso restrito';
+    el.innerHTML = `<div class="card" style="text-align:center;padding:48px 24px">
+      <div style="font-size:15px;font-weight:500;margin-bottom:6px">Acesso restrito</div>
+      <div class="muted" style="font-size:13px">
+        O Fluxo de Caixa é de uso exclusivo da diretoria.<br>
+        Entre com um usuário autorizado para visualizar.
+      </div></div>`;
+    return;
+  }
+  document.querySelector('.view-switch')?.style.removeProperty('display');
   if (view==='dfc')   el.innerHTML = htmlDFC();
   if (view==='lanc')  el.innerHTML = htmlLanc();
   if (view==='rev')   el.innerHTML = htmlRev();
@@ -783,11 +810,17 @@ window.addEventListener('message', e => {
     const s = e.data.value;
     if (!session || session.username!==s.username || session.role!==s.role){
       session = s;
-      isAdmin = s.role==='admin' || s.role==='financeiro';
+      isAdmin = autorizado(s);
+      iniciarDados();
       render();
     }
   }
 });
+
+// Tentativa inicial: se a sessão já estiver no sessionStorage (mesma origem
+// do portal), começa a carregar; senão espera o postMessage do portal.
+iniciarDados();
+render();
 </script>
 </body>
 </html>

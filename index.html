@@ -692,7 +692,10 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     </div>
 
     <div class="tab-panel" id="tab-fluxo">
-      <iframe src="fluxo/index.html" id="iframe-fluxo" title="Fluxo de Caixa"></iframe>
+      <!-- src fica em data-src de propósito: o módulo só é carregado depois
+           que canAccess() aprova o usuário. Sem isso, o navegador de qualquer
+           pessoa logada baixaria o fluxo de caixa e assinaria o Firebase. -->
+      <iframe data-src="fluxo/index.html" id="iframe-fluxo" title="Fluxo de Caixa"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-suporte">
@@ -735,7 +738,7 @@ async function hashSenha(senha) {
 
 const ROLE_ACCESS = {
   admin:       ['home', 'comercial', 'financeiro', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'],
-  financeiro:  ['home', 'comercial', 'financeiro', 'fluxo', 'cac'],
+  financeiro:  ['home', 'comercial', 'financeiro', 'cac'],
   comercial:   ['comercial'],
   suporte:     ['suporte', 'ponto'],
   funcionario: ['ponto'],
@@ -781,8 +784,21 @@ function getSession() {
 function setSession(u) { sessionStorage.setItem('ibnet_session', JSON.stringify(u)); }
 function clearSession() { sessionStorage.removeItem('ibnet_session'); }
 
-function canAccess(role, tab) {
-  return (ROLE_ACCESS[role] || []).includes(tab);
+// Abas restritas a usuários específicos, além da checagem de papel.
+// Mesmo que outro usuário venha a ser 'admin' no futuro, só quem estiver
+// listado aqui enxerga a aba.
+const TAB_USERS = {
+  fluxo: ['igor'],
+};
+
+function canAccess(role, tab, username) {
+  if (!(ROLE_ACCESS[role] || []).includes(tab)) return false;
+  const permitidos = TAB_USERS[tab];
+  if (permitidos) {
+    const u = (username ?? getSession()?.username ?? '').toLowerCase();
+    if (!permitidos.includes(u)) return false;
+  }
+  return true;
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────
@@ -824,12 +840,26 @@ function bootPlatform(session) {
   ['home', 'comercial', 'financeiro', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
-    const hasAccess = canAccess(session.role, tab);
+    const hasAccess = canAccess(session.role, tab, session.username);
+    // Abas restritas a usuários específicos somem por completo em vez de
+    // aparecer esmaecidas com cadeado — quem não pode ver nem sabe que existem.
+    const restrita = !!TAB_USERS[tab];
     if (btn) {
-      btn.style.opacity       = hasAccess ? '1' : '.4';
-      btn.style.pointerEvents = hasAccess ? 'auto' : 'none';
+      if (restrita && !hasAccess) {
+        btn.style.display = 'none';
+      } else {
+        btn.style.display       = '';
+        btn.style.opacity       = hasAccess ? '1' : '.4';
+        btn.style.pointerEvents = hasAccess ? 'auto' : 'none';
+      }
     }
     if (lockEl) lockEl.style.display = hasAccess ? 'none' : '';
+
+    // Só carrega o iframe de abas restritas se o usuário tiver acesso.
+    const frame = document.getElementById('iframe-' + tab);
+    if (frame && frame.dataset.src && hasAccess && !frame.src) {
+      frame.src = frame.dataset.src;
+    }
   });
 
   // Abre a primeira aba acessível (Home se disponível, senão Comercial)
@@ -842,7 +872,7 @@ function bootPlatform(session) {
 
 function switchTab(tab) {
   const session = getSession();
-  if (!session || !canAccess(session.role, tab)) return;
+  if (!session || !canAccess(session.role, tab, session.username)) return;
 
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
