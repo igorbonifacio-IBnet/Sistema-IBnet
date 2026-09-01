@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "comercial":  { ".read": true, ".write": true },
+    "ponto":      { ".read": true, ".write": true },
+    "suporte":    { ".read": true, ".write": true },
+    "cac":        { ".read": true, ".write": true },
+    "logs":       { ".read": true, ".write": true },
+
+    "financeiro": {
+      ".read":  "auth != null && auth.uid === 'AQAT4K9Gy9O9iRJF1Ed7nZ378kJ2'",
+      ".write": "auth != null && auth.uid === 'AQAT4K9Gy9O9iRJF1Ed7nZ378kJ2'"
+    }
+  }
+}
