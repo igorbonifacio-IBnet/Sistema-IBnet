@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Fluxo de Caixa — IBnet</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -115,6 +116,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 
 .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
 .loading{text-align:center;padding:40px;color:var(--muted)}
+.muted{color:var(--muted)}
 .bar-track{height:6px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:5px}
 .bar-fill{height:100%;border-radius:99px}
 @media(max-width:640px){
@@ -132,6 +134,8 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <div class="mh-sub" id="mh-sub">carregando…</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-ghost btn-sm" id="btn-sair-fin" style="display:none"
+            onclick="sairFinanceiro()" title="Encerrar a sessão do financeiro neste navegador">Sair</button>
     <button class="btn btn-ghost btn-sm" onclick="abrirImport()">Importar</button>
     <button class="btn btn-sm" onclick="abrirLanc()">+ Lançamento</button>
   </div>
@@ -146,6 +150,26 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   </div>
   <div id="view"><div class="loading">Carregando lançamentos…</div></div>
 </main>
+
+<!-- modal de login do financeiro (Firebase Auth) -->
+<div class="modal-ov" id="auth-modal">
+  <div class="modal-box" style="max-width:380px">
+    <h3>Acesso ao financeiro</h3>
+    <p class="muted" style="font-size:13px;line-height:1.55;margin-bottom:16px">
+      Os dados do fluxo de caixa são protegidos por login próprio.
+      Entre com sua conta para visualizar.
+    </p>
+    <div class="mb-field"><label>E-mail</label>
+      <input type="email" id="au-email" autocomplete="username" placeholder="seu@email.com"/></div>
+    <div class="mb-field"><label>Senha</label>
+      <input type="password" id="au-pass" autocomplete="current-password"
+             placeholder="••••••••" onkeydown="if(event.key==='Enter')fazerLogin()"/></div>
+    <div id="au-erro" class="alert warn" style="display:none;margin:12px 0 0;font-size:12.5px"></div>
+    <div class="mb-actions" style="margin-top:18px">
+      <button class="btn" id="au-btn" onclick="fazerLogin()">Entrar</button>
+    </div>
+  </div>
+</div>
 
 <!-- modal lançamento -->
 <div class="modal-ov" id="lanc-modal">
@@ -351,6 +375,64 @@ function toast(msg){
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3200);
 }
 
+/* ── autenticação do financeiro ──────────────────────────────────── */
+// As regras do Realtime Database restringem financeiro/* ao UID do dono.
+// A sessão do Firebase persiste no navegador — a senha é pedida uma vez só.
+const auth = firebase.auth(_app);
+try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e){}
+
+function abrirAuth(){
+  const m = document.getElementById('auth-modal');
+  if (!m.classList.contains('show')){
+    m.classList.add('show');
+    const e = document.getElementById('au-email');
+    if (!e.value && session?.email) e.value = session.email;
+    setTimeout(()=> (e.value ? document.getElementById('au-pass') : e).focus(), 60);
+  }
+}
+function fecharAuth(){
+  document.getElementById('auth-modal').classList.remove('show');
+  document.getElementById('au-pass').value = '';
+  document.getElementById('au-erro').style.display = 'none';
+}
+function erroAuth(msg){
+  const el = document.getElementById('au-erro');
+  el.textContent = msg; el.style.display = '';
+}
+function msgErroAuth(e){
+  const c = e && e.code || '';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c))
+    return 'E-mail ou senha incorretos.';
+  if (/invalid-email/.test(c))          return 'E-mail inválido.';
+  if (/too-many-requests/.test(c))      return 'Muitas tentativas. Aguarde alguns minutos.';
+  if (/network-request-failed/.test(c)) return 'Sem conexão com a internet.';
+  if (/operation-not-allowed/.test(c))  return 'Login por e-mail/senha não está ativado no Firebase.';
+  if (/user-disabled/.test(c))          return 'Esta conta está desativada.';
+  return 'Não foi possível entrar. ' + (e && e.message || '');
+}
+function fazerLogin(){
+  const email = document.getElementById('au-email').value.trim();
+  const pass  = document.getElementById('au-pass').value;
+  const btn   = document.getElementById('au-btn');
+  if (!email || !pass){ erroAuth('Preencha e-mail e senha.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(()  => { document.getElementById('au-pass').value=''; })
+    .catch(e  => { erroAuth(msgErroAuth(e)); })
+    .then(()  => { btn.disabled=false; btn.textContent='Entrar'; });
+}
+function sairFinanceiro(){
+  auth.signOut().then(()=>{
+    lref.off(); _inscrito=false; lancamentos=[];
+    render(); abrirAuth(); toast('Você saiu do financeiro.');
+  });
+}
+auth.onAuthStateChanged(u => {
+  const b = document.getElementById('btn-sair-fin');
+  if (b) b.style.display = u ? '' : 'none';
+  if (u){ fecharAuth(); iniciarDados(); }
+});
+
 /* ── carregamento em tempo real ──────────────────────────────────── */
 // A assinatura do Firebase só é aberta depois de autorizar o usuário.
 // Antes disso nenhum dado financeiro chega ao navegador.
@@ -367,7 +449,19 @@ function iniciarDados(){
     b.style.display = n ? '' : 'none'; b.textContent = n;
     document.getElementById('mh-sub').textContent =
       lancamentos.length ? `${lancamentos.length} lançamentos · ${mesesDisponiveis().length} meses` : 'nenhum lançamento ainda';
+    fecharAuth();
     render();
+  }, err => {
+    // As regras negaram a leitura: solta o listener e pede login.
+    lref.off(); _inscrito = false;
+    const c = (err && (err.code || err.message) || '') + '';
+    if (/permission|denied/i.test(c)){
+      document.getElementById('mh-sub').textContent = 'login necessário';
+      abrirAuth();
+    } else {
+      document.getElementById('mh-sub').textContent = 'erro ao carregar';
+      toast('Erro ao carregar: ' + c);
+    }
   });
 }
 
