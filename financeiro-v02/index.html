@@ -1270,8 +1270,19 @@ function primeiraPeloMes(txt, diaFallback, hojeISO){
   const dia = +br[1], mes = +br[2];
   if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return primeiraPorDia(diaFallback, 0, hojeISO);
   if (br[3]){ const a = +br[3]; return ocorrenciaNoMes(a < 100 ? 2000 + a : a, mes, dia); }
+  // Sem ano na planilha, "05/09" pode ser 2026 ou 2027. A escolha ingênua —
+  // a próxima ocorrência futura — erra por um ano inteiro e em silêncio se a
+  // importação acontecer poucos dias DEPOIS do vencimento, que é o caso mais
+  // provável de todos: a pessoa monta a planilha e importa na semana seguinte.
+  // Por isso o ano corrente ganha enquanto estiver dentro da janela de
+  // atraso; passou disso, aí sim é a do ano que vem.
+  const ATRASO_OK = 75;                     // dias
   const [Y,M,D] = hojeISO.split('-').map(Number);
-  const ano = (mes > M || (mes === M && dia >= D)) ? Y : Y + 1;
+  const hj = Date.UTC(Y, M-1, D);
+  const cand = a => { const s = ocorrenciaNoMes(a, mes, dia).split('-').map(Number);
+                      return Date.UTC(s[0], s[1]-1, s[2]); };
+  const dias = ms => (ms - hj) / 86400000;
+  const ano = dias(cand(Y)) >= -ATRASO_OK ? Y : Y + 1;
   return ocorrenciaNoMes(ano, mes, dia);
 }
 function ocorrenciaNoMes(ano, mes, dia){
@@ -1458,7 +1469,9 @@ function previewImpDiv(){
         const cr = cronogramaDe(r);
         return `<tr${r._dup?' style="opacity:.45"':''}>
         <td>${esc(r.credor)}${r._dup?' <span class="muted" style="font-size:11px">(já existe)</span>':''}</td>
-        <td style="font-size:12px">${esc(r.descricao||'—')}</td>
+        <td style="font-size:12px">${esc(r.descricao||'—')}
+          ${variavel(r) ? `<div style="font-size:10px;color:var(--muted)">${
+            cr.map(p=>`${mesLabel(p.mes)} ${fmt(p.valor)}`).join(' · ')}</div>` : ''}</td>
         <td class="num neg">${variavel(r)
           ? `<span style="font-size:11px">${fmt(Math.min(...r.valores))} a ${fmt(Math.max(...r.valores))}</span>
              <div style="font-size:10px;color:var(--muted)">valores diferentes por mês</div>`
