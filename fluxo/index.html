@@ -145,6 +145,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   <div class="view-switch">
     <button class="active" data-view="dfc"   onclick="setView('dfc')">Fluxo de Caixa</button>
     <button data-view="lanc"   onclick="setView('lanc')">Lançamentos</button>
+    <button data-view="div"    onclick="setView('div')">Dívida</button>
     <button data-view="rev"    onclick="setView('rev')">Revisar <span class="vs-badge" id="rev-badge" style="display:none">0</span></button>
     <button data-view="plano"  onclick="setView('plano')">Plano de Contas</button>
   </div>
@@ -192,6 +193,45 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <div class="mb-actions">
       <button class="btn btn-ghost" onclick="fecharLanc()">Cancelar</button>
       <button class="btn" id="l-save" onclick="salvarLanc()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal dívida -->
+<div class="modal-ov" id="div-modal">
+  <div class="modal-box" style="max-width:580px">
+    <h3 id="div-title">Nova dívida</h3>
+    <div class="mb-row">
+      <div class="mb-field"><label>Credor</label>
+        <input type="text" id="d-credor" placeholder="Ex.: Cartão XP, Banco do Brasil, Fornecedor"/></div>
+      <div class="mb-field"><label>Tipo</label><select id="d-tipo"></select></div>
+    </div>
+    <div class="mb-field"><label>Descrição — o que foi comprado/financiado</label>
+      <input type="text" id="d-desc" placeholder="Ex.: 200 ONTs para expansão"/></div>
+    <div class="mb-row">
+      <div class="mb-field"><label>Valor da parcela (R$)</label>
+        <input type="number" step="0.01" id="d-parcela" placeholder="0,00" oninput="previaDivida()"/></div>
+      <div class="mb-field"><label>Nº total de parcelas</label>
+        <input type="number" step="1" min="1" id="d-nparc" placeholder="12" oninput="previaDivida()"/></div>
+    </div>
+    <div class="mb-row">
+      <div class="mb-field"><label>Vencimento da 1ª parcela</label>
+        <input type="date" id="d-primeira" oninput="previaDivida()"/></div>
+      <div class="mb-field"><label>Parcelas já pagas</label>
+        <input type="number" step="1" min="0" id="d-pagas" placeholder="0" oninput="previaDivida()"/></div>
+    </div>
+    <div class="mb-field"><label>Conta do plano (onde a parcela entra no fluxo)</label>
+      <select id="d-cat"></select></div>
+    <div class="mb-row">
+      <div class="mb-field"><label>Valor à vista (opcional)</label>
+        <input type="number" step="0.01" id="d-avista" placeholder="preço sem juros" oninput="previaDivida()"/></div>
+      <div class="mb-field"><label>Observação</label>
+        <input type="text" id="d-obs" placeholder="opcional"/></div>
+    </div>
+    <div id="d-previa" class="alert" style="display:none;margin:6px 0 0;font-size:12.5px"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharDivida()">Cancelar</button>
+      <button class="btn" id="d-save" onclick="salvarDivida()">Salvar</button>
     </div>
   </div>
 </div>
@@ -341,6 +381,7 @@ const fbCfg = {
 let _app; try{ _app = firebase.app('fluxo'); }catch(e){ _app = firebase.initializeApp(fbCfg,'fluxo'); }
 const db   = firebase.database(_app);
 const lref = db.ref('financeiro/lancamentos');
+const dref = db.ref('financeiro/dividas');
 
 /* ── sessão (o portal envia por postMessage) ─────────────────────── */
 function getSession(){
@@ -358,10 +399,23 @@ let isAdmin = autorizado(session);
 
 /* ── estado ──────────────────────────────────────────────────────── */
 let lancamentos = [];
+let dividas = [];
 let view = 'dfc';
-let editId = null;
+let editId = null, editDiv = null;
 let impRows = [];
 let filtroMes = 'todos', filtroCat = 'todas';
+
+// Natureza da dívida. Serve para separar o que é dívida de crescimento
+// (capex parcelado) do que é dívida de operação — leituras bem diferentes.
+const TIPOS_DIVIDA = {
+  capex:      'Capex parcelado',
+  emprestimo: 'Empréstimo / financiamento',
+  cartao:     'Cartão de crédito',
+  fornecedor: 'Parcelamento com fornecedor',
+  veiculo:    'Veículo',
+  imposto:    'Parcelamento de imposto',
+  outro:      'Outro'
+};
 
 const fmt = v => (v<0?'-':'') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -423,7 +477,7 @@ function fazerLogin(){
 }
 function sairFinanceiro(){
   auth.signOut().then(()=>{
-    lref.off(); _inscrito=false; lancamentos=[];
+    lref.off(); dref.off(); _inscrito=false; lancamentos=[]; dividas=[];
     render(); abrirAuth(); toast('Você saiu do financeiro.');
   });
 }
@@ -453,7 +507,7 @@ function iniciarDados(){
     render();
   }, err => {
     // As regras negaram a leitura: solta o listener e pede login.
-    lref.off(); _inscrito = false;
+    lref.off(); dref.off(); _inscrito = false;
     const c = (err && (err.code || err.message) || '') + '';
     if (/permission|denied/i.test(c)){
       document.getElementById('mh-sub').textContent = 'login necessário';
@@ -463,6 +517,16 @@ function iniciarDados(){
       toast('Erro ao carregar: ' + c);
     }
   });
+
+  // Cronograma de dívida — base própria, mesma proteção de financeiro/*.
+  // Assinatura independente: se der erro aqui, o listener de lançamentos
+  // já cuidou de pedir login, então basta não quebrar a tela.
+  dref.on('value', s2 => {
+    const d = s2.val() || {};
+    dividas = Object.entries(d).map(([id,x]) => ({id, ...x}))
+                    .sort((a,b) => (a.primeiraData||'').localeCompare(b.primeiraData||''));
+    if (view === 'div') render();
+  }, () => { dividas = []; });
 }
 
 function mesesDisponiveis(){
@@ -478,7 +542,7 @@ function setView(v){
 function render(){
   const el = document.getElementById('view');
   if (!autorizado(session)){
-    lancamentos = [];
+    lancamentos = []; dividas = [];
     document.querySelector('.view-switch')?.style.setProperty('display','none');
     document.getElementById('mh-sub').textContent = 'acesso restrito';
     el.innerHTML = `<div class="card" style="text-align:center;padding:48px 24px">
@@ -492,6 +556,7 @@ function render(){
   document.querySelector('.view-switch')?.style.removeProperty('display');
   if (view==='dfc')   el.innerHTML = htmlDFC();
   if (view==='lanc')  el.innerHTML = htmlLanc();
+  if (view==='div')   el.innerHTML = htmlDivida();
   if (view==='rev')   el.innerHTML = htmlRev();
   if (view==='plano') el.innerHTML = htmlPlano();
 }
@@ -789,6 +854,276 @@ async function excluirLanc(id){
   if (!confirm(`Excluir "${l.descricao}" de ${dataBR(l.data)} (${fmt(+l.valor)})?`)) return;
   await lref.child(id).remove();
   toast('Lançamento excluído.');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CRONOGRAMA DE DÍVIDA
+   O contrato é cadastrado uma vez; o cronograma mês a mês é *derivado*,
+   nunca digitado. É isso que impede a planilha de parcelas de
+   desatualizar — não existe linha para esquecer de atualizar.
+   ══════════════════════════════════════════════════════════════════ */
+
+// Soma n meses preservando o dia. Se o mês destino não tiver aquele dia
+// (31/01 + 1 mês), cai no último dia do mês — que é como banco faz.
+function somaMeses(iso, n){
+  const [y,m,d] = (iso||'').split('-').map(Number);
+  if (!y || !m) return iso;
+  const alvo   = new Date(Date.UTC(y, m - 1 + n, 1));
+  const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth()+1, 0)).getUTCDate();
+  const dia    = Math.min(d || 1, ultimo);
+  return `${alvo.getUTCFullYear()}-${String(alvo.getUTCMonth()+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+}
+function proxMes(mes){ return somaMeses(mes + '-01', 1).slice(0,7); }
+
+function cronogramaDe(dv){
+  const n     = Math.max(0, Math.round(+dv.parcelas || 0));
+  const v     = +dv.valorParcela || 0;
+  const pagas = Math.max(0, Math.round(+dv.pagas || 0));
+  const out = [];
+  for (let i = 1; i <= n; i++){
+    const venc = somaMeses(dv.primeiraData, i - 1);
+    out.push({ n:i, venc, mes:(venc||'').slice(0,7), valor:v, paga: i <= pagas });
+  }
+  return out;
+}
+const saldoDe  = dv => cronogramaDe(dv).filter(p => !p.paga).reduce((a,p) => a + p.valor, 0);
+const quitada  = dv => dv.status === 'quitada' ||
+                       Math.round(+dv.pagas||0) >= Math.round(+dv.parcelas||0);
+
+function htmlDivida(){
+  const hoje     = new Date().toISOString().slice(0,10);
+  const mesAtual = hoje.slice(0,7);
+  const btnNova  = isAdmin ? `<button class="btn" onclick="abrirDivida()">+ Nova dívida</button>` : '';
+
+  if (!dividas.length) return `
+    <div class="alert">
+      Cadastre aqui cada compra parcelada, empréstimo e financiamento. O cronograma
+      mês a mês é montado sozinho — inclusive <b>quando cada parcela acaba</b>, que é
+      a informação que decide se dá para investir agora ou esperar mais um mês.
+    </div>
+    <div class="card"><div class="empty">
+      <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma dívida cadastrada</div>
+      Comece pelas parcelas que você já paga todo mês.<br/><br/>${btnNova}
+    </div></div>`;
+
+  const ativas   = dividas.filter(d => !quitada(d));
+  const quitadas = dividas.filter(d =>  quitada(d));
+
+  /* agenda mês a mês — só parcelas em aberto */
+  const agenda = {};
+  let atrasadas = 0, vlrAtraso = 0;
+  ativas.forEach(d => cronogramaDe(d).forEach(p => {
+    if (p.paga || !p.mes) return;
+    const a = (agenda[p.mes] = agenda[p.mes] || { total:0, qtd:0, fim:[] });
+    a.total += p.valor; a.qtd++;
+    if (p.n === Math.round(+d.parcelas||0)) a.fim.push(d);
+    if (p.venc < hoje){ atrasadas++; vlrAtraso += p.valor; }
+  }));
+
+  const chaves     = Object.keys(agenda).sort();
+  const saldoTotal = ativas.reduce((a,d) => a + saldoDe(d), 0);
+  const mesFim     = chaves[chaves.length-1] || null;
+  const doMes      = m => (agenda[m] ? agenda[m].total : 0);
+
+  /* linha contínua de meses — buracos aparecem como zero */
+  const ini   = (chaves.length && chaves[0] < mesAtual) ? chaves[0] : mesAtual;
+  const linha = [];
+  for (let m = ini; mesFim && m <= mesFim && linha.length < 24; m = proxMes(m)) linha.push(m);
+
+  const atual  = doMes(mesAtual);
+  const m6     = somaMeses(mesAtual+'-01', 6).slice(0,7);
+  const alivio = atual - doMes(m6);
+  const prox12 = linha.filter(m => m >= mesAtual).slice(0,12).reduce((a,m)=>a+doMes(m),0);
+  const pico   = Math.max(1, ...linha.map(doMes));
+
+  const fins    = chaves.filter(m => m >= mesAtual && agenda[m].fim.length);
+  const proxFim = fins.length ? { mes:fins[0], itens:agenda[fins[0]].fim } : null;
+
+  return `
+  <div class="dfc-grid">
+    <div class="dfc-box fin"><div class="lbl">Saldo devedor</div>
+      <div class="val neg">${fmt(-saldoTotal)}</div>
+      <div class="sub">${ativas.length} contrato${ativas.length===1?'':'s'} em aberto</div></div>
+    <div class="dfc-box fin"><div class="lbl">Sai este mês</div>
+      <div class="val neg">${fmt(-atual)}</div>
+      <div class="sub">${agenda[mesAtual]?agenda[mesAtual].qtd:0} parcela(s) em ${mesLabel(mesAtual)}</div></div>
+    <div class="dfc-box fin"><div class="lbl">Próximos 12 meses</div>
+      <div class="val neg">${fmt(-prox12)}</div>
+      <div class="sub">${prox12?fmt(-prox12/12)+' / mês em média':'—'}</div></div>
+    <div class="dfc-box tot"><div class="lbl">Livre de dívida em</div>
+      <div class="val">${mesFim?mesLabel(mesFim):'—'}</div>
+      <div class="sub">última parcela cadastrada</div></div>
+  </div>
+
+  ${atrasadas ? `<div class="alert warn" style="margin-top:14px">
+    <b>${atrasadas} parcela(s) já venceram</b> e não estão marcadas como pagas,
+    somando <b>${fmt(-vlrAtraso)}</b>. Se já pagou, use o botão <b>+1 paga</b> na tabela
+    para o cronograma voltar a bater.</div>` : ''}
+
+  ${proxFim ? `<div class="alert" style="margin-top:14px">
+    <b>Próximo alívio:</b> em ${mesLabel(proxFim.mes)} encerra
+    ${proxFim.itens.map(d=>`<b>${esc(d.credor||d.descricao||'—')}</b>`).join(' e ')} —
+    ${fmt(proxFim.itens.reduce((a,d)=>a+(+d.valorParcela||0),0))}/mês que deixam de sair do caixa.
+    ${alivio>0?`Daqui a 6 meses (${mesLabel(m6)}) o compromisso mensal cai
+      de ${fmt(atual)} para ${fmt(doMes(m6))} — <b>${fmt(alivio)}/mês liberados</b>.`:''}
+    </div>` : ''}
+
+  <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Cronograma mês a mês</span>${btnNova}</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Mês</th><th class="num">Parcelas</th><th class="num">Valor</th>
+      <th style="width:32%">Peso no mês</th><th>Encerra neste mês</th></tr></thead>
+    <tbody>
+      ${linha.map(m=>{
+        const a = agenda[m], v = doMes(m);
+        return `<tr${m===mesAtual?' style="background:rgba(221,92,51,.07)"':''}>
+          <td style="white-space:nowrap">${mesLabel(m)}${m===mesAtual?' <span class="muted" style="font-size:11px">· atual</span>':''}</td>
+          <td class="num">${a?a.qtd:'—'}</td>
+          <td class="num ${v?'neg':'muted'}">${v?fmt(-v):'—'}</td>
+          <td><div class="bar-track"><div class="bar-fill" style="width:${Math.round(100*v/pico)}%;background:var(--yellow)"></div></div></td>
+          <td style="font-size:12px">${a&&a.fim.length?a.fim.map(d=>esc(d.credor||d.descricao||'—')).join(', '):'<span class="muted">—</span>'}</td>
+        </tr>`;}).join('')}
+      <tr class="tot-row"><td><b>Total em aberto</b></td><td class="num"></td>
+        <td class="num neg"><b>${fmt(-saldoTotal)}</b></td><td colspan="2"></td></tr>
+    </tbody></table></div></div>
+
+  <div class="section-title">Contratos</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Credor / descrição</th><th>Tipo</th><th class="num">Parcela</th>
+      <th style="width:150px">Andamento</th><th class="num">Saldo</th><th>Última</th>${isAdmin?'<th></th>':''}</tr></thead>
+    <tbody>
+      ${ativas.map(d=>{
+        const n=Math.round(+d.parcelas||0), pg=Math.round(+d.pagas||0);
+        const cr=cronogramaDe(d), ult=cr.length?cr[cr.length-1].mes:null;
+        return `<tr>
+          <td><b>${esc(d.credor||'—')}</b>${d.descricao?`<div style="font-size:11px;color:var(--muted)">${esc(d.descricao)}</div>`:''}</td>
+          <td style="font-size:12px">${esc(TIPOS_DIVIDA[d.tipo]||d.tipo||'—')}</td>
+          <td class="num neg">${fmt(-(+d.valorParcela||0))}</td>
+          <td><div style="font-size:11px;color:var(--muted)">${pg} de ${n} pagas</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${n?Math.round(100*pg/n):0}%;background:var(--green)"></div></div></td>
+          <td class="num neg">${fmt(-saldoDe(d))}</td>
+          <td style="white-space:nowrap;font-size:12px">${ult?mesLabel(ult):'—'}</td>
+          ${isAdmin?`<td style="white-space:nowrap">
+            <button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Marcar mais uma parcela como paga">+1 paga</button>
+            <button class="icon-btn" onclick="editarDivida('${d.id}')">editar</button>
+            <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
+        </tr>`;}).join('')}
+      ${ativas.length?'':'<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">Nenhum contrato em aberto.</td></tr>'}
+    </tbody></table></div></div>
+
+  ${quitadas.length?`
+  <div class="section-title">Quitados (${quitadas.length})</div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Credor / descrição</th><th class="num">Parcelas</th><th class="num">Total pago</th>${isAdmin?'<th></th>':''}</tr></thead>
+    <tbody>${quitadas.map(d=>`<tr>
+      <td>${esc(d.credor||'—')}${d.descricao?`<div style="font-size:11px;color:var(--muted)">${esc(d.descricao)}</div>`:''}</td>
+      <td class="num">${Math.round(+d.parcelas||0)}x</td>
+      <td class="num neg">${fmt(-(Math.round(+d.parcelas||0)*(+d.valorParcela||0)))}</td>
+      ${isAdmin?`<td style="white-space:nowrap">
+        <button class="icon-btn" onclick="pagarParcela('${d.id}',-1)" title="Desfazer a última baixa">−1 paga</button>
+        <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
+    </tr>`).join('')}</tbody></table></div></div>`:''}`;
+}
+
+/* ── cadastro de dívida ──────────────────────────────────────────── */
+function optionsTipos(sel){
+  return Object.entries(TIPOS_DIVIDA).map(([k,v]) =>
+    `<option value="${k}" ${k===sel?'selected':''}>${esc(v)}</option>`).join('');
+}
+function preencherFormDivida(d){
+  document.getElementById('d-credor').value   = d.credor || '';
+  document.getElementById('d-desc').value     = d.descricao || '';
+  document.getElementById('d-tipo').innerHTML = optionsTipos(d.tipo || 'capex');
+  document.getElementById('d-parcela').value  = d.valorParcela != null ? Math.abs(+d.valorParcela) : '';
+  document.getElementById('d-nparc').value    = d.parcelas || '';
+  document.getElementById('d-primeira').value = d.primeiraData || '';
+  document.getElementById('d-pagas').value    = d.pagas != null ? d.pagas : 0;
+  document.getElementById('d-avista').value   = d.valorAVista || '';
+  document.getElementById('d-obs').value      = d.obs || '';
+  document.getElementById('d-cat').innerHTML  =
+    `<option value="">— sem conta definida —</option>` + optionsCats(d.categoria || '');
+  previaDivida();
+  document.getElementById('div-modal').classList.add('show');
+}
+function abrirDivida(){
+  if (!isAdmin) return toast('Sem permissão para cadastrar dívida.');
+  editDiv = null;
+  document.getElementById('div-title').textContent = 'Nova dívida';
+  preencherFormDivida({ primeiraData: new Date().toISOString().slice(0,10), pagas:0 });
+}
+function editarDivida(id){
+  const d = dividas.find(x=>x.id===id); if(!d) return;
+  editDiv = id;
+  document.getElementById('div-title').textContent = 'Editar dívida';
+  preencherFormDivida(d);
+}
+function fecharDivida(){ document.getElementById('div-modal').classList.remove('show'); }
+
+function previaDivida(){
+  const el = document.getElementById('d-previa');
+  const v  = Math.abs(parseFloat(document.getElementById('d-parcela').value) || 0);
+  const n  = Math.round(+document.getElementById('d-nparc').value || 0);
+  const p  = Math.round(+document.getElementById('d-pagas').value || 0);
+  const d1 = document.getElementById('d-primeira').value;
+  const av = Math.abs(parseFloat(document.getElementById('d-avista').value) || 0);
+  if (!v || !n || !d1){ el.style.display='none'; return; }
+  const total = v * n;
+  const rest  = Math.max(0, n - p);
+  const fim   = somaMeses(d1, n - 1).slice(0,7);
+  const juros = av ? total - av : 0;
+  el.style.display = '';
+  el.innerHTML = `Total do contrato <b>${fmt(total)}</b> em ${n}x de ${fmt(v)} ·
+    faltam <b>${rest}</b> parcela(s) = <b>${fmt(rest*v)}</b> ·
+    última em <b>${mesLabel(fim)}</b>` +
+    (av && juros > 0
+      ? `<br/>À vista sairia ${fmt(av)} — o parcelamento custa <b class="neg">${fmt(juros)}</b> a mais
+         (${(100*juros/av).toFixed(1)}% sobre o valor).`
+      : '');
+}
+
+async function salvarDivida(){
+  const credor = document.getElementById('d-credor').value.trim();
+  const desc   = document.getElementById('d-desc').value.trim();
+  const tipo   = document.getElementById('d-tipo').value;
+  const vparc  = Math.abs(parseFloat(document.getElementById('d-parcela').value));
+  const nparc  = Math.round(+document.getElementById('d-nparc').value || 0);
+  const prim   = document.getElementById('d-primeira').value;
+  const pagas  = Math.max(0, Math.round(+document.getElementById('d-pagas').value || 0));
+  const cat    = document.getElementById('d-cat').value;
+  const avista = Math.abs(parseFloat(document.getElementById('d-avista').value)) || null;
+  const obs    = document.getElementById('d-obs').value.trim();
+
+  if (!credor)                    return toast('Informe o credor.');
+  if (!vparc || isNaN(vparc))     return toast('Informe o valor da parcela.');
+  if (!nparc || nparc < 1)        return toast('Informe o número de parcelas.');
+  if (!prim)                      return toast('Informe o vencimento da 1ª parcela.');
+  if (pagas > nparc)              return toast('Parcelas pagas não pode ser maior que o total.');
+
+  const rec = { credor, descricao:desc, tipo, valorParcela:vparc, parcelas:nparc,
+                primeiraData:prim, pagas, categoria:cat, valorAVista:avista, obs,
+                status: pagas >= nparc ? 'quitada' : 'ativa',
+                por: session?.nome || '—', ts: Date.now() };
+  const btn = document.getElementById('d-save'); btn.disabled = true;
+  try {
+    if (editDiv) await dref.child(editDiv).update(rec);
+    else         await dref.push(rec);
+    fecharDivida();
+    toast(editDiv ? 'Dívida atualizada.' : `${credor} cadastrada — ${nparc}x de ${fmt(vparc)}.`);
+  } catch(e){ toast('Erro ao salvar: ' + e.message); }
+  btn.disabled = false;
+}
+async function pagarParcela(id, delta){
+  const d = dividas.find(x=>x.id===id); if(!d) return;
+  const n    = Math.round(+d.parcelas||0);
+  const novo = Math.min(n, Math.max(0, Math.round(+d.pagas||0) + delta));
+  await dref.child(id).update({ pagas:novo, status: novo>=n ? 'quitada' : 'ativa' });
+  toast(novo>=n ? `${d.credor} quitada.` : `${d.credor}: ${novo} de ${n} pagas.`);
+}
+async function excluirDivida(id){
+  const d = dividas.find(x=>x.id===id); if(!d) return;
+  if (!confirm(`Excluir a dívida "${d.credor}" (${d.parcelas}x de ${fmt(+d.valorParcela||0)})?`)) return;
+  await dref.child(id).remove();
+  toast('Dívida excluída.');
 }
 
 /* ── importação ──────────────────────────────────────────────────── */
