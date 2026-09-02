@@ -1211,6 +1211,12 @@ const COLS_DIV = [
   { campo:'restantes',     chaves:['qnt em parc restante','qtd em parc restante','parcelas restantes','qnt parcelas restantes'] },
   { campo:'total',         chaves:['qnt total de parc','total de parcelas','qnt parcelas','numero de parcelas','n parcelas'] },
   { campo:'dia',           chaves:['dia do vencimento','dia venc','vencimento','dia','data'] },
+  // Âncora explícita do cronograma. Sem ela, a 1ª parcela é deduzida de
+  // "quantas já foram pagas" contadas a partir de HOJE — e essa dedução
+  // envelhece: colar a mesma planilha depois do vencimento do mês empurra o
+  // contrato inteiro um mês para a frente, calado. Com a data declarada,
+  // colar hoje ou daqui a seis meses dá exatamente o mesmo cronograma.
+  { campo:'primeira',      chaves:['data da 1a parcela','primeira parcela','1a parcela','inicio do contrato'] },
   // "PARCELAS" como cabeçalho de uma coluna de dinheiro é ambíguo — pode ser
   // contagem. Fica num campo à parte, usado só quando não há coluna explícita
   // de valor da parcela, e o que ele leu aparece na prévia antes de gravar.
@@ -1256,6 +1262,24 @@ function diaDe(s){
   if (br)  return +br[1] >= 1 && +br[1] <= 31 ? +br[1] : null;
   const n = parseInt(t.replace(/\D/g,''), 10);          // "dia 23", "23"
   return (!isNaN(n) && n >= 1 && n <= 31) ? n : null;
+}
+// Data completa, com ano, ou nada. Dia solto ("23") e mês sem ano ("05/10")
+// devolvem null de propósito — para esses a dedução assume e a prévia mostra
+// o que deduziu. Aceitar data pela metade aqui seria promover um palpite a
+// dado declarado, que é justamente o que esta coluna existe para evitar.
+function dataISO(s){
+  const t = (s||'').trim(); if (!t) return null;
+  const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) return dataValida(+iso[1], +iso[2], +iso[3]);
+  const br = t.match(/^(\d{1,2})\D+(\d{1,2})\D+(\d{4}|\d{2})$/);
+  if (!br) return null;
+  const a = +br[3];
+  return dataValida(a < 100 ? 2000 + a : a, +br[2], +br[1]);
+}
+function dataValida(ano, mes, dia){
+  if (!(mes >= 1 && mes <= 12) || !(dia >= 1 && dia <= 31)) return null;
+  if (!(ano >= 2000 && ano <= 2100)) return null;
+  return ocorrenciaNoMes(ano, mes, dia);
 }
 // No cronograma mês a mês a planilha traz dia e mês ("05/10") mas quase nunca
 // o ano. Ancora na ocorrência mais próxima que ainda não passou: uma fatura
@@ -1322,10 +1346,13 @@ function fecharImpDiv(){ document.getElementById('impdiv-modal').classList.remov
 // Modelo com as colunas que o importador entende. Fica aqui dentro de
 // propósito: cabeçalho copiado de um documento à parte envelhece sem
 // ninguém perceber, e aí a importação falha por um nome de coluna.
+// A coluna 1A PARCELA vem no modelo de propósito: sem ela o cronograma é
+// deduzido de "quantas já foram pagas" a partir de hoje, e a mesma planilha
+// colada depois do vencimento do mês entra um mês adiantada.
 const MODELO_DIV = [
-  ['DESCRICAO','CREDOR','TIPO','VALOR POR PARCELA','QNT PAGO EM PARC','QNT EM PARC RESTANTE','DIA DO VENCIMENTO'],
-  ['REFIN - PF (REFORMA SALA E SERVIDOR)','SAFRA','PF','1238,83','11','25','23'],
-  ['FINANCIAMENTO STRADA','BRADESCO','VEICULO','980,00','5','19','10'],
+  ['DESCRICAO','CREDOR','TIPO','VALOR POR PARCELA','QNT PAGO EM PARC','QNT EM PARC RESTANTE','1A PARCELA'],
+  ['REFIN - PF (REFORMA SALA E SERVIDOR)','SAFRA','PF','1238,83','11','25','23/10/2025'],
+  ['FINANCIAMENTO STRADA','BRADESCO','VEICULO','980,00','5','19','10/04/2026'],
 ].map(l => l.join('\t')).join('\n');
 
 function modeloImpDiv(){
@@ -1362,6 +1389,11 @@ function previewImpDiv(){
   const dados = linhas.slice(1).map(l => splitDiv(l) || []);
   const cel = (c, campo) => { const k = idx[campo]; return k === undefined ? '' : (c[k]||'').trim(); };
   const vlrDe = c => Math.abs(parseValorBR(cel(c,'valorParcela') || cel(c,'valorMes')));
+  // A data da linha pode estar em qualquer uma das duas colunas de data. Quem
+  // lê a sequência de meses do cartão precisa das duas, senão trocar "DATA"
+  // por "1A PARCELA" no cabeçalho desliga a conferência de meses sem que
+  // nada reclame.
+  const dataTxt = c => cel(c,'dia') || cel(c,'primeira');
 
   // Duas formas de colagem convivem aqui. Uma linha por dívida (parcela fixa)
   // e uma linha por parcela (fatura de cartão, valor mudando mês a mês porque
@@ -1382,11 +1414,11 @@ function previewImpDiv(){
     if (!vparc || isNaN(vparc)){ if (desc||v('credor')) erros.push(`linha ${i+2}: valor de parcela inválido`); continue; }
 
     // recolhe as continuações que pertencem a esta dívida
-    const valores = [vparc], meses = [ diaDe(v('dia')) ? v('dia') : '' ];
+    const valores = [vparc], meses = [ diaDe(dataTxt(c)) ? dataTxt(c) : '' ];
     let j = i + 1;
     while (j < dados.length && continuacao(dados[j])){
       valores.push(vlrDe(dados[j]));
-      meses.push(cel(dados[j],'dia'));
+      meses.push(dataTxt(dados[j]));
       j++;
     }
     const mesAMes = valores.length > 1;
@@ -1399,14 +1431,22 @@ function previewImpDiv(){
     if (!total){ erros.push(`linha ${i+2}: não deu para saber o total de parcelas`); continue; }
     if (pagas > total){ erros.push(`linha ${i+2}: pagas (${pagas}) > total (${total})`); continue; }
 
-    const dia = diaDe(v('dia')) || diaPadrao;
+    // Quem declarou "1ª parcela em 23/10/2025" já disse que o vencimento é
+    // dia 23 — não faz sentido exigir a informação duas vezes.
+    const dia = diaDe(dataTxt(c)) || diaPadrao;
     if (!dia){ erros.push(`linha ${i+2}: sem dia de vencimento — preencha o campo acima`); continue; }
 
     const credor = v('credor') || (desc.split(/[-(]/)[0].trim()) || '—';
-    // No mês a mês a própria planilha diz em que mês começa; nas demais a
-    // primeira parcela é deduzida de quantas já foram pagas.
-    const prim = mesAMes ? primeiraPeloMes(v('dia'), dia, hoje)
-                         : primeiraPorDia(dia, pagas, hoje);
+    // Três origens para a 1ª parcela, da mais confiável para a menos:
+    //   1. coluna "1A PARCELA" — declarada, imune à data em que se cola;
+    //   2. mês a mês — a própria planilha diz em que mês começa;
+    //   3. dedução por "quantas já foram pagas", contada a partir de hoje.
+    // A (3) é a única que muda de resposta conforme o dia da colagem, então
+    // fica por último e a prévia mostra o que ela deduziu.
+    const declarada = dataISO(v('primeira'));
+    const prim = declarada ? declarada
+               : mesAMes  ? primeiraPeloMes(dataTxt(c), dia, hoje)
+                          : primeiraPorDia(dia, pagas, hoje);
     const r = { credor, descricao:desc, tipo:mapTipoDiv(v('tipoOrig'), v('credor')),
                 valorParcela:vparc, parcelas:total, primeiraData:prim, pagas,
                 categoria:cat, valorAVista:null,
@@ -1414,6 +1454,9 @@ function previewImpDiv(){
                              : `Vence todo dia ${dia}`,
                 status: pagas>=total ? 'quitada' : 'ativa' };
     if (mesAMes) r.valores = valores;
+    // Marca só a origem que pode envelhecer, para a prévia pedir conferência
+    // onde ela é de fato necessária. Campo de tela: não vai para o banco.
+    r._deduzida = !declarada && !mesAMes;
 
     const somaParc = mesAMes ? valores.reduce((a,x)=>a+x,0) : total*vparc;
     const abertoP  = mesAMes ? valores.slice(pagas).reduce((a,x)=>a+x,0) : (total-pagas)*vparc;
@@ -1477,7 +1520,8 @@ function previewImpDiv(){
              <div style="font-size:10px;color:var(--muted)">valores diferentes por mês</div>`
           : fmt(-r.valorParcela)}</td>
         <td class="num">${r.pagas}/${r.parcelas}</td>
-        <td style="white-space:nowrap;font-size:12px">${esc(dataBR(r.primeiraData))}</td>
+        <td style="white-space:nowrap;font-size:12px">${esc(dataBR(r.primeiraData))}
+          ${r._deduzida?`<div style="font-size:10px;color:var(--yellow)">deduzida das ${r.pagas} pagas</div>`:''}</td>
         <td style="white-space:nowrap;font-size:12px">${cr.length?mesLabel(cr[cr.length-1].mes):'—'}</td>
         <td class="num neg">${fmt(-saldoDe(r))}</td></tr>`;}).join('')}
       </tbody></table></div>`:''}`;
@@ -1491,7 +1535,7 @@ async function confirmarImpDiv(){
   btn.disabled = true; btn.textContent = 'Importando…';
   const updates = {};
   novos.forEach(r => {
-    const { _dup, ...rec } = r;
+    const { _dup, _deduzida, ...rec } = r;
     updates[dref.push().key] = { ...rec, por: session?.nome||'—', ts: Date.now() };
   });
   try {
