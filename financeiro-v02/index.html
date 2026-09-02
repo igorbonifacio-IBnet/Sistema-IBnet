@@ -265,7 +265,9 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 REFIN - PF (REFORMA SALA E SERVIDOR)	SAFRA	PF	R$ 44.597,88	R$ 1.238,83	11	R$ 13.627,13	25	R$ 30.970,75"></textarea>
       <div class="mb-hint">Copie direto do Excel/Google Sheets — as colunas vêm separadas por TAB.
       As colunas são reconhecidas pelo <b>nome do cabeçalho</b>, então a ordem não importa e sobra
-      coluna sem problema.</div>
+      coluna sem problema.
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:4px"
+              onclick="modeloImpDiv()">usar o modelo</button></div>
     </div>
     <div class="mb-row">
       <div class="mb-field"><label>Dia do vencimento</label>
@@ -1202,6 +1204,19 @@ function mapTipoDiv(s, credor){
   if (/\bPF\b|\bPJ\b|REFIN|EMPREST|CAPITAL DE GIRO|CDC|CONSIGN/.test(n)) return 'emprestimo';
   return normalizar(credor||'') ? 'emprestimo' : 'outro';
 }
+// A coluna de vencimento pode vir como dia solto ("23") ou como data
+// inteira ("23/10/2025"). Sem isto, a data inteira virava 23102025, que o
+// Math.min lá embaixo grudava no último dia do mês — data errada e sem aviso
+// nenhum. Fora de 1..31 devolve null e o dia padrão do formulário assume.
+function diaDe(s){
+  const t = (s||'').trim(); if (!t) return null;
+  const iso = t.match(/^\d{4}-(\d{2})-(\d{2})/);        // 2025-10-23
+  if (iso) return +iso[2] >= 1 && +iso[2] <= 31 ? +iso[2] : null;
+  const br  = t.match(/^(\d{1,2})\s*[\/.-]/);           // 23/10/2025
+  if (br)  return +br[1] >= 1 && +br[1] <= 31 ? +br[1] : null;
+  const n = parseInt(t.replace(/\D/g,''), 10);          // "dia 23", "23"
+  return (!isNaN(n) && n >= 1 && n <= 31) ? n : null;
+}
 function ocorrenciaNoMes(ano, mes, dia){
   const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   return `${ano}-${String(mes).padStart(2,'0')}-${String(Math.min(dia,ultimo)).padStart(2,'0')}`;
@@ -1235,6 +1250,23 @@ function abrirImpDiv(){
   document.getElementById('impdiv-modal').classList.add('show');
 }
 function fecharImpDiv(){ document.getElementById('impdiv-modal').classList.remove('show'); }
+
+// Modelo com as colunas que o importador entende. Fica aqui dentro de
+// propósito: cabeçalho copiado de um documento à parte envelhece sem
+// ninguém perceber, e aí a importação falha por um nome de coluna.
+const MODELO_DIV = [
+  ['DESCRICAO','CREDOR','TIPO','VALOR POR PARCELA','QNT PAGO EM PARC','QNT EM PARC RESTANTE','DIA DO VENCIMENTO'],
+  ['REFIN - PF (REFORMA SALA E SERVIDOR)','SAFRA','PF','1238,83','11','25','23'],
+  ['FINANCIAMENTO STRADA','BRADESCO','VEICULO','980,00','5','19','10'],
+].map(l => l.join('\t')).join('\n');
+
+function modeloImpDiv(){
+  const ta = document.getElementById('id-txt');
+  if (ta.value.trim() && !confirm('Isto substitui o que já está colado. Continuar?')) return;
+  ta.value = MODELO_DIV;
+  previewImpDiv();
+  toast('Modelo carregado — troque as duas linhas de exemplo pelas suas dívidas.');
+}
 
 function previewImpDiv(){
   const txt = document.getElementById('id-txt').value.trim();
@@ -1274,7 +1306,7 @@ function previewImpDiv(){
     if (!total){ erros.push(`linha ${i+2}: não deu para saber o total de parcelas`); return; }
     if (pagas > total){ erros.push(`linha ${i+2}: pagas (${pagas}) > total (${total})`); return; }
 
-    const dia = num('dia') || diaPadrao;
+    const dia = diaDe(v('dia')) || diaPadrao;
     if (!dia){ erros.push(`linha ${i+2}: sem dia de vencimento — preencha o campo acima`); return; }
 
     const credor = v('credor') || (desc.split(/[-(]/)[0].trim()) || '—';
