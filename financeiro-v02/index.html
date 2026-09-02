@@ -255,6 +255,33 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   </div>
 </div>
 
+<!-- modal importar dívidas em lote -->
+<div class="modal-ov" id="impdiv-modal">
+  <div class="modal-box" style="max-width:760px">
+    <h3>Importar dívidas da planilha</h3>
+    <div class="mb-field">
+      <label>Cole a tabela inteira, com o cabeçalho</label>
+      <textarea id="id-txt" rows="7" placeholder="DESCRIÇÃO	BANCO	TIPO	VALOR TOTAL	VALOR POR PARCELA	QNT PAGO EM PARC	QNT PAGO	QNT EM PARC RESTANTE	QNT RESTANTE
+REFIN - PF (REFORMA SALA E SERVIDOR)	SAFRA	PF	R$ 44.597,88	R$ 1.238,83	11	R$ 13.627,13	25	R$ 30.970,75"></textarea>
+      <div class="mb-hint">Copie direto do Excel/Google Sheets — as colunas vêm separadas por TAB.
+      As colunas são reconhecidas pelo <b>nome do cabeçalho</b>, então a ordem não importa e sobra
+      coluna sem problema.</div>
+    </div>
+    <div class="mb-row">
+      <div class="mb-field"><label>Dia do vencimento</label>
+        <input type="number" min="1" max="31" id="id-dia" placeholder="23" oninput="previewImpDiv()"/>
+        <div class="mb-hint">Usado para todas as linhas, a menos que a planilha traga uma coluna de dia.</div></div>
+      <div class="mb-field"><label>Conta do plano</label><select id="id-cat" onchange="previewImpDiv()"></select></div>
+    </div>
+    <div id="id-preview"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharImpDiv()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="previewImpDiv()">Pré-visualizar</button>
+      <button class="btn" id="id-save" onclick="confirmarImpDiv()" disabled>Importar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -895,6 +922,7 @@ function htmlDivida(){
   const hoje     = new Date().toISOString().slice(0,10);
   const mesAtual = hoje.slice(0,7);
   const btnNova  = isAdmin ? `<button class="btn" onclick="abrirDivida()">+ Nova dívida</button>` : '';
+  const btnImp   = isAdmin ? `<button class="btn btn-ghost" onclick="abrirImpDiv()">Importar planilha</button>` : '';
 
   if (!dividas.length) return `
     <div class="alert">
@@ -904,7 +932,8 @@ function htmlDivida(){
     </div>
     <div class="card"><div class="empty">
       <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma dívida cadastrada</div>
-      Comece pelas parcelas que você já paga todo mês.<br/><br/>${btnNova}
+      Comece pelas parcelas que você já paga todo mês.<br/><br/>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">${btnNova}${btnImp}</div>
     </div></div>`;
 
   const ativas   = dividas.filter(d => !quitada(d));
@@ -970,7 +999,8 @@ function htmlDivida(){
     </div>` : ''}
 
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-    <span>Cronograma mês a mês</span>${btnNova}</div>
+    <span>Cronograma mês a mês</span>
+    <span style="display:flex;gap:8px">${btnImp}${btnNova}</span></div>
   <div class="card"><div class="tbl-wrap"><table>
     <thead><tr><th>Mês</th><th class="num">Parcelas</th><th class="num">Valor</th>
       <th style="width:32%">Peso no mês</th><th>Encerra neste mês</th></tr></thead>
@@ -1125,6 +1155,195 @@ async function excluirDivida(id){
   if (!confirm(`Excluir a dívida "${d.credor}" (${d.parcelas}x de ${fmt(+d.valorParcela||0)})?`)) return;
   await dref.child(id).remove();
   toast('Dívida excluída.');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   IMPORTAÇÃO DE DÍVIDAS EM LOTE
+   Planilha de controle de dívida raramente traz a data da 1ª parcela —
+   traz o dia do vencimento e quantas já foram pagas. Daí dá para derivar
+   o resto: a última ocorrência do dia que já passou é a parcela nº
+   `pagas`, então a 1ª foi `pagas-1` meses antes.
+   ══════════════════════════════════════════════════════════════════ */
+const COLS_DIV = [
+  { campo:'descricao',     chaves:['descricao','historico','discriminacao'] },
+  { campo:'credor',        chaves:['banco','credor','instituicao','financeira'] },
+  { campo:'tipoOrig',      chaves:['tipo','modalidade'] },
+  { campo:'valorParcela',  chaves:['valor por parcela','valor da parcela','valor parcela','vlr parcela'] },
+  { campo:'pagas',         chaves:['qnt pago em parc','qtd pago em parc','parcelas pagas','qnt parcelas pagas','pagas'] },
+  { campo:'restantes',     chaves:['qnt em parc restante','qtd em parc restante','parcelas restantes','qnt parcelas restantes'] },
+  { campo:'total',         chaves:['qnt total de parc','total de parcelas','qnt parcelas','numero de parcelas','n parcelas'] },
+  { campo:'dia',           chaves:['dia do vencimento','dia venc','vencimento','dia'] },
+  { campo:'valorTotal',    chaves:['valor total'] },
+  { campo:'valorPago',     chaves:['qnt pago','valor pago'] },
+  { campo:'valorRestante', chaves:['qnt restante','valor restante','saldo devedor','saldo'] },
+];
+// Casa a chave mais longa primeiro: "qnt pago em parc" (contagem) tem de
+// ganhar de "qnt pago" (valor em R$), senão as duas colunas se confundem.
+function mapearColunasDiv(head){
+  const pares = [];
+  COLS_DIV.forEach(c => c.chaves.forEach(k => pares.push({campo:c.campo, k})));
+  pares.sort((a,b) => b.k.length - a.k.length);
+  const idx = {};
+  head.forEach((h,i) => {
+    const n = normalizar(h).toLowerCase();
+    if (!n) return;
+    const hit = pares.find(p => n.includes(p.k) && idx[p.campo] === undefined);
+    if (hit) idx[hit.campo] = i;
+  });
+  return idx;
+}
+function mapTipoDiv(s, credor){
+  const n = normalizar(s);
+  if (/CARTAO|CREDITO ROTATIVO/.test(n))            return 'cartao';
+  if (/VEICULO|CARRO|AUTO|MOTO|CDC VEIC/.test(n))   return 'veiculo';
+  if (/IMPOSTO|REFIS|TRIBUT|PARC\.? FISCAL/.test(n))return 'imposto';
+  if (/FORNECEDOR|BOLETO/.test(n))                  return 'fornecedor';
+  if (/CAPEX|EQUIPAMENTO|ONT|CABO/.test(n))         return 'capex';
+  if (/\bPF\b|\bPJ\b|REFIN|EMPREST|CAPITAL DE GIRO|CDC|CONSIGN/.test(n)) return 'emprestimo';
+  return normalizar(credor||'') ? 'emprestimo' : 'outro';
+}
+function ocorrenciaNoMes(ano, mes, dia){
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return `${ano}-${String(mes).padStart(2,'0')}-${String(Math.min(dia,ultimo)).padStart(2,'0')}`;
+}
+function primeiraPorDia(dia, pagas, hojeISO){
+  const [Y,M,D] = hojeISO.split('-').map(Number);
+  let ano = Y, mes = M;
+  if (pagas > 0){
+    if (D < dia){ mes--; if (mes === 0){ mes = 12; ano--; } }
+    return somaMeses(ocorrenciaNoMes(ano, mes, dia), -(pagas - 1));
+  }
+  if (D > dia){ mes++; if (mes === 13){ mes = 1; ano++; } }
+  return ocorrenciaNoMes(ano, mes, dia);
+}
+function splitDiv(l){
+  if (l.includes('\t')) return l.split('\t');
+  if (l.includes(';'))  return l.split(';');
+  return null;   // vírgula é ambígua com o decimal — não arrisca
+}
+
+let impDivRows = [];
+function abrirImpDiv(){
+  if (!isAdmin) return toast('Sem permissão para importar.');
+  document.getElementById('id-txt').value = '';
+  document.getElementById('id-dia').value = '';
+  document.getElementById('id-preview').innerHTML = '';
+  document.getElementById('id-save').disabled = true;
+  document.getElementById('id-cat').innerHTML =
+    `<option value="">— sem conta definida —</option>` + optionsCats('Amortização de Empréstimo');
+  impDivRows = [];
+  document.getElementById('impdiv-modal').classList.add('show');
+}
+function fecharImpDiv(){ document.getElementById('impdiv-modal').classList.remove('show'); }
+
+function previewImpDiv(){
+  const txt = document.getElementById('id-txt').value.trim();
+  const box = document.getElementById('id-preview');
+  impDivRows = [];
+  document.getElementById('id-save').disabled = true;
+  if (!txt){ box.innerHTML = ''; return; }
+
+  const diaPadrao = Math.round(+document.getElementById('id-dia').value || 0);
+  const cat       = document.getElementById('id-cat').value;
+  const hoje      = new Date().toISOString().slice(0,10);
+  const linhas    = txt.split(/\r?\n/).filter(l => l.trim());
+  const head      = splitDiv(linhas[0]);
+  if (!head) return box.innerHTML = `<div class="alert warn" style="margin-top:12px">
+    Não consegui separar as colunas. Copie direto do Excel ou do Google Sheets
+    (vem com TAB), ou use <b>;</b> entre os campos.</div>`;
+
+  const idx = mapearColunasDiv(head);
+  const reconhecidas = Object.keys(idx);
+  if (idx.valorParcela === undefined) return box.innerHTML = `<div class="alert warn" style="margin-top:12px">
+    Não achei a coluna de <b>valor da parcela</b>. Colunas lidas no cabeçalho:
+    ${esc(head.filter(Boolean).join(' · '))}</div>`;
+
+  const erros = [], avisos = [];
+  linhas.slice(1).forEach((linha, i) => {
+    const c = splitDiv(linha) || [];
+    const v = campo => { const k = idx[campo]; return k === undefined ? '' : (c[k]||'').trim(); };
+    const num = campo => { const n = parseInt((v(campo)||'').replace(/\D/g,''),10); return isNaN(n)?null:n; };
+
+    const desc  = v('descricao');
+    const vparc = Math.abs(parseValorBR(v('valorParcela')));
+    if (!vparc || isNaN(vparc)){ if (desc||v('credor')) erros.push(`linha ${i+2}: valor de parcela inválido`); return; }
+
+    const pagas = num('pagas') || 0;
+    const rest  = num('restantes');
+    const total = num('total') != null ? num('total') : (rest != null ? pagas + rest : null);
+    if (!total){ erros.push(`linha ${i+2}: não deu para saber o total de parcelas`); return; }
+    if (pagas > total){ erros.push(`linha ${i+2}: pagas (${pagas}) > total (${total})`); return; }
+
+    const dia = num('dia') || diaPadrao;
+    if (!dia){ erros.push(`linha ${i+2}: sem dia de vencimento — preencha o campo acima`); return; }
+
+    const credor = v('credor') || (desc.split(/[-(]/)[0].trim()) || '—';
+    const prim   = primeiraPorDia(dia, pagas, hoje);
+    const r = { credor, descricao:desc, tipo:mapTipoDiv(v('tipoOrig'), v('credor')),
+                valorParcela:vparc, parcelas:total, primeiraData:prim, pagas,
+                categoria:cat, valorAVista:null, obs:`Vence todo dia ${dia}`,
+                status: pagas>=total ? 'quitada' : 'ativa' };
+
+    // confere contra os totais que a própria planilha declara
+    const decTot  = parseValorBR(v('valorTotal'));
+    const decRest = parseValorBR(v('valorRestante'));
+    if (!isNaN(decTot)  && Math.abs(Math.abs(decTot)  - total*vparc)          > 0.05)
+      avisos.push(`${credor}: valor total da planilha (${fmt(Math.abs(decTot))}) ≠ ${total}×parcela (${fmt(total*vparc)})`);
+    if (!isNaN(decRest) && Math.abs(Math.abs(decRest) - (total-pagas)*vparc)  > 0.05)
+      avisos.push(`${credor}: saldo da planilha (${fmt(Math.abs(decRest))}) ≠ ${total-pagas}×parcela (${fmt((total-pagas)*vparc)})`);
+
+    r._dup = dividas.some(d => normalizar(d.credor)===normalizar(credor)
+                            && Math.abs((+d.valorParcela||0) - vparc) < 0.005
+                            && Math.round(+d.parcelas||0) === total);
+    impDivRows.push(r);
+  });
+
+  const novos = impDivRows.filter(r => !r._dup);
+  const soma  = novos.reduce((a,r) => a + (r.parcelas - r.pagas) * r.valorParcela, 0);
+  box.innerHTML = `
+    <div class="alert" style="margin-top:12px">
+      <b>${impDivRows.length}</b> dívida(s) lida(s) · <b>${novos.length}</b> a cadastrar ·
+      saldo devedor somado <b class="neg">${fmt(-soma)}</b>
+      ${impDivRows.length-novos.length?`<br/><b>${impDivRows.length-novos.length}</b> já cadastrada(s), serão ignoradas.`:''}
+      <br/><span class="muted" style="font-size:12px">Colunas reconhecidas: ${esc(reconhecidas.join(' · '))}</span>
+      ${erros.length?`<br/><span class="neg">${erros.length} linha(s) com problema:</span> ${esc(erros.slice(0,4).join(' · '))}`:''}
+    </div>
+    ${avisos.length?`<div class="alert warn" style="margin-top:10px">
+      <b>Confira antes de importar:</b><br/>${avisos.map(a=>esc(a)).join('<br/>')}</div>`:''}
+    ${impDivRows.length?`<div class="tbl-wrap" style="max-height:230px;overflow:auto;margin-top:10px">
+      <table><thead><tr><th>Credor</th><th>Descrição</th><th class="num">Parcela</th>
+        <th class="num">Nº</th><th>1º venc.</th><th>Última</th><th class="num">Saldo</th></tr></thead>
+      <tbody>${impDivRows.map(r=>{
+        const cr = cronogramaDe(r);
+        return `<tr${r._dup?' style="opacity:.45"':''}>
+        <td>${esc(r.credor)}${r._dup?' <span class="muted" style="font-size:11px">(já existe)</span>':''}</td>
+        <td style="font-size:12px">${esc(r.descricao||'—')}</td>
+        <td class="num neg">${fmt(-r.valorParcela)}</td>
+        <td class="num">${r.pagas}/${r.parcelas}</td>
+        <td style="white-space:nowrap;font-size:12px">${esc(dataBR(r.primeiraData))}</td>
+        <td style="white-space:nowrap;font-size:12px">${cr.length?mesLabel(cr[cr.length-1].mes):'—'}</td>
+        <td class="num neg">${fmt(-saldoDe(r))}</td></tr>`;}).join('')}
+      </tbody></table></div>`:''}`;
+  document.getElementById('id-save').disabled = !novos.length;
+}
+
+async function confirmarImpDiv(){
+  const novos = impDivRows.filter(r => !r._dup);
+  if (!novos.length) return;
+  const btn = document.getElementById('id-save');
+  btn.disabled = true; btn.textContent = 'Importando…';
+  const updates = {};
+  novos.forEach(r => {
+    const { _dup, ...rec } = r;
+    updates[dref.push().key] = { ...rec, por: session?.nome||'—', ts: Date.now() };
+  });
+  try {
+    await dref.update(updates);
+    fecharImpDiv();
+    toast(`${novos.length} dívida(s) cadastrada(s).`);
+    setView('div');
+  } catch(e){ toast('Erro na importação: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Importar';
 }
 
 /* ── importação ──────────────────────────────────────────────────── */
