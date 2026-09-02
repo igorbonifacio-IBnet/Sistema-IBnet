@@ -201,6 +201,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 <div class="modal-ov" id="div-modal">
   <div class="modal-box" style="max-width:580px">
     <h3 id="div-title">Nova dívida</h3>
+    <div class="alert warn" id="d-varaviso" style="display:none;margin-bottom:12px"></div>
     <div class="mb-row">
       <div class="mb-field"><label>Credor</label>
         <input type="text" id="d-credor" placeholder="Ex.: Cartão XP, Banco do Brasil, Fornecedor"/></div>
@@ -905,17 +906,30 @@ function somaMeses(iso, n){
 }
 function proxMes(mes){ return somaMeses(mes + '-01', 1).slice(0,7); }
 
+// `valores` é opcional e existe para fatura de cartão, onde o valor muda de
+// mês para mês porque várias compras parceladas terminam em datas
+// diferentes. Sem ele, um cartão só caberia aqui sendo quebrado em contratos
+// fictícios — quatro linhas "NUBANK" que não correspondem a nada que o Igor
+// reconheça no extrato. Com ele, o cronograma é o próprio extrato.
+// Quando falta valor para alguma parcela, cai no valorParcela fixo.
 function cronogramaDe(dv){
   const n     = Math.max(0, Math.round(+dv.parcelas || 0));
   const v     = +dv.valorParcela || 0;
+  const vs    = Array.isArray(dv.valores) ? dv.valores : null;
   const pagas = Math.max(0, Math.round(+dv.pagas || 0));
   const out = [];
   for (let i = 1; i <= n; i++){
     const venc = somaMeses(dv.primeiraData, i - 1);
-    out.push({ n:i, venc, mes:(venc||'').slice(0,7), valor:v, paga: i <= pagas });
+    const vi   = vs && vs[i-1] != null && !isNaN(+vs[i-1]) ? +vs[i-1] : v;
+    out.push({ n:i, venc, mes:(venc||'').slice(0,7), valor:vi, paga: i <= pagas });
   }
   return out;
 }
+// Para exibição: parcela fixa mostra o valor; variável mostra a faixa.
+const variavel = dv => Array.isArray(dv.valores) &&
+                       new Set(dv.valores.map(x => Math.round(+x*100))).size > 1;
+const totalDe  = dv => cronogramaDe(dv).reduce((a,p) => a + p.valor, 0);
+const proximaDe = dv => cronogramaDe(dv).find(p => !p.paga) || null;
 const saldoDe  = dv => cronogramaDe(dv).filter(p => !p.paga).reduce((a,p) => a + p.valor, 0);
 const quitada  = dv => dv.status === 'quitada' ||
                        Math.round(+dv.pagas||0) >= Math.round(+dv.parcelas||0);
@@ -995,7 +1009,8 @@ function htmlDivida(){
   ${proxFim ? `<div class="alert" style="margin-top:14px">
     <b>Próximo alívio:</b> em ${mesLabel(proxFim.mes)} encerra
     ${proxFim.itens.map(d=>`<b>${esc(d.credor||d.descricao||'—')}</b>`).join(' e ')} —
-    ${fmt(proxFim.itens.reduce((a,d)=>a+(+d.valorParcela||0),0))}/mês que deixam de sair do caixa.
+    ${fmt(proxFim.itens.reduce((a,d)=>{
+        const c=cronogramaDe(d); return a + (c.length ? c[c.length-1].valor : 0); },0))}/mês que deixam de sair do caixa.
     ${alivio>0?`Daqui a 6 meses (${mesLabel(m6)}) o compromisso mensal cai
       de ${fmt(atual)} para ${fmt(doMes(m6))} — <b>${fmt(alivio)}/mês liberados</b>.`:''}
     </div>` : ''}
@@ -1031,7 +1046,12 @@ function htmlDivida(){
         return `<tr>
           <td><b>${esc(d.credor||'—')}</b>${d.descricao?`<div style="font-size:11px;color:var(--muted)">${esc(d.descricao)}</div>`:''}</td>
           <td style="font-size:12px">${esc(TIPOS_DIVIDA[d.tipo]||d.tipo||'—')}</td>
-          <td class="num neg">${fmt(-(+d.valorParcela||0))}</td>
+          <td class="num neg">${(()=>{
+            if (!variavel(d)) return fmt(-(+d.valorParcela||0));
+            const px = cr.find(p=>!p.paga), vs = cr.map(p=>p.valor);
+            return `${fmt(-(px?px.valor:0))}<div style="font-size:10px;color:var(--muted)">varia · ${
+              fmt(Math.min(...vs))} a ${fmt(Math.max(...vs))}</div>`;
+          })()}</td>
           <td><div style="font-size:11px;color:var(--muted)">${pg} de ${n} pagas</div>
             <div class="bar-track"><div class="bar-fill" style="width:${n?Math.round(100*pg/n):0}%;background:var(--green)"></div></div></td>
           <td class="num neg">${fmt(-saldoDe(d))}</td>
@@ -1051,7 +1071,7 @@ function htmlDivida(){
     <tbody>${quitadas.map(d=>`<tr>
       <td>${esc(d.credor||'—')}${d.descricao?`<div style="font-size:11px;color:var(--muted)">${esc(d.descricao)}</div>`:''}</td>
       <td class="num">${Math.round(+d.parcelas||0)}x</td>
-      <td class="num neg">${fmt(-(Math.round(+d.parcelas||0)*(+d.valorParcela||0)))}</td>
+      <td class="num neg">${fmt(-totalDe(d))}</td>
       ${isAdmin?`<td style="white-space:nowrap">
         <button class="icon-btn" onclick="pagarParcela('${d.id}',-1)" title="Desfazer a última baixa">−1 paga</button>
         <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
@@ -1082,6 +1102,7 @@ function abrirDivida(){
   if (!isAdmin) return toast('Sem permissão para cadastrar dívida.');
   editDiv = null;
   document.getElementById('div-title').textContent = 'Nova dívida';
+  document.getElementById('d-varaviso').style.display = 'none';
   preencherFormDivida({ primeiraData: new Date().toISOString().slice(0,10), pagas:0 });
 }
 function editarDivida(id){
@@ -1089,6 +1110,21 @@ function editarDivida(id){
   editDiv = id;
   document.getElementById('div-title').textContent = 'Editar dívida';
   preencherFormDivida(d);
+  // Este formulário é de parcela fixa. Numa dívida de valor variável ele
+  // continua servindo para credor, conta e baixas, mas o campo de valor da
+  // parcela não manda — quem manda é a lista mês a mês, que o update()
+  // preserva. Sem este aviso, o Igor mexeria no valor e juraria que o
+  // sistema ignorou a edição.
+  const av = document.getElementById('d-varaviso');
+  if (variavel(d)){
+    const cr = cronogramaDe(d), vs = cr.map(p=>p.valor);
+    av.innerHTML = `<b>Parcelas de valores diferentes.</b> Esta dívida tem cronograma
+      próprio mês a mês (${fmt(Math.min(...vs))} a ${fmt(Math.max(...vs))}). Você pode
+      corrigir credor, descrição, conta e baixas normalmente — mas o campo
+      <b>valor da parcela</b> abaixo não altera o cronograma. Para trocar os valores,
+      exclua e importe de novo pela planilha.`;
+    av.style.display = '';
+  } else av.style.display = 'none';
 }
 function fecharDivida(){ document.getElementById('div-modal').classList.remove('show'); }
 
@@ -1174,7 +1210,11 @@ const COLS_DIV = [
   { campo:'pagas',         chaves:['qnt pago em parc','qtd pago em parc','parcelas pagas','qnt parcelas pagas','pagas'] },
   { campo:'restantes',     chaves:['qnt em parc restante','qtd em parc restante','parcelas restantes','qnt parcelas restantes'] },
   { campo:'total',         chaves:['qnt total de parc','total de parcelas','qnt parcelas','numero de parcelas','n parcelas'] },
-  { campo:'dia',           chaves:['dia do vencimento','dia venc','vencimento','dia'] },
+  { campo:'dia',           chaves:['dia do vencimento','dia venc','vencimento','dia','data'] },
+  // "PARCELAS" como cabeçalho de uma coluna de dinheiro é ambíguo — pode ser
+  // contagem. Fica num campo à parte, usado só quando não há coluna explícita
+  // de valor da parcela, e o que ele leu aparece na prévia antes de gravar.
+  { campo:'valorMes',      chaves:['parcelas','valor do mes','valor mes'] },
   { campo:'valorTotal',    chaves:['valor total'] },
   { campo:'valorPago',     chaves:['qnt pago','valor pago'] },
   { campo:'valorRestante', chaves:['qnt restante','valor restante','saldo devedor','saldo'] },
@@ -1216,6 +1256,23 @@ function diaDe(s){
   if (br)  return +br[1] >= 1 && +br[1] <= 31 ? +br[1] : null;
   const n = parseInt(t.replace(/\D/g,''), 10);          // "dia 23", "23"
   return (!isNaN(n) && n >= 1 && n <= 31) ? n : null;
+}
+// No cronograma mês a mês a planilha traz dia e mês ("05/10") mas quase nunca
+// o ano. Ancora na ocorrência mais próxima que ainda não passou: uma fatura
+// que alguém está cadastrando como dívida em aberto começa hoje ou adiante,
+// não doze meses atrás.
+function primeiraPeloMes(txt, diaFallback, hojeISO){
+  const t = (txt||'').trim();
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const br = t.match(/^(\d{1,2})\D+(\d{1,2})(?:\D+(\d{2,4}))?/);   // 05/10 ou 05/10/2026
+  if (!br) return primeiraPorDia(diaFallback, 0, hojeISO);
+  const dia = +br[1], mes = +br[2];
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return primeiraPorDia(diaFallback, 0, hojeISO);
+  if (br[3]){ const a = +br[3]; return ocorrenciaNoMes(a < 100 ? 2000 + a : a, mes, dia); }
+  const [Y,M,D] = hojeISO.split('-').map(Number);
+  const ano = (mes > M || (mes === M && dia >= D)) ? Y : Y + 1;
+  return ocorrenciaNoMes(ano, mes, dia);
 }
 function ocorrenciaNoMes(ano, mes, dia){
   const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
@@ -1286,52 +1343,104 @@ function previewImpDiv(){
 
   const idx = mapearColunasDiv(head);
   const reconhecidas = Object.keys(idx);
-  if (idx.valorParcela === undefined) return box.innerHTML = `<div class="alert warn" style="margin-top:12px">
+  if (idx.valorParcela === undefined && idx.valorMes === undefined) return box.innerHTML = `<div class="alert warn" style="margin-top:12px">
     Não achei a coluna de <b>valor da parcela</b>. Colunas lidas no cabeçalho:
     ${esc(head.filter(Boolean).join(' · '))}</div>`;
 
   const erros = [], avisos = [];
-  linhas.slice(1).forEach((linha, i) => {
-    const c = splitDiv(linha) || [];
-    const v = campo => { const k = idx[campo]; return k === undefined ? '' : (c[k]||'').trim(); };
+  const dados = linhas.slice(1).map(l => splitDiv(l) || []);
+  const cel = (c, campo) => { const k = idx[campo]; return k === undefined ? '' : (c[k]||'').trim(); };
+  const vlrDe = c => Math.abs(parseValorBR(cel(c,'valorParcela') || cel(c,'valorMes')));
+
+  // Duas formas de colagem convivem aqui. Uma linha por dívida (parcela fixa)
+  // e uma linha por parcela (fatura de cartão, valor mudando mês a mês porque
+  // várias compras acabam em datas diferentes). A segunda se reconhece pela
+  // linha de continuação: sem credor e sem descrição, mas com valor e data —
+  // exatamente como o Excel mostra células mescladas quando você copia.
+  const continuacao = c => !cel(c,'descricao') && !cel(c,'credor') &&
+                           !isNaN(vlrDe(c)) && vlrDe(c) > 0;
+
+  for (let i = 0; i < dados.length; i++){
+    const c = dados[i];
+    if (continuacao(c)) continue;               // já consumida abaixo
+    const v   = campo => cel(c, campo);
     const num = campo => { const n = parseInt((v(campo)||'').replace(/\D/g,''),10); return isNaN(n)?null:n; };
 
     const desc  = v('descricao');
-    const vparc = Math.abs(parseValorBR(v('valorParcela')));
-    if (!vparc || isNaN(vparc)){ if (desc||v('credor')) erros.push(`linha ${i+2}: valor de parcela inválido`); return; }
+    const vparc = vlrDe(c);
+    if (!vparc || isNaN(vparc)){ if (desc||v('credor')) erros.push(`linha ${i+2}: valor de parcela inválido`); continue; }
+
+    // recolhe as continuações que pertencem a esta dívida
+    const valores = [vparc], meses = [ diaDe(v('dia')) ? v('dia') : '' ];
+    let j = i + 1;
+    while (j < dados.length && continuacao(dados[j])){
+      valores.push(vlrDe(dados[j]));
+      meses.push(cel(dados[j],'dia'));
+      j++;
+    }
+    const mesAMes = valores.length > 1;
+    i = j - 1;
 
     const pagas = num('pagas') || 0;
     const rest  = num('restantes');
-    const total = num('total') != null ? num('total') : (rest != null ? pagas + rest : null);
-    if (!total){ erros.push(`linha ${i+2}: não deu para saber o total de parcelas`); return; }
-    if (pagas > total){ erros.push(`linha ${i+2}: pagas (${pagas}) > total (${total})`); return; }
+    const total = mesAMes ? valores.length
+                : (num('total') != null ? num('total') : (rest != null ? pagas + rest : null));
+    if (!total){ erros.push(`linha ${i+2}: não deu para saber o total de parcelas`); continue; }
+    if (pagas > total){ erros.push(`linha ${i+2}: pagas (${pagas}) > total (${total})`); continue; }
 
     const dia = diaDe(v('dia')) || diaPadrao;
-    if (!dia){ erros.push(`linha ${i+2}: sem dia de vencimento — preencha o campo acima`); return; }
+    if (!dia){ erros.push(`linha ${i+2}: sem dia de vencimento — preencha o campo acima`); continue; }
 
     const credor = v('credor') || (desc.split(/[-(]/)[0].trim()) || '—';
-    const prim   = primeiraPorDia(dia, pagas, hoje);
+    // No mês a mês a própria planilha diz em que mês começa; nas demais a
+    // primeira parcela é deduzida de quantas já foram pagas.
+    const prim = mesAMes ? primeiraPeloMes(v('dia'), dia, hoje)
+                         : primeiraPorDia(dia, pagas, hoje);
     const r = { credor, descricao:desc, tipo:mapTipoDiv(v('tipoOrig'), v('credor')),
                 valorParcela:vparc, parcelas:total, primeiraData:prim, pagas,
-                categoria:cat, valorAVista:null, obs:`Vence todo dia ${dia}`,
+                categoria:cat, valorAVista:null,
+                obs: mesAMes ? `Parcelas de valores diferentes · vence todo dia ${dia}`
+                             : `Vence todo dia ${dia}`,
                 status: pagas>=total ? 'quitada' : 'ativa' };
+    if (mesAMes) r.valores = valores;
 
-    // confere contra os totais que a própria planilha declara
+    const somaParc = mesAMes ? valores.reduce((a,x)=>a+x,0) : total*vparc;
+    const abertoP  = mesAMes ? valores.slice(pagas).reduce((a,x)=>a+x,0) : (total-pagas)*vparc;
+
+    // Confere contra os totais que a própria planilha declara. Comparar meu
+    // cálculo com ele mesmo não prova nada — é preciso bater com o que veio
+    // de fora.
+    // A tolerância cresce com o número de parcelas: cada uma carrega até meio
+    // centavo de arredondamento, então um contrato de 36x pode fechar alguns
+    // centavos longe sem estar errado. Fixar em 5 centavos faria a tela gritar
+    // por arredondamento — e aviso que grita à toa é aviso que se ignora,
+    // inclusive quando aparecer o que importa (parcela faltando, na casa dos
+    // reais).
+    const tol = Math.max(0.05, 0.01 * total);
     const decTot  = parseValorBR(v('valorTotal'));
     const decRest = parseValorBR(v('valorRestante'));
-    if (!isNaN(decTot)  && Math.abs(Math.abs(decTot)  - total*vparc)          > 0.05)
-      avisos.push(`${credor}: valor total da planilha (${fmt(Math.abs(decTot))}) ≠ ${total}×parcela (${fmt(total*vparc)})`);
-    if (!isNaN(decRest) && Math.abs(Math.abs(decRest) - (total-pagas)*vparc)  > 0.05)
-      avisos.push(`${credor}: saldo da planilha (${fmt(Math.abs(decRest))}) ≠ ${total-pagas}×parcela (${fmt((total-pagas)*vparc)})`);
+    if (!isNaN(decTot)  && Math.abs(Math.abs(decTot)  - somaParc) > tol)
+      avisos.push(`${credor}: valor total da planilha (${fmt(Math.abs(decTot))}) ≠ soma das parcelas (${fmt(somaParc)})`);
+    if (!isNaN(decRest) && Math.abs(Math.abs(decRest) - abertoP) > tol)
+      avisos.push(`${credor}: saldo da planilha (${fmt(Math.abs(decRest))}) ≠ parcelas em aberto (${fmt(abertoP)})`);
+
+    // No mês a mês, confere se os meses que ele listou são os mesmos que o
+    // cronograma vai gerar — pega mês pulado ou fora de ordem na planilha.
+    if (mesAMes){
+      const gerados = cronogramaDe(r).map(p => +p.venc.slice(5,7));
+      const listados = meses.map(m => { const t=(m||'').match(/\d{1,2}\D+(\d{1,2})/); return t?+t[1]:null; });
+      if (listados.every(x => x != null) && listados.join()!==gerados.join())
+        avisos.push(`${credor}: os meses da planilha (${listados.join('/')}) não batem com o cronograma gerado (${gerados.join('/')}) — confira se falta ou sobra algum mês`);
+    }
 
     r._dup = dividas.some(d => normalizar(d.credor)===normalizar(credor)
                             && Math.abs((+d.valorParcela||0) - vparc) < 0.005
                             && Math.round(+d.parcelas||0) === total);
     impDivRows.push(r);
-  });
+  }
 
   const novos = impDivRows.filter(r => !r._dup);
-  const soma  = novos.reduce((a,r) => a + (r.parcelas - r.pagas) * r.valorParcela, 0);
+  const soma  = novos.reduce((a,r) => a + saldoDe(r), 0);
   box.innerHTML = `
     <div class="alert" style="margin-top:12px">
       <b>${impDivRows.length}</b> dívida(s) lida(s) · <b>${novos.length}</b> a cadastrar ·
@@ -1350,7 +1459,10 @@ function previewImpDiv(){
         return `<tr${r._dup?' style="opacity:.45"':''}>
         <td>${esc(r.credor)}${r._dup?' <span class="muted" style="font-size:11px">(já existe)</span>':''}</td>
         <td style="font-size:12px">${esc(r.descricao||'—')}</td>
-        <td class="num neg">${fmt(-r.valorParcela)}</td>
+        <td class="num neg">${variavel(r)
+          ? `<span style="font-size:11px">${fmt(Math.min(...r.valores))} a ${fmt(Math.max(...r.valores))}</span>
+             <div style="font-size:10px;color:var(--muted)">valores diferentes por mês</div>`
+          : fmt(-r.valorParcela)}</td>
         <td class="num">${r.pagas}/${r.parcelas}</td>
         <td style="white-space:nowrap;font-size:12px">${esc(dataBR(r.primeiraData))}</td>
         <td style="white-space:nowrap;font-size:12px">${cr.length?mesLabel(cr[cr.length-1].mes):'—'}</td>
