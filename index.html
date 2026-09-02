@@ -548,7 +548,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 
     <button class="sb-item" data-tab="financeiro" id="sb-financeiro">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      Financeiro
+      Financeiro_V01
       <span class="sb-lock" id="fin-lock">🔒</span>
     </button>
 
@@ -568,9 +568,15 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 
     <div class="sb-section">Financeiro</div>
 
-    <button class="sb-item" data-tab="fluxo" id="sb-fluxo">
+    <button class="sb-item" data-tab="fv02" id="sb-fv02">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><polyline points="7 14 11 10 15 13 21 6"/></svg>
-      Fluxo de Caixa
+      Financeiro IBnet_V02
+      <span class="sb-lock" id="fv02-lock">🔒</span>
+    </button>
+
+    <button class="sb-item" data-tab="fluxo" id="sb-fluxo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Fluxo de Caixa_V01
       <span class="sb-lock" id="fluxo-lock">🔒</span>
     </button>
 
@@ -691,6 +697,11 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       <iframe src="financeiro/index.html" id="iframe-financeiro" title="Painel Financeiro"></iframe>
     </div>
 
+    <div class="tab-panel" id="tab-fv02">
+      <!-- data-src pelo mesmo motivo do fluxo: só carrega após canAccess(). -->
+      <iframe data-src="financeiro-v02/index.html" id="iframe-fv02" title="Financeiro IBnet V02"></iframe>
+    </div>
+
     <div class="tab-panel" id="tab-fluxo">
       <!-- src fica em data-src de propósito: o módulo só é carregado depois
            que canAccess() aprova o usuário. Sem isso, o navegador de qualquer
@@ -737,7 +748,7 @@ async function hashSenha(senha) {
 }
 
 const ROLE_ACCESS = {
-  admin:       ['home', 'comercial', 'financeiro', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'],
+  admin:       ['home', 'comercial', 'financeiro', 'fv02', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'],
   financeiro:  ['home', 'comercial', 'financeiro', 'cac'],
   comercial:   ['comercial'],
   suporte:     ['suporte', 'ponto'],
@@ -789,6 +800,7 @@ function clearSession() { sessionStorage.removeItem('ibnet_session'); }
 // listado aqui enxerga a aba.
 const TAB_USERS = {
   fluxo: ['igor'],
+  fv02:  ['igor'],
 };
 
 function canAccess(role, tab, username) {
@@ -837,7 +849,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['home', 'comercial', 'financeiro', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
+  ['home', 'comercial', 'financeiro', 'fv02', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab, session.username);
@@ -888,6 +900,7 @@ function switchTab(tab) {
   if (tab === 'home') renderHome();
   if (tab === 'ponto') postSessionTo('iframe-ponto');
   if (tab === 'fluxo') postSessionTo('iframe-fluxo');
+  if (tab === 'fv02')  postSessionTo('iframe-fv02');
 }
 
 document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
@@ -916,7 +929,7 @@ function applyTheme(t) {
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-financeiro','iframe-fluxo','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
+  ['iframe-comercial','iframe-financeiro','iframe-fv02','iframe-fluxo','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -939,6 +952,7 @@ document.getElementById('iframe-suporte').addEventListener('load', () => applyTh
 document.getElementById('iframe-logs').addEventListener('load', () => applyTheme(currentTheme));
 document.getElementById('iframe-ponto').addEventListener('load', () => { applyTheme(currentTheme); postSessionTo('iframe-ponto'); });
 document.getElementById('iframe-fluxo').addEventListener('load',  () => { applyTheme(currentTheme); postSessionTo('iframe-fluxo'); });
+document.getElementById('iframe-fv02').addEventListener('load',   () => { applyTheme(currentTheme); postSessionTo('iframe-fv02'); });
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';

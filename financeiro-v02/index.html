@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Fluxo de Caixa_V01 — IBnet (arquivo)</title>
+<title>Financeiro IBnet — V02</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -130,12 +130,14 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 
 <div class="mini-header">
   <div>
-    <h1>Fluxo de Caixa <span style="font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:2px">V01 · ARQUIVO</span></h1>
+    <h1>Financeiro IBnet <span style="font-size:11px;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:2px">V02</span></h1>
     <div class="mh-sub" id="mh-sub">carregando…</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
     <button class="btn btn-ghost btn-sm" id="btn-sair-fin" style="display:none"
             onclick="sairFinanceiro()" title="Encerrar a sessão do financeiro neste navegador">Sair</button>
+    <button class="btn btn-ghost btn-sm" onclick="abrirImport()">Importar</button>
+    <button class="btn btn-sm" onclick="abrirLanc()">+ Lançamento</button>
   </div>
 </div>
 
@@ -155,7 +157,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   <div class="modal-box" style="max-width:380px">
     <h3>Acesso ao financeiro</h3>
     <p class="muted" style="font-size:13px;line-height:1.55;margin-bottom:16px">
-      Os dados do fluxo de caixa são protegidos por login próprio.
+      Os dados do Financeiro IBnet são protegidos por login próprio.
       Entre com sua conta para visualizar.
     </p>
     <div class="mb-field"><label>E-mail</label>
@@ -376,10 +378,10 @@ const fbCfg = {
   messagingSenderId: "468380845527",
   appId:             "1:468380845527:web:88d88aea4731a2f1e8b792"
 };
-let _app; try{ _app = firebase.app('fluxo'); }catch(e){ _app = firebase.initializeApp(fbCfg,'fluxo'); }
+let _app; try{ _app = firebase.app('fv02'); }catch(e){ _app = firebase.initializeApp(fbCfg,'fv02'); }
 const db   = firebase.database(_app);
-const lref = db.ref('financeiro/lancamentos');
-const dref = db.ref('financeiro/dividas');
+const lref = db.ref('financeiro/v02/lancamentos');
+const dref = db.ref('financeiro/v02/dividas');
 
 /* ── sessão (o portal envia por postMessage) ─────────────────────── */
 function getSession(){
@@ -392,15 +394,8 @@ function autorizado(s){
       && USUARIOS_AUTORIZADOS.includes(String(s.username||'').toLowerCase());
 }
 
-// V01 — ARQUIVO. A base para em ago/2026 e fica só para consulta e
-// comparação histórica. A operação corrente vive em "Financeiro IBnet_V02".
-// A edição é bloqueada de propósito: manter duas bases graváveis ao mesmo
-// tempo é exatamente o jeito de os números divergirem sem ninguém perceber.
-const ARQUIVO = true;
-const podeEditar = s => autorizado(s) && !ARQUIVO;
-
 let session = getSession();
-let isAdmin = podeEditar(session);
+let isAdmin = autorizado(session);
 
 /* ── estado ──────────────────────────────────────────────────────── */
 let lancamentos = [];
@@ -553,21 +548,17 @@ function render(){
     el.innerHTML = `<div class="card" style="text-align:center;padding:48px 24px">
       <div style="font-size:15px;font-weight:500;margin-bottom:6px">Acesso restrito</div>
       <div class="muted" style="font-size:13px">
-        O Fluxo de Caixa é de uso exclusivo da diretoria.<br>
+        O Financeiro IBnet é de uso exclusivo da diretoria.<br>
         Entre com um usuário autorizado para visualizar.
       </div></div>`;
     return;
   }
   document.querySelector('.view-switch')?.style.removeProperty('display');
-  const aviso = ARQUIVO ? `<div class="alert warn">
-      <b>V01 — arquivo.</b> Base congelada em ago/2026, mantida apenas para consulta
-      e comparação. <b>Nada aqui é editável.</b> Lançamentos novos vão em
-      <b>Financeiro IBnet_V02</b>.</div>` : '';
-  if (view==='dfc')   el.innerHTML = aviso + htmlDFC();
-  if (view==='lanc')  el.innerHTML = aviso + htmlLanc();
-  if (view==='div')   el.innerHTML = aviso + htmlDivida();
-  if (view==='rev')   el.innerHTML = aviso + htmlRev();
-  if (view==='plano') el.innerHTML = aviso + htmlPlano();
+  if (view==='dfc')   el.innerHTML = htmlDFC();
+  if (view==='lanc')  el.innerHTML = htmlLanc();
+  if (view==='div')   el.innerHTML = htmlDivida();
+  if (view==='rev')   el.innerHTML = htmlRev();
+  if (view==='plano') el.innerHTML = htmlPlano();
 }
 
 /* ── 1. DFC ──────────────────────────────────────────────────────── */
@@ -751,19 +742,17 @@ function htmlRev(){
   const tot = pend.reduce((a,l)=>a+ +l.valor,0);
   return `<div class="alert">
     <b>${pend.length} lançamentos</b> sem categoria, somando <b>${fmt(tot)}</b>.
-    ${ARQUIVO ? 'Ficaram assim no fechamento do histórico — não há o que corrigir aqui.'
-              : 'Classifique abaixo — cada escolha já corrige o fluxo de caixa na hora.'}</div>
+    Classifique abaixo — cada escolha já corrige o fluxo de caixa na hora.</div>
   <div class="card"><div class="tbl-wrap"><table>
     <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th style="width:260px">Classificar como</th></tr></thead>
     <tbody>${pend.slice(0,150).map(l=>`<tr>
       <td style="white-space:nowrap">${esc(dataBR(l.data))}</td>
       <td>${esc(l.descricao)}</td>
       <td class="num ${+l.valor>=0?'pos':'neg'}">${fmt(+l.valor)}</td>
-      <td>${ARQUIVO ? '<span class="muted">arquivo — não editável</span>'
-        : `<select onchange="classificarUm('${l.id}', this.value)">
+      <td><select onchange="classificarUm('${l.id}', this.value)">
         <option value="">— escolher —</option>
         ${optionsCats('')}
-      </select>`}</td></tr>`).join('')}
+      </select></td></tr>`).join('')}
     </tbody></table></div></div>`;
 }
 function optionsCats(sel){
@@ -802,8 +791,9 @@ function htmlPlano(){
 
 function vazio(){
   return `<div class="card"><div class="empty">
-    <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhum lançamento ainda</div>
-    Use <b>Importar</b> para trazer o extrato do banco ou <b>+ Lançamento</b> para registrar um a um.<br/>
+    <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Base zerada — começando do zero</div>
+    Esta é a base nova. O histórico até ago/2026 ficou congelado em <b>Fluxo de Caixa_V01</b>.<br/>
+    Use <b>+ Lançamento</b> para registrar um a um, na ordem que fizer sentido.<br/>
     Cada linha é classificada automaticamente pelas regras de provedor.</div></div>`;
 }
 
@@ -1250,7 +1240,7 @@ window.addEventListener('message', e => {
     const s = e.data.value;
     if (!session || session.username!==s.username || session.role!==s.role){
       session = s;
-      isAdmin = podeEditar(s);
+      isAdmin = autorizado(s);
       iniciarDados();
       render();
     }
