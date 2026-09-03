@@ -285,6 +285,40 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   </div>
 </div>
 
+<!-- modal de importação de recorrentes em lote -->
+<div class="modal-ov" id="imprec-modal">
+  <div class="modal-box" style="max-width:760px">
+    <h3>Importar recorrentes</h3>
+    <div class="mb-field">
+      <label>Cole a tabela inteira, com o cabeçalho</label>
+      <textarea id="ir-txt" rows="7" placeholder="DESCRICAO	VALOR	DIA	COMPORTAMENTO	CONTA DO PLANO	CONTA DE SAIDA	COMECA A VALER
+RAGTEK - Link dedicado 1Gb	4200,00	10	Fixa	Custo Direto · Link/Trânsito	Conta corrente SICOOB	09/2026"></textarea>
+      <div class="mb-hint">Copie direto do Excel/Google Sheets — as colunas vêm separadas por TAB.
+      São reconhecidas pelo <b>nome do cabeçalho</b>, então a ordem não importa e coluna sobrando
+      não atrapalha. Só <b>descrição</b> e <b>valor</b> são obrigatórias.
+      Este importador é de <b>despesa</b>: todo valor entra como saída.
+      <button class="btn btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:4px"
+              onclick="modeloImpRec()">usar o modelo</button></div>
+    </div>
+    <div class="mb-row">
+      <div class="mb-field"><label>Dia padrão</label>
+        <input type="number" min="1" max="31" id="ir-dia" placeholder="10" oninput="previewImpRec()"/>
+        <div class="mb-hint">Usado só nas linhas sem coluna de dia.</div></div>
+      <div class="mb-field"><label>Conta de saída padrão</label>
+        <input type="text" id="ir-conta" list="r-contas" oninput="previewImpRec()"/></div>
+      <div class="mb-field"><label>Começa a valer em</label>
+        <input type="month" id="ir-inicio" oninput="previewImpRec()"/>
+        <div class="mb-hint">Vale para as linhas sem coluna de vigência.</div></div>
+    </div>
+    <div id="ir-preview"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharImpRec()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="previewImpRec()">Pré-visualizar</button>
+      <button class="btn" id="ir-save" onclick="confirmarImpRec()" disabled>Importar</button>
+    </div>
+  </div>
+</div>
+
 <!-- modal de confirmação: a ocorrência do mês vira lançamento -->
 <div class="modal-ov" id="conf-modal">
   <div class="modal-box" style="max-width:460px">
@@ -1759,6 +1793,7 @@ function htmlRec(){
   const hoje    = new Date().toISOString().slice(0,10);
   const mes     = hoje.slice(0,7);
   const btnNova = isAdmin ? `<button class="btn" onclick="abrirRec()">+ Nova recorrente</button>` : '';
+  const btnImp  = isAdmin ? `<button class="btn btn-ghost" onclick="abrirImpRec()">Importar lista</button>` : '';
 
   if (!recorrentes.length) return `
     <div class="alert">
@@ -1770,7 +1805,7 @@ function htmlRec(){
     <div class="card"><div class="empty">
       <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma recorrente cadastrada</div>
       Comece pelo que sai todo mês na mesma data.<br/><br/>
-      ${btnNova}
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">${btnNova}${btnImp}</div>
     </div></div>`;
 
   const fila   = pendentesRec(hoje);
@@ -1849,7 +1884,7 @@ function htmlRec(){
   </div>
 
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-    <span>Próximos 12 meses</span><span>${btnNova}</span></div>
+    <span>Próximos 12 meses</span><span style="display:flex;gap:8px">${btnImp}${btnNova}</span></div>
   <div class="alert" style="margin-bottom:10px;font-size:12.5px">
     Só as recorrentes já somam <b>${fmt(-ano)}</b> nos próximos 12 meses
     (<b>${fmt(-ano/12)}/mês</b>). Nenhum desses meses está gravado — tudo aqui é
@@ -2112,6 +2147,258 @@ async function confirmarTodasFixas(){
     await lref.update(updates);
     toast(`${fila.length} recorrente(s) confirmada(s) — ${fmt(tot)} lançados.`);
   } catch(e){ toast('Erro ao confirmar: ' + e.message); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   IMPORTAÇÃO DE RECORRENTES EM LOTE
+   Mesmo desenho da importação de dívida: colunas reconhecidas pelo nome
+   do cabeçalho, ordem livre, coluna sobrando não atrapalha.
+
+   O mês de início é declarado, não deduzido — pelo mesmo motivo que a
+   dívida ganhou a coluna 1A PARCELA. "Começa hoje" muda de resposta
+   conforme o dia em que se cola, e a mesma lista colada em outubro
+   produziria uma previsão diferente da colada em setembro, calada.
+   Aqui o mês do formulário fica visível na tela na hora de importar, e
+   a prévia diz linha a linha de onde veio cada vigência.
+   ══════════════════════════════════════════════════════════════════ */
+const COLS_REC = [
+  { campo:'descricao', chaves:['descricao','despesa','item','fornecedor','nome'] },
+  { campo:'valor',     chaves:['valor mensal','valor por mes','valor','custo','mensalidade','preco'] },
+  { campo:'dia',       chaves:['dia do vencimento','dia venc','vencimento','dia'] },
+  // 'conta do plano' precisa casar antes de 'conta', senão a conta bancária
+  // levaria a coluna do plano e as duas ficariam trocadas. Aqui a ordem de
+  // declaração (categoria antes de conta) já resolveria; quem sustenta o caso
+  // difícil é o sort por tamanho lá embaixo.
+  { campo:'categoria', chaves:['conta do plano','plano de contas','categoria','classificacao'] },
+  { campo:'conta',     chaves:['conta de saida','de onde sai','conta bancaria','banco','conta'] },
+  { campo:'fixa',      chaves:['comportamento','fixa ou varia','fixa/varia','fixa','tipo'] },
+  { campo:'inicio',    chaves:['comeca a valer','primeiro mes','a partir de','vigencia','inicio'] },
+  { campo:'fim',       chaves:['ultimo mes','termino','fim','ate'] },
+  { campo:'meses',     chaves:['so nos meses','meses do ano','meses'] },
+  { campo:'obs',       chaves:['observacao','obs','nota'] },
+];
+function mapearColunasRec(head){
+  const pares = [];
+  COLS_REC.forEach(c => c.chaves.forEach(k => pares.push({campo:c.campo, k})));
+  // A chave mais longa ganha, não a declarada primeiro. Sem esta linha,
+  // "NOME DA CONTA DE SAIDA" casa 'nome' e a coluna do banco vira descrição —
+  // e ninguém percebe, porque o resultado é uma planilha lida "com sucesso".
+  // Rodar o módulo com este sort removido quebra 4 asserções do harness.
+  pares.sort((a,b) => b.k.length - a.k.length);
+  const idx = {};
+  head.forEach((h,i) => {
+    const n = normalizar(h).toLowerCase();
+    if (!n) return;
+    const hit = pares.find(p => n.includes(p.k) && idx[p.campo] === undefined);
+    if (hit) idx[hit.campo] = i;
+  });
+  return idx;
+}
+// Mês no formato 'YYYY-MM'. Aceita 09/2026, 2026-09, set/2026 e "setembro
+// de 2026". Sem ano não dá — devolve null e o padrão do formulário assume.
+function mesISO(s){
+  const t = (s||'').trim(); if (!t) return null;
+  let m = t.match(/^(\d{4})[-\/.](\d{1,2})$/);                    // 2026-09
+  if (m) return okMes(+m[1], +m[2]);
+  m = t.match(/^(\d{1,2})[-\/.](\d{4})$/);                        // 09/2026
+  if (m) return okMes(+m[2], +m[1]);
+  m = t.match(/^(\d{4})-(\d{1,2})-\d{1,2}$/);                     // 2026-09-01
+  if (m) return okMes(+m[1], +m[2]);
+  m = t.match(/^\d{1,2}[-\/.](\d{1,2})[-\/.](\d{4})$/);           // 01/09/2026
+  if (m) return okMes(+m[2], +m[1]);
+  const N = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  const n = normalizar(t);
+  m = n.match(/([A-Z]{3})[A-Z]*\D*(\d{4})/);                      // set/2026
+  if (m){ const i = N.indexOf(m[1]); if (i >= 0) return okMes(+m[2], i+1); }
+  return null;
+}
+function okMes(ano, mes){
+  if (!(mes >= 1 && mes <= 12) || !(ano >= 2000 && ano <= 2100)) return null;
+  return `${ano}-${String(mes).padStart(2,'0')}`;
+}
+// Só reconhece as duas palavras. Qualquer outra coisa cai em fixa, que é o
+// caso comum — e a prévia mostra o que ficou, então erro aqui é visível.
+function fixaDe(s){
+  const n = normalizar(s);
+  if (/VARI|ESTIM|APROX|MUDA|OSCIL/.test(n)) return false;
+  return true;
+}
+
+let impRecRows = [];
+function abrirImpRec(){
+  if (!isAdmin) return toast('Sem permissão para importar.');
+  document.getElementById('ir-txt').value = '';
+  document.getElementById('ir-dia').value = '';
+  document.getElementById('ir-conta').value = 'Conta corrente SICOOB';
+  document.getElementById('ir-inicio').value = new Date().toISOString().slice(0,7);
+  // A datalist mora no modal da regra; sem popular aqui, quem abre direto o
+  // importador fica sem sugestão de conta.
+  document.getElementById('r-contas').innerHTML =
+    contasConhecidas().map(c => `<option value="${esc(c)}"></option>`).join('');
+  document.getElementById('ir-preview').innerHTML = '';
+  document.getElementById('ir-save').disabled = true;
+  document.getElementById('imprec-modal').classList.add('show');
+}
+function fecharImpRec(){ document.getElementById('imprec-modal').classList.remove('show'); }
+
+const MODELO_REC = [
+  ['DESCRICAO','VALOR','DIA','COMPORTAMENTO','CONTA DO PLANO','CONTA DE SAIDA','COMECA A VALER'],
+  ['RAGTEK - Link dedicado 1Gb','4200,00','10','Fixa','Custo Direto · Link/Trânsito','Conta corrente SICOOB','09/2026'],
+  ['Rede neutra - fibra','8500,00','5','Varia','Custo Direto · Rede Neutra','Conta corrente SICOOB','09/2026'],
+  ['Contador','980,00','15','Fixa','Administrativo · Contabilidade','Conta corrente SICOOB','09/2026'],
+].map(l => l.join('\t')).join('\n');
+function modeloImpRec(){
+  document.getElementById('ir-txt').value = MODELO_REC;
+  document.getElementById('ir-dia').value = '';
+  previewImpRec();
+}
+
+function previewImpRec(){
+  const box = document.getElementById('ir-preview');
+  const txt = document.getElementById('ir-txt').value.trim();
+  impRecRows = [];
+  document.getElementById('ir-save').disabled = true;
+  if (!txt){ box.innerHTML = ''; return; }
+
+  const linhas = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const dados  = linhas.map(splitDiv).filter(Boolean);
+  if (!dados.length){
+    box.innerHTML = `<div class="alert warn" style="margin-top:10px">Não consegui separar as
+      colunas. Cole com TAB (direto do Excel) ou com ponto e vírgula.</div>`;
+    return;
+  }
+  const idx = mapearColunasRec(dados[0]);
+  const temCabecalho = idx.descricao !== undefined && idx.valor !== undefined;
+  if (!temCabecalho){
+    box.innerHTML = `<div class="alert warn" style="margin-top:10px">
+      Não achei o cabeçalho. Preciso de pelo menos uma coluna de <b>descrição</b> e uma de
+      <b>valor</b>. Use o modelo como referência.</div>`;
+    return;
+  }
+  const reconhecidas = Object.keys(idx).sort();
+  const diaPadrao   = Math.round(+document.getElementById('ir-dia').value || 0);
+  const contaPadrao = document.getElementById('ir-conta').value.trim();
+  const iniPadrao   = document.getElementById('ir-inicio').value ||
+                      new Date().toISOString().slice(0,7);
+
+  const jaExistem = new Set(recorrentes.map(r => normalizar(r.descricao)));
+  const erros = [], avisos = [];
+
+  dados.slice(1).forEach((c, i) => {
+    const v = campo => (idx[campo] !== undefined ? (c[idx[campo]] || '').trim() : '');
+    const desc = v('descricao');
+    if (!desc) return;                            // linha em branco no meio da planilha
+    const linha = i + 2;
+
+    const bruto = parseValorBR(v('valor'));
+    if (isNaN(bruto) || !bruto){ erros.push(`linha ${linha} (${desc}): valor ilegível`); return; }
+
+    const dia = diaDe(v('dia')) || diaPadrao;
+    if (!dia){ erros.push(`linha ${linha} (${desc}): sem dia de vencimento`); return; }
+
+    const iniDeclarado = mesISO(v('inicio'));
+    const inicio = iniDeclarado || iniPadrao;
+    const fim    = mesISO(v('fim'));
+    if (fim && fim < inicio){
+      erros.push(`linha ${linha} (${desc}): último mês antes do primeiro`); return;
+    }
+
+    // Categoria declarada ganha; sem ela, o motor de classificação chuta e a
+    // prévia marca o chute. Categoria que não existe no plano é erro, não
+    // silêncio: guardar string solta aqui quebraria o agrupamento do DFC.
+    let categoria = v('categoria'), sugerida = false;
+    if (categoria){
+      const achou = TODAS_CATS.find(x => normalizar(x) === normalizar(categoria));
+      if (!achou){ erros.push(`linha ${linha} (${desc}): conta "${categoria}" não existe no plano`); return; }
+      categoria = achou;
+    } else {
+      categoria = classificar(desc) || '';
+      sugerida = !!categoria;
+    }
+
+    const r = {
+      descricao: desc,
+      valor: -Math.abs(bruto),                    // este importador é de despesa
+      dia, fixa: idx.fixa !== undefined ? fixaDe(v('fixa')) : true,
+      categoria, conta: v('conta') || contaPadrao,
+      inicio, fim: fim || null, meses: parseMeses(v('meses')),
+      obs: v('obs') || '', ativo: true,
+      _dup: jaExistem.has(normalizar(desc)),
+      _iniDeduzido: !iniDeclarado,
+      _catSugerida: sugerida
+    };
+    impRecRows.push(r);
+  });
+
+  const novos = impRecRows.filter(r => !r._dup);
+  const mensal = novos.reduce((a,r) => a + Math.abs(r.valor), 0);
+  const mFim   = somaMeses(iniPadrao + '-01', 11).slice(0,7);
+  const anual  = novos.reduce((a,r) =>
+    a + ocorrenciasDe(r, iniPadrao, mFim).reduce((s,o) => s + Math.abs(o.valor), 0), 0);
+
+  if (impRecRows.some(r => r._iniDeduzido))
+    avisos.push(`Sem coluna de vigência, ${impRecRows.filter(r=>r._iniDeduzido).length} linha(s) ` +
+                `começam em ${mesLabel(iniPadrao)} — o mês do campo acima. Se alguma já vale ` +
+                `há mais tempo, corrija antes de importar ou ela não entra na fila do mês certo.`);
+  if (impRecRows.some(r => r._catSugerida))
+    avisos.push(`${impRecRows.filter(r=>r._catSugerida).length} linha(s) tiveram a conta do plano ` +
+                `adivinhada pela descrição. Confira na tabela abaixo — palpite errado vai para o DFC igual.`);
+  if (impRecRows.some(r => !r.categoria))
+    avisos.push(`${impRecRows.filter(r=>!r.categoria).length} linha(s) ficam sem conta do plano ` +
+                `e vão cair em Revisar quando você confirmar.`);
+
+  box.innerHTML = `
+    <div class="alert" style="margin-top:10px">
+      <b>${impRecRows.length}</b> recorrente(s) lida(s) · <b>${novos.length}</b> a cadastrar ·
+      <b class="neg">${fmt(-mensal)}</b>/mês · <b class="neg">${fmt(-anual)}</b> em 12 meses
+      ${impRecRows.length-novos.length?`<br/><b>${impRecRows.length-novos.length}</b> já cadastrada(s) pela descrição, serão ignoradas.`:''}
+      <br/><span class="muted" style="font-size:12px">Colunas reconhecidas: ${esc(reconhecidas.join(' · '))}</span>
+      ${erros.length?`<br/><span class="neg">${erros.length} linha(s) com problema:</span> ${esc(erros.slice(0,4).join(' · '))}`:''}
+    </div>
+    ${avisos.length?`<div class="alert warn" style="margin-top:10px">
+      <b>Confira antes de importar:</b><br/>${avisos.map(a=>esc(a)).join('<br/>')}</div>`:''}
+    ${impRecRows.length?`<div class="tbl-wrap" style="max-height:240px;overflow:auto;margin-top:10px">
+      <table><thead><tr><th>Descrição</th><th>Conta do plano</th><th>Sai de</th>
+        <th class="num">Dia</th><th class="num">Valor</th><th>Vigência</th><th>Próxima</th></tr></thead>
+      <tbody>${impRecRows.map(r => {
+        const oc = ocorrenciasDe(r, r.inicio, somaMeses(r.inicio+'-01',13).slice(0,7));
+        return `<tr${r._dup?' style="opacity:.45"':''}>
+        <td><b>${esc(r.descricao)}</b>${r._dup?' <span class="muted" style="font-size:11px">(já existe)</span>':''}
+          ${r.obs?`<div style="font-size:10px;color:var(--muted)">${esc(r.obs)}</div>`:''}</td>
+        <td style="font-size:12px">${r.categoria?esc(r.categoria):'<span class="neg">sem conta</span>'}
+          ${r._catSugerida?'<div style="font-size:10px;color:var(--yellow)">adivinhada pela descrição</div>':''}</td>
+        <td style="font-size:12px">${esc(r.conta||'—')}</td>
+        <td class="num">${r.dia}</td>
+        <td class="num neg">${fmt(r.valor)}${r.fixa?'':'<div style="font-size:10px;color:var(--yellow)">varia</div>'}</td>
+        <td style="font-size:11.5px;white-space:nowrap">${mesLabel(r.inicio)} → ${r.fim?mesLabel(r.fim):'sem fim'}
+          ${r._iniDeduzido?'<div style="font-size:10px;color:var(--yellow)">do campo acima</div>':''}
+          ${Array.isArray(r.meses)?`<div style="font-size:10px;color:var(--muted)">só ${
+            r.meses.map(m=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][m-1]).join(', ')}</div>`:''}</td>
+        <td style="white-space:nowrap;font-size:12px">${oc.length?esc(dataBR(oc[0].venc)):'—'}</td>
+      </tr>`;}).join('')}
+      </tbody></table></div>`:''}`;
+  document.getElementById('ir-save').disabled = !novos.length;
+}
+
+async function confirmarImpRec(){
+  const novos = impRecRows.filter(r => !r._dup);
+  if (!novos.length) return;
+  const btn = document.getElementById('ir-save');
+  btn.disabled = true; btn.textContent = 'Importando…';
+  const updates = {};
+  novos.forEach(r => {
+    // Campos de tela não vão para o banco — senão _catSugerida viraria dado
+    // permanente e ninguém saberia mais o que foi conferido.
+    const { _dup, _iniDeduzido, _catSugerida, ...rec } = r;
+    updates[rref.push().key] = { ...rec, por: session?.nome||'—', ts: Date.now() };
+  });
+  try {
+    await rref.update(updates);
+    fecharImpRec();
+    toast(`${novos.length} recorrente(s) cadastrada(s).`);
+    setView('rec');
+  } catch(e){ toast('Erro na importação: ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Importar';
 }
 
 /* ── importação ──────────────────────────────────────────────────── */
