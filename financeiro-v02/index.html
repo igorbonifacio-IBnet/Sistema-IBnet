@@ -406,9 +406,14 @@ const PLANO = {
   OPER: { nome:'Operacional', cor:'var(--green)', sub:[
     { nome:'Receitas', cats:[
       'Receita de Mensalidades','Receita de Instalação','Receita de Serviços',
+      'Receita de Câmeras/CFTV',
       'Outras Receitas','Estornos e Reembolsos' ]},
+    // Câmeras é operação de integrador: a IBnet fatura o cliente final e paga
+    // parceiros locais pela porta. Receita e custo andam juntos e precisam de
+    // par próprio — sem isso a margem do negócio some dentro de mensalidades.
     { nome:'Custo Direto (rede)', cats:[
-      'Custo Direto · Link/Trânsito','Custo Direto · Rede Neutra','Custo Direto · Postes/Licenças' ]},
+      'Custo Direto · Link/Trânsito','Custo Direto · Rede Neutra','Custo Direto · Postes/Licenças',
+      'Custo Direto · Câmeras/CFTV' ]},
     { nome:'Pessoal', cats:[
       'Pessoal · Folha','Pessoal · Pró-labore','Pessoal · VA/VT','Pessoal · Comissões',
       'Pessoal · Benefícios','Pessoal · Terceirizados','Pessoal · Encargos','Pessoal · Adiantamentos' ]},
