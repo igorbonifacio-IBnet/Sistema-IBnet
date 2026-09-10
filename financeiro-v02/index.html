@@ -440,6 +440,10 @@ const PLANO = {
 const GRUPO_DE = {};
 Object.entries(PLANO).forEach(([g,d]) => d.sub.forEach(s => s.cats.forEach(c => GRUPO_DE[c] = g)));
 const TODAS_CATS = Object.keys(GRUPO_DE);
+// Serviço da dívida: as contas onde uma parcela baixada na aba Dívidas
+// pode cair. Uma lista só, porque quem usa são dois lugares que precisam
+// concordar — o aviso do DFC e o dedup da importação de extrato.
+const CATS_DIVIDA = PLANO.FINAN.sub.find(s => s.nome==='Serviço da dívida').cats;
 
 /* ══════════════════════════════════════════════════════════════════
    REGRAS DE CLASSIFICAÇÃO AUTOMÁTICA
@@ -776,7 +780,7 @@ function htmlDFC(){
   const opEnt = rows.filter(l => GRUPO_DE[l.categoria]==='OPER' && +l.valor>0).reduce((s,l)=>s+ +l.valor,0);
   const opSai = rows.filter(l => GRUPO_DE[l.categoria]==='OPER' && +l.valor<0).reduce((s,l)=>s+ +l.valor,0);
   const variacao = t.OPER+t.INVEST+t.FINAN+t.REVISAR;
-  const servicoDivida = rows.filter(l => ['Amortização de Empréstimo','Juros e Encargos','Cartão de Crédito','Devolução de Empréstimo'].includes(l.categoria))
+  const servicoDivida = rows.filter(l => CATS_DIVIDA.includes(l.categoria))
                             .reduce((s,l)=>s+ +l.valor,0);
 
   let aviso = '';
@@ -932,6 +936,11 @@ function pillGrupo(g){
   const [c,t] = m[g]||m.REVISAR; return `<span class="pill ${c}">${t}</span>`;
 }
 function dataBR(d){ if(!d) return '—'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
+// Em UTC de propósito: comparar datas ISO em horário local erra por um dia
+// duas vezes por ano, e "errou por um dia" numa janela de conciliação é o
+// tipo de bug que ninguém encontra depois.
+const diasEntre = (a,b) =>
+  Math.round((Date.parse(b+'T00:00:00Z') - Date.parse(a+'T00:00:00Z')) / 86400000);
 
 /* ── 3. Revisar ──────────────────────────────────────────────────── */
 function htmlRev(){
@@ -1226,7 +1235,8 @@ function htmlDivida(){
           <td class="num neg">${fmt(-saldoDe(d))}</td>
           <td style="white-space:nowrap;font-size:12px">${ult?mesLabel(ult):'—'}</td>
           ${isAdmin?`<td style="white-space:nowrap">
-            <button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Marcar mais uma parcela como paga">+1 paga</button>
+            <button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Baixa a próxima parcela e lança a saída no fluxo">+1 paga</button>
+            ${pg?`<button class="icon-btn" onclick="pagarParcela('${d.id}',-1)" title="Desfazer a última baixa e apagar o lançamento">−1</button>`:''}
             <button class="icon-btn" onclick="editarDivida('${d.id}')">editar</button>
             <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
         </tr>`;}).join('')}
@@ -1350,12 +1360,74 @@ async function salvarDivida(){
   } catch(e){ toast('Erro ao salvar: ' + e.message); }
   btn.disabled = false;
 }
+// Dar baixa numa parcela é o mesmo gesto de confirmar uma recorrente, e
+// tem que produzir a mesma coisa: um lançamento. O cronograma continua
+// derivado — nada de mês futuro gravado —, mas o DFC lê `lancamentos` e
+// mais nada. Sem esta linha, contar as parcelas pagas não move um centavo
+// no fluxo de caixa, e o serviço da dívida (o maior consumo de caixa da
+// empresa) fica invisível justamente onde ele decide alguma coisa.
+// `divId` + `divParc` são a marca dupla, igual a `recId` + `recMes`:
+// identificam a parcela e impedem que a mesma baixa entre duas vezes.
+function lancDaParcela(d, p){
+  const n = Math.round(+d.parcelas||0);
+  return { data: p.venc,
+           descricao: `${d.credor||'Dívida'} — parcela ${p.n}/${n}`,
+           valor: -Math.abs(+p.valor||0),
+           categoria: d.categoria || 'Amortização de Empréstimo',
+           conta: d.conta || '',
+           obs: d.descricao || '',
+           origem:'divida', divId:d.id, divParc:p.n,
+           por: session?.nome || '—', ts: Date.now() };
+}
+const lancDaParcelaExistente = (divId, nParc) =>
+  lancamentos.find(l => l.divId===divId && Math.round(+l.divParc)===nParc) || null;
+
+// A trava do outro lado. As parcelas de jan a ago já entraram pelo extrato
+// do banco, com a descrição do banco — dar baixa nelas agora criaria uma
+// segunda linha do mesmo dinheiro. O extrato não escreve o nome do credor,
+// então o casamento é estrutural: mesmo valor, conta de serviço da dívida,
+// dentro de uma semana do vencimento. Não decide por ele: mostra a linha
+// que achou e pergunta. É raro o bastante para não virar aviso ignorado.
+const noExtratoJa = (venc, valor) => lancamentos.find(l =>
+     l.origem !== 'divida'
+  && CATS_DIVIDA.includes(l.categoria)
+  && Math.abs(Math.abs(+l.valor||0) - Math.abs(+valor||0)) < 0.005
+  && Math.abs(diasEntre(l.data, venc)) <= 7) || null;
+
 async function pagarParcela(id, delta){
   const d = dividas.find(x=>x.id===id); if(!d) return;
-  const n    = Math.round(+d.parcelas||0);
-  const novo = Math.min(n, Math.max(0, Math.round(+d.pagas||0) + delta));
-  await dref.child(id).update({ pagas:novo, status: novo>=n ? 'quitada' : 'ativa' });
-  toast(novo>=n ? `${d.credor} quitada.` : `${d.credor}: ${novo} de ${n} pagas.`);
+  const n     = Math.round(+d.parcelas||0);
+  const atual = Math.max(0, Math.round(+d.pagas||0));
+  const novo  = Math.min(n, Math.max(0, atual + delta));
+  if (novo === atual) return toast(delta>0 ? 'Todas as parcelas já estão pagas.'
+                                           : 'Nenhuma baixa para desfazer.');
+  // Quem muda de estado: ao pagar, a parcela nº `novo`; ao desfazer, a
+  // última que estava paga, que é a de nº `atual`.
+  const alvo = cronogramaDe(d)[(delta>0 ? novo : atual) - 1];
+  if (!alvo) return toast('Parcela fora do cronograma — confira o cadastro.');
+  const est = { pagas:novo, status: novo>=n ? 'quitada' : 'ativa' };
+  try {
+    if (delta > 0){
+      // Idempotente de propósito: se o lançamento daquela parcela já
+      // existe (baixa refeita depois de um desfazer), só o contador anda.
+      if (!lancDaParcelaExistente(id, alvo.n)){
+        const noExtrato = noExtratoJa(alvo.venc, alvo.valor);
+        if (noExtrato && !confirm(
+              `O extrato já tem ${fmt(-Math.abs(+noExtrato.valor||0))} em ${dataBR(noExtrato.data)}`
+            + ` — "${noExtrato.descricao}" — na conta ${noExtrato.categoria}.\n\n`
+            + `Se for esta mesma parcela, lançar de novo conta o dinheiro duas vezes.\n\n`
+            + `Lançar assim mesmo?`)) return;
+        await lref.push(lancDaParcela(d, alvo));
+      }
+      await dref.child(id).update(est);
+      toast(`${d.credor}: ${novo} de ${n} pagas · ${fmt(-Math.abs(+alvo.valor||0))} lançado em ${dataBR(alvo.venc)}.`);
+    } else {
+      const ja = lancDaParcelaExistente(id, alvo.n);
+      if (ja) await lref.child(ja.id).remove();
+      await dref.child(id).update(est);
+      toast(`${d.credor}: baixa desfeita — ${novo} de ${n} pagas${ja?', lançamento removido':''}.`);
+    }
+  } catch(e){ toast('Erro ao dar baixa: ' + e.message); }
 }
 async function excluirDivida(id){
   const d = dividas.find(x=>x.id===id); if(!d) return;
@@ -2637,6 +2709,27 @@ function splitLinha(l){
   const p = l.split(',');
   return p.length >= 3 ? p : [l];
 }
+// Duas linhas são o mesmo dinheiro por dois motivos diferentes.
+//
+// 1. Repetição literal — mesma data, mesmo valor, mesma descrição. É o
+//    caso de colar o extrato duas vezes.
+// 2. Parcela já baixada na aba Dívidas. Aqui o texto não ajuda: o banco
+//    escreve "DEB TIT COMP EFETI" e a baixa escreve o nome do credor.
+//    A chave tem que ser estrutural — mesmo valor, conta do plano de
+//    serviço da dívida, dentro de uma semana do vencimento. Débito
+//    automático de parcela não erra valor; erra data por feriado.
+//
+// Sem o item 2, importar o extrato depois de dar baixa contaria a dívida
+// duas vezes — e ela é o maior consumo de caixa da empresa.
+function jaLancado(r){
+  if (lancamentos.some(l => l.data===r.data
+        && Math.abs(+l.valor - r.valor) < 0.005
+        && normalizar(l.descricao)===normalizar(r.descricao))) return true;
+  if (!CATS_DIVIDA.includes(r.categoria)) return false;
+  return lancamentos.some(l => l.origem==='divida'
+        && Math.abs(Math.abs(+l.valor||0) - Math.abs(r.valor)) < 0.005
+        && Math.abs(diasEntre(l.data, r.data)) <= 7);
+}
 function previewImport(){
   const txt = document.getElementById('imp-txt').value.trim();
   if (!txt) return toast('Cole as linhas primeiro.');
@@ -2653,14 +2746,16 @@ function previewImport(){
     impRows.push({ data, descricao:desc, valor, categoria: classificar(desc) || '' });
   });
   const okCat = impRows.filter(r=>r.categoria).length;
-  const dup = impRows.filter(r => lancamentos.some(l =>
-    l.data===r.data && Math.abs(+l.valor - r.valor)<0.005 && normalizar(l.descricao)===normalizar(r.descricao))).length;
+  const dups  = impRows.filter(jaLancado);
+  const dup   = dups.length;
+  const dupDiv= dups.filter(r => CATS_DIVIDA.includes(r.categoria)).length;
   document.getElementById('imp-preview').innerHTML = `
     <div class="alert" style="margin:12px 0 0">
       <b>${impRows.length}</b> linhas lidas · <b>${okCat}</b> classificadas automaticamente
       (${impRows.length?Math.round(100*okCat/impRows.length):0}%) ·
       <b>${impRows.length-okCat}</b> vão para Revisar.
-      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas.`:''}
+      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas${
+        dupDiv?` — <b>${dupDiv}</b> ${dupDiv===1?'é parcela já baixada':'são parcelas já baixadas'} na aba Dívidas`:''}.`:''}
       ${erros.length?`<br/><span class="neg">${erros.length} linhas com problema:</span> ${esc(erros.slice(0,3).join(' · '))}`:''}
     </div>
     ${impRows.length?`<div class="tbl-wrap" style="max-height:190px;overflow:auto;margin-top:10px">
@@ -2676,8 +2771,7 @@ async function confirmarImport(){
   if (!impRows.length) return;
   const btn = document.getElementById('imp-save');
   btn.disabled = true; btn.textContent = 'Importando…';
-  const novos = impRows.filter(r => !lancamentos.some(l =>
-    l.data===r.data && Math.abs(+l.valor - r.valor)<0.005 && normalizar(l.descricao)===normalizar(r.descricao)));
+  const novos = impRows.filter(r => !jaLancado(r));
   const updates = {};
   novos.forEach(r => {
     updates[lref.push().key] = { ...r, origem:'import', por: session?.nome||'—', ts: Date.now() };
