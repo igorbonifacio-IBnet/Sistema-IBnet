@@ -1753,17 +1753,30 @@ function pendentesRec(hojeISO){
 // Previsto x realizado de um mês. Onde já houve confirmação vale o valor
 // real, não o da regra — senão o total do mês seria uma estimativa mesmo
 // depois de o dinheiro ter saído.
+//
+// Entrada e saída somam SEPARADO. O líquido sozinho responde "sobra quanto"
+// e apaga "quanto entra" e "quanto sai" — que é o que decide se o mês apertou
+// por receita de menos ou por custo de mais. Mesma razão que faz o DFC lançar
+// as duas pontas cheias em vez do lucro.
+//
+// O lado é escolhido pelo sinal da REGRA, não pelo do lançamento: se uma
+// confirmação vier com o sinal trocado, ela aparece como número estranho
+// dentro do lado certo em vez de migrar para o outro lado e abater duas vezes.
 function resumoRecMes(mes){
   const mapa = mapaRealizado();
-  const r = { previsto:0, realizado:0, aberto:0, nAberto:0, nConf:0, itens:[] };
+  const r = { previsto:0, realizado:0, aberto:0, nAberto:0, nConf:0,
+              entra:0, sai:0, nEntra:0, nSai:0, nConfEntra:0, nConfSai:0, itens:[] };
   recorrentes.forEach(g => ocorrenciasDe(g, mes, mes).forEach(o => {
     const l = realizadoDe(mapa, g.id, o.mes);
+    const v = l ? (+l.valor || 0) : o.valor;   // real onde já confirmou
     r.previsto += o.valor;
     if (l){ r.realizado += (+l.valor || 0); r.nConf++; }
     else  { r.aberto    += o.valor;         r.nAberto++; }
+    if (o.valor >= 0){ r.entra += v; r.nEntra++; if (l) r.nConfEntra++; }
+    else             { r.sai   += v; r.nSai++;   if (l) r.nConfSai++;   }
     r.itens.push({ ...o, regra:g, lanc:l });
   }));
-  r.total = r.realizado + r.aberto;
+  r.total = r.realizado + r.aberto;   // === r.entra + r.sai
   return r;
 }
 
@@ -1802,10 +1815,11 @@ function htmlRec(){
 
   if (!recorrentes.length) return `
     <div class="alert">
-      Aqui ficam as despesas que se repetem todo mês — folha, link, aluguel, contador.
+      Aqui fica o que se repete todo mês nos dois sentidos — folha, link, aluguel e
+      contador de um lado; mensalidade e contrato fixo do outro.
       Você cadastra a <b>regra</b> uma vez; o previsto de cada mês é calculado sozinho
       e entra na fila quando chega o dia. <b>Nada é gravado no futuro</b>: o lançamento
-      só nasce quando você confirma quanto realmente saiu.
+      só nasce quando você confirma quanto realmente entrou ou saiu.
     </div>
     <div class="card"><div class="empty">
       <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma recorrente cadastrada</div>
@@ -1817,22 +1831,29 @@ function htmlRec(){
   const resumo = resumoRecMes(mes);
   const divMes = dividaDoMes(mes);
 
-  /* previsão dos próximos 12 meses — derivada, igual à agenda de dívida */
+  /* previsão dos próximos 12 meses — derivada, igual à agenda de dívida.
+     Entrada e saída somam em baldes separados: Math.abs() sobre o líquido
+     dava o mesmo número para "entra 0, sai 40 mil" e para "entra 80, sai 40". */
   const mFim = somaMeses(mes + '-01', 11).slice(0,7);
   const linha = [];
   for (let m = mes; m <= mFim && linha.length < 12; m = proxMes(m)){
-    let v = 0, q = 0;
-    recorrentes.forEach(r => ocorrenciasDe(r, m, m).forEach(o => { v += o.valor; q++; }));
-    linha.push({ mes:m, valor:Math.abs(v), qtd:q, divida:dividaDoMes(m) });
+    let entra = 0, sai = 0, q = 0;
+    recorrentes.forEach(r => ocorrenciasDe(r, m, m).forEach(o => {
+      if (o.valor >= 0) entra += o.valor; else sai += o.valor; q++; }));
+    linha.push({ mes:m, entra, sai, qtd:q, divida:dividaDoMes(m) });
   }
-  const ano   = linha.reduce((a,x) => a + x.valor, 0);
-  const pico  = Math.max(1, ...linha.map(x => x.valor + x.divida));
+  const anoEnt = linha.reduce((a,x) => a + x.entra, 0);
+  const anoSai = linha.reduce((a,x) => a + x.sai,   0);
+  const anoDiv = linha.reduce((a,x) => a + x.divida,0);
+  /* a barra mede peso: só o que SAI, recorrente + dívida. Receita na barra
+     encolheria o mês caro só por ele faturar mais. */
+  const pico  = Math.max(1, ...linha.map(x => Math.abs(x.sai) + x.divida));
   const fixas = fila.filter(p => p.regra.fixa !== false);
 
   const ativas  = recorrentes.filter(r => r.ativo !== false);
   const pausadas= recorrentes.filter(r => r.ativo === false);
 
-  /* agrupa as regras por conta de saída — é assim que se olha saldo */
+  /* agrupa as regras pela conta bancária — é assim que se olha saldo */
   const porConta = {};
   ativas.forEach(r => {
     const k = r.conta || '— sem conta informada —';
@@ -1843,7 +1864,7 @@ function htmlRec(){
   ${fila.length ? `
   <div class="alert warn">
     <b>${fila.length} ${fila.length===1?'recorrente já venceu':'recorrentes já venceram'} e não ${fila.length===1?'foi confirmada':'foram confirmadas'}.</b>
-    Confirmar é dizer quanto de fato saiu — é isso que vira lançamento no fluxo.
+    Confirmar é dizer quanto de fato entrou ou saiu — é isso que vira lançamento no fluxo.
     Enquanto não confirmar, esse dinheiro não aparece no caixa realizado.
   </div>
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -1873,52 +1894,76 @@ function htmlRec(){
     <b>Nada pendente.</b> Toda recorrente que já venceu neste período está confirmada.
   </div>`}
 
+  ${(() => {
+    /* Sobra = o que entra menos o que sai menos a dívida do mês, com sinal de
+       verdade. Antes esta faixa fazia -Math.abs() em cima do líquido: com só
+       despesa cadastrada dava certo por acidente, e no dia em que entrou
+       receita passou a imprimir a sobra positiva como se fosse conta a pagar. */
+    const sobra = resumo.entra + resumo.sai - divMes;
+    return `
   <div class="dfc-grid" style="margin-top:14px">
-    <div class="dfc-box"><div class="lbl">Previsto em ${mesLabel(mes)}</div>
-      <div class="val neg">${fmt(-Math.abs(resumo.previsto))}</div>
-      <div class="sub">${resumo.itens.length} recorrente(s) no mês</div></div>
-    <div class="dfc-box"><div class="lbl">Já confirmado</div>
-      <div class="val ${resumo.nConf?'neg':'muted'}">${resumo.nConf?fmt(resumo.realizado):'—'}</div>
-      <div class="sub">${resumo.nConf} de ${resumo.itens.length} lançadas</div></div>
-    <div class="dfc-box"><div class="lbl">Falta sair</div>
-      <div class="val ${resumo.nAberto?'neg':'muted'}">${resumo.nAberto?fmt(resumo.aberto):'—'}</div>
-      <div class="sub">${resumo.nAberto} a confirmar</div></div>
-    <div class="dfc-box tot"><div class="lbl">Compromisso fixo do mês</div>
-      <div class="val neg">${fmt(-(Math.abs(resumo.total) + divMes))}</div>
-      <div class="sub">recorrentes + parcelas de dívida</div></div>
-  </div>
+    <div class="dfc-box op"><div class="lbl">Entra em ${mesLabel(mes)}</div>
+      <div class="val ${resumo.nEntra?'pos':'muted'}">${resumo.nEntra?fmt(resumo.entra):'—'}</div>
+      <div class="sub">${resumo.nEntra} receita(s) · ${resumo.nConfEntra} confirmada(s)</div></div>
+    <div class="dfc-box"><div class="lbl">Sai em ${mesLabel(mes)}</div>
+      <div class="val ${resumo.nSai?'neg':'muted'}">${resumo.nSai?fmt(resumo.sai):'—'}</div>
+      <div class="sub">${resumo.nSai} despesa(s) · ${resumo.nConfSai} confirmada(s)</div></div>
+    <div class="dfc-box fin"><div class="lbl">Parcelas de dívida</div>
+      <div class="val ${divMes?'neg':'muted'}">${divMes?fmt(-divMes):'—'}</div>
+      <div class="sub">${divMes?'ainda em aberto no mês':'nada vencendo no mês'}</div></div>
+    <div class="dfc-box tot"><div class="lbl">Sobra do mês</div>
+      <div class="val ${sobra>=0?'pos':'neg'}">${fmt(sobra)}</div>
+      <div class="sub">${resumo.itens.length} recorrente(s) + dívida${
+        resumo.nConf?` · ${resumo.nConf} já confirmada(s) pelo valor real`:''}</div></div>
+  </div>`;})()}
 
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
     <span>Próximos 12 meses</span><span style="display:flex;gap:8px">${btnImp}${btnNova}</span></div>
   <div class="alert" style="margin-bottom:10px;font-size:12.5px">
-    Só as recorrentes já somam <b>${fmt(-ano)}</b> nos próximos 12 meses
-    (<b>${fmt(-ano/12)}/mês</b>). Nenhum desses meses está gravado — tudo aqui é
-    calculado a partir das ${ativas.length} regras ativas.
+    As ${ativas.length} regras ativas somam <b class="pos">${fmt(anoEnt)}</b> de entrada
+    contra <b class="neg">${fmt(anoSai)}</b> de saída nos próximos 12 meses; com
+    <b class="neg">${fmt(-anoDiv)}</b> de dívida, sobra
+    <b class="${anoEnt+anoSai-anoDiv>=0?'pos':'neg'}">${fmt(anoEnt+anoSai-anoDiv)}</b>
+    (<b>${fmt((anoEnt+anoSai-anoDiv)/12)}/mês</b>).
+    Nenhum desses meses está gravado — tudo aqui é derivado das regras.
   </div>
   <div class="card"><div class="tbl-wrap"><table>
-    <thead><tr><th>Mês</th><th class="num">Itens</th><th class="num">Recorrentes</th>
-      <th class="num">Dívida</th><th class="num">Total fixo</th><th style="width:26%">Peso</th></tr></thead>
+    <thead><tr><th>Mês</th><th class="num">Itens</th><th class="num">Entra</th>
+      <th class="num">Sai</th><th class="num">Dívida</th><th class="num">Sobra</th>
+      <th style="width:20%" title="Quanto sai no mês — recorrente + dívida — em relação ao mês mais pesado">Peso da saída</th></tr></thead>
     <tbody>${linha.map(x => {
-      const t = x.valor + x.divida;
+      const sobra = x.entra + x.sai - x.divida;
+      const peso  = Math.abs(x.sai) + x.divida;
       return `<tr${x.mes===mes?' style="background:rgba(221,92,51,.07)"':''}>
         <td style="white-space:nowrap">${mesLabel(x.mes)}${x.mes===mes?' <span class="muted" style="font-size:11px">· atual</span>':''}</td>
         <td class="num">${x.qtd||'—'}</td>
-        <td class="num ${x.valor?'neg':'muted'}">${x.valor?fmt(-x.valor):'—'}</td>
+        <td class="num ${x.entra?'pos':'muted'}">${x.entra?fmt(x.entra):'—'}</td>
+        <td class="num ${x.sai?'neg':'muted'}">${x.sai?fmt(x.sai):'—'}</td>
         <td class="num ${x.divida?'neg':'muted'}">${x.divida?fmt(-x.divida):'—'}</td>
-        <td class="num ${t?'neg':'muted'}"><b>${t?fmt(-t):'—'}</b></td>
-        <td><div class="bar-track"><div class="bar-fill" style="width:${Math.round(100*t/pico)}%;background:var(--yellow)"></div></div></td>
+        <td class="num ${x.qtd||x.divida?(sobra>=0?'pos':'neg'):'muted'}"><b>${x.qtd||x.divida?fmt(sobra):'—'}</b></td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:${Math.round(100*peso/pico)}%;background:var(--yellow)"></div></div></td>
       </tr>`;}).join('')}
     </tbody></table></div></div>
 
   <div class="section-title">Regras cadastradas (${ativas.length})</div>
   ${Object.keys(porConta).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(conta => {
     const itens = porConta[conta];
-    const soma  = itens.reduce((a,r) => a + Math.abs(+r.valor||0), 0);
+    /* Somava Math.abs() de tudo: a receita de mensalidade entrava no total da
+       conta com o mesmo peso de uma despesa, e o cabeçalho da SICOOB virava a
+       soma de tudo que PASSA pela conta em vez do que sobra nela. */
+    const gEnt = itens.reduce((a,r) => a + Math.max(0, +r.valor||0), 0);
+    const gSai = itens.reduce((a,r) => a + Math.min(0, +r.valor||0), 0);
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px 6px">
         <b style="font-size:13px">${esc(conta)}</b>
-        <span class="neg" style="font-size:13px">${fmt(-soma)}/mês</span></div>
+        <span style="font-size:13px">${gEnt ? `<span class="muted" style="font-size:11px">entra</span>
+            <span class="pos">${fmt(gEnt)}</span>
+            <span class="muted" style="font-size:11px">· sai</span> ` : ''}<span
+            class="neg">${fmt(gSai)}</span>${gEnt ? `
+            <span class="muted" style="font-size:11px">· líquido</span>
+            <b class="${gEnt+gSai>=0?'pos':'neg'}">${fmt(gEnt+gSai)}</b>` : ''}<span
+            class="muted" style="font-size:11px">/mês</span></span></div>
       <div class="tbl-wrap"><table>
       <thead><tr><th>Descrição</th><th>Conta do plano</th><th class="num">Dia</th>
         <th class="num">Valor</th><th>Vigência</th>${isAdmin?'<th></th>':''}</tr></thead>
@@ -1926,7 +1971,7 @@ function htmlRec(){
         <td><b>${esc(r.descricao||'—')}</b>${r.obs?`<div style="font-size:11px;color:var(--muted)">${esc(r.obs)}</div>`:''}</td>
         <td style="font-size:12px">${r.categoria?esc(r.categoria):'<span class="muted">— defina —</span>'}</td>
         <td class="num">${Math.round(+r.dia||1)}</td>
-        <td class="num neg">${fmt(+r.valor||0)}${
+        <td class="num ${+r.valor>=0?'pos':'neg'}">${fmt(+r.valor||0)}${
           r.fixa===false?'<div style="font-size:10px;color:var(--yellow)">estimativa · varia</div>':''}</td>
         <td style="font-size:11.5px;white-space:nowrap">${mesLabel(r.inicio||mes)} → ${r.fim?mesLabel(r.fim):'sem fim'}${
           Array.isArray(r.meses)&&r.meses.length
