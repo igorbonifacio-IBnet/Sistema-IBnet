@@ -550,6 +550,21 @@ let confRec = null;                       // {id, mes} da recorrente sendo confi
 let impRows = [];
 let filtroMes = 'todos', filtroCat = 'todas';
 
+/* Filtros da LISTA de regras recorrentes.
+   Recortam só a lista. Não tocam nos totais do mês nem na projeção de 12 meses:
+   filtro que mexe no total faz parecer que o negócio mudou quando a pessoa só
+   procurou alguma coisa. O que o recorte soma aparece na própria barra — ali o
+   número descreve o que está na tela, e nada além disso. */
+const REC_SEM_CAT = '__sem__';   // acha regra sem conta do plano: sem categoria
+                                 // o lançamento cai em REVISAR e some do
+                                 // resultado operacional sem avisar ninguém.
+const REC_F0 = { dia:'todos', cat:'todas', busca:'', ord:'desc' };
+let recF = { ...REC_F0 };
+function limparFiltroRec(){ recF = { ...REC_F0 }; render(); }
+function filtrandoRec(){
+  return recF.dia!=='todos' || recF.cat!=='todas' || !!String(recF.busca||'').trim();
+}
+
 // Natureza da dívida. Serve para separar o que é dívida de crescimento
 // (capex parcelado) do que é dívida de operação — leituras bem diferentes.
 const TIPOS_DIVIDA = {
@@ -722,12 +737,27 @@ function render(){
     return;
   }
   document.querySelector('.view-switch')?.style.removeProperty('display');
+  /* Quem está digitando na busca perde o foco quando o innerHTML é trocado —
+     a pessoa digita "jan" e só a letra "j" entra. Guarda quem estava em foco e
+     onde estava o cursor ANTES de destruir o DOM, e devolve depois. */
+  const foco = document.activeElement;
+  const focoId  = foco && foco.id && /^(rec-busca)$/.test(foco.id) ? foco.id : null;
+  const focoPos = focoId ? foco.selectionStart : null;
+
   if (view==='dfc')   el.innerHTML = htmlDFC();
   if (view==='lanc')  el.innerHTML = htmlLanc();
   if (view==='div')   el.innerHTML = htmlDivida();
   if (view==='rec')   el.innerHTML = htmlRec();
   if (view==='rev')   el.innerHTML = htmlRev();
   if (view==='plano') el.innerHTML = htmlPlano();
+
+  if (focoId){
+    const novo = document.getElementById(focoId);
+    if (novo){
+      novo.focus();
+      try { novo.setSelectionRange(focoPos, focoPos); } catch(e){}
+    }
+  }
 }
 
 /* ── 1. DFC ──────────────────────────────────────────────────────── */
@@ -1807,6 +1837,51 @@ function contasConhecidas(){
   return [...s].sort((a,b) => a.localeCompare(b,'pt-BR'));
 }
 
+/* Recorte e ordem da lista de regras. Função pura: recebe as regras e o filtro,
+   devolve array novo. Não lê `recF` nem `recorrentes` de fora, para poder ser
+   testada sem navegador. */
+function filtrarRecs(rs, f){
+  const q = normalizar(f.busca || '');
+  const out = (rs||[]).filter(r => {
+    if (f.dia !== 'todos' && Math.round(+r.dia||1) !== Math.round(+f.dia)) return false;
+    if (f.cat === REC_SEM_CAT){ if (r.categoria) return false; }
+    else if (f.cat !== 'todas' && (r.categoria||'') !== f.cat) return false;
+    if (q && !normalizar([r.descricao, r.categoria, r.conta, r.obs].join(' ')).includes(q))
+      return false;
+    return true;
+  });
+  const az = (a,b) => (a.descricao||'').localeCompare(b.descricao||'','pt-BR');
+  /* Duas ordens de valor em vez de uma por módulo. Ordenar por Math.abs()
+     colocaria a receita de 48.500 encostada na despesa de 48.000 como se
+     fossem a mesma coisa — o erro que custou R$ 101 mil na faixa de totais. */
+  const CMP = {
+    desc:    az,
+    dia:     (a,b) => (Math.round(+a.dia||1) - Math.round(+b.dia||1)) || az(a,b),
+    saida:   (a,b) => ((+a.valor||0) - (+b.valor||0)) || az(a,b),   // mais negativo primeiro
+    entrada: (a,b) => ((+b.valor||0) - (+a.valor||0)) || az(a,b),   // mais positivo primeiro
+    /* Regra sem conta do plano vai para o FIM, explicitamente. Nada de ordenar
+       por um caractere sentinela alto: sentinela depende de como a engine
+       ordena um caractere que ninguém deveria digitar, e some da revisão. */
+    cat:     (a,b) => {
+      const A = a.categoria || '', B = b.categoria || '';
+      if (!A !== !B) return A ? -1 : 1;
+      return A.localeCompare(B,'pt-BR') || az(a,b);
+    },
+  };
+  return (CMP[f.ord] ? out.sort(CMP[f.ord]) : out);
+}
+
+/* Quantos por dia e por conta do plano, para a contagem aparecer na própria
+   opção do select — "dia 5 (4)" já responde antes de filtrar. */
+function contarRecs(rs, chave){
+  const m = new Map();
+  (rs||[]).forEach(r => {
+    const k = chave === 'dia' ? Math.round(+r.dia||1) : (r.categoria || '');
+    m.set(k, (m.get(k)||0) + 1);
+  });
+  return m;
+}
+
 function htmlRec(){
   const hoje    = new Date().toISOString().slice(0,10);
   const mes     = hoje.slice(0,7);
@@ -1853,9 +1928,19 @@ function htmlRec(){
   const ativas  = recorrentes.filter(r => r.ativo !== false);
   const pausadas= recorrentes.filter(r => r.ativo === false);
 
+  /* O recorte vale só daqui para baixo. Tudo que já foi calculado acima —
+     fila, resumo do mês, 12 meses — usa `recorrentes` inteiro de propósito. */
+  const vistas   = filtrarRecs(ativas, recF);
+  const filtrado = filtrandoRec();
+  const porDia   = contarRecs(ativas, 'dia');
+  const porCat   = contarRecs(ativas, 'cat');
+  const nSemCat  = porCat.get('') || 0;
+  const fEnt = vistas.reduce((a,r) => a + Math.max(0, +r.valor||0), 0);
+  const fSai = vistas.reduce((a,r) => a + Math.min(0, +r.valor||0), 0);
+
   /* agrupa as regras pela conta bancária — é assim que se olha saldo */
   const porConta = {};
-  ativas.forEach(r => {
+  vistas.forEach(r => {
     const k = r.conta || '— sem conta informada —';
     (porConta[k] = porConta[k] || []).push(r);
   });
@@ -1945,7 +2030,54 @@ function htmlRec(){
       </tr>`;}).join('')}
     </tbody></table></div></div>
 
-  <div class="section-title">Regras cadastradas (${ativas.length})</div>
+  <div class="section-title">Regras cadastradas (${
+    filtrado ? `${vistas.length} de ${ativas.length}` : ativas.length})</div>
+
+  <div class="filters">
+    <label>Dia<select onchange="recF.dia=this.value;render()">
+      <option value="todos">Todos os dias</option>
+      ${[...porDia.keys()].sort((a,b)=>a-b).map(d =>
+        `<option value="${d}" ${String(d)===String(recF.dia)?'selected':''}
+          >dia ${d} (${porDia.get(d)})</option>`).join('')}
+    </select></label>
+    <label>Conta do plano<select onchange="recF.cat=this.value;render()">
+      <option value="todas">Todas</option>
+      ${nSemCat?`<option value="${REC_SEM_CAT}" ${recF.cat===REC_SEM_CAT?'selected':''}
+          >⚠ sem conta do plano (${nSemCat})</option>`:''}
+      ${[...porCat.keys()].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(c =>
+        `<option value="${esc(c)}" ${c===recF.cat?'selected':''}
+          >${esc(c)} (${porCat.get(c)})</option>`).join('')}
+    </select></label>
+    <label>Buscar<input id="rec-busca" type="search" placeholder="descrição, conta, obs…"
+      value="${esc(recF.busca)}" oninput="recF.busca=this.value;render()"/></label>
+    <label>Ordenar por<select onchange="recF.ord=this.value;render()">
+      ${[['desc','Descrição (A–Z)'],['dia','Dia (1 → 31)'],
+         ['saida','Maior saída primeiro'],['entrada','Maior entrada primeiro'],
+         ['cat','Conta do plano (A–Z)']].map(([v,t]) =>
+        `<option value="${v}" ${v===recF.ord?'selected':''}>${t}</option>`).join('')}
+    </select></label>
+    ${filtrado?`<button class="btn btn-ghost btn-sm" onclick="limparFiltroRec()"
+      style="align-self:center">Limpar filtros</button>`:''}
+  </div>
+
+  ${filtrado?`
+  <div class="alert" style="margin-bottom:10px;font-size:12.5px">
+    <b>${vistas.length}</b> de ${ativas.length} regra(s) ativa(s) neste recorte${
+      vistas.length?` — entra <b class="pos">${fmt(fEnt)}</b>, sai
+      <b class="neg">${fmt(fSai)}</b>, líquido
+      <b class="${fEnt+fSai>=0?'pos':'neg'}">${fmt(fEnt+fSai)}</b>`:''}.
+    ${recF.dia!=='todos'?`É isso que movimenta a conta <b>no dia ${esc(recF.dia)}</b> de cada mês. `:''}
+    <span class="muted">Os totais do mês e a projeção de 12 meses acima
+    <b>não</b> mudam com o filtro — eles seguem contando as ${ativas.length} regras.</span>
+  </div>`:''}
+
+  ${!vistas.length?`
+  <div class="card"><div class="empty">
+    <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma regra neste recorte</div>
+    As ${ativas.length} regras ativas continuam cadastradas — só nenhuma casa com o filtro.<br/><br/>
+    <button class="btn btn-ghost btn-sm" onclick="limparFiltroRec()">Limpar filtros</button>
+  </div></div>`:''}
+
   ${Object.keys(porConta).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(conta => {
     const itens = porConta[conta];
     /* Somava Math.abs() de tudo: a receita de mensalidade entrava no total da
@@ -1953,10 +2085,16 @@ function htmlRec(){
        soma de tudo que PASSA pela conta em vez do que sobra nela. */
     const gEnt = itens.reduce((a,r) => a + Math.max(0, +r.valor||0), 0);
     const gSai = itens.reduce((a,r) => a + Math.min(0, +r.valor||0), 0);
+    /* Com filtro ligado este cabeçalho soma só o que está na tela. Ele PRECISA
+       dizer isso: número de conta bancária que some parte das regras sem avisar
+       é o mesmo tipo de mentira que a faixa de totais contava antes. */
+    const nConta = ativas.filter(r => (r.conta||'— sem conta informada —') === conta).length;
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px 6px">
-        <b style="font-size:13px">${esc(conta)}</b>
+        <b style="font-size:13px">${esc(conta)}${
+          filtrado?`<span class="muted" style="font-weight:400;font-size:11px">
+            · ${itens.length} de ${nConta}, filtrado</span>`:''}</b>
         <span style="font-size:13px">${gEnt ? `<span class="muted" style="font-size:11px">entra</span>
             <span class="pos">${fmt(gEnt)}</span>
             <span class="muted" style="font-size:11px">· sai</span> ` : ''}<span
