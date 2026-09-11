@@ -1922,6 +1922,30 @@ function pendentesRec(hojeISO){
                            (a.regra.descricao||'').localeCompare(b.regra.descricao||'','pt-BR'));
 }
 
+// Espelho de `pendentesRec`, olhando para FRENTE — e só para a próxima.
+//
+// A fila de pendências continua olhando só para trás de propósito: o que vence
+// semana que vem é previsão, não pendência, e transformar previsão em fila
+// encheria a tela de coisa que ninguém tem que fazer hoje. Adiantar é o
+// contrário disso: não é uma cobrança do sistema, é uma decisão do Igor —
+// "tenho caixa agora, quero quitar a de outubro". Por isso entra por um botão
+// na regra, e não por uma segunda fila.
+//
+// A janela é curta porque o botão serve para AGIR. Previsão longa já existe
+// em "Próximos 12 meses", e ali ela é derivada, não clicável.
+const JANELA_ADIANTA = 62;   // dias — o resto deste mês mais o mês seguinte
+function proximaAbertaRec(r, hojeISO, mapa){
+  if (!r || r.ativo === false) return null;
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaRealizado();
+  // 3 meses de varredura para a janela de 62 dias caber inteira mesmo quando
+  // hoje é dia 28 e a regra vence dia 1º.
+  return ocorrenciasDe(r, hoje.slice(0,7), somaMeses(hoje, 3).slice(0,7))
+    .filter(o => o.venc > hoje
+              && diasEntre(hoje, o.venc) <= JANELA_ADIANTA
+              && !realizadoDe(mp, r.id, o.mes))[0] || null;
+}
+
 // Previsto x realizado de um mês. Onde já houve confirmação vale o valor
 // real, não o da regra — senão o total do mês seria uma estimativa mesmo
 // depois de o dinheiro ter saído.
@@ -2027,6 +2051,9 @@ function contarRecs(rs, chave){
 function htmlRec(){
   const hoje    = new Date().toISOString().slice(0,10);
   const mes     = hoje.slice(0,7);
+  // Uma vez só: `proximaAbertaRec` é chamada por regra, e recalcular o mapa
+  // dentro do laço seria varrer os ~900 lançamentos uma vez por regra.
+  const mapaReal = mapaRealizado();
   const btnNova = isAdmin ? `<button class="btn" onclick="abrirRec()">+ Nova recorrente</button>` : '';
   const btnImp  = isAdmin ? `<button class="btn btn-ghost" onclick="abrirImpRec()">Importar lista</button>` : '';
 
@@ -2247,7 +2274,7 @@ function htmlRec(){
       <div class="tbl-wrap"><table>
       <thead><tr><th>Descrição</th><th>Conta do plano</th><th class="num">Dia</th>
         <th class="num">Valor</th><th>Vigência</th>${isAdmin?'<th></th>':''}</tr></thead>
-      <tbody>${itens.map(r => `<tr>
+      <tbody>${itens.map(r => { const prox = proximaAbertaRec(r, hoje, mapaReal); return `<tr>
         <td><b>${esc(r.descricao||'—')}</b>${r.obs?`<div style="font-size:11px;color:var(--muted)">${esc(r.obs)}</div>`:''}</td>
         <td style="font-size:12px">${r.categoria?esc(r.categoria):'<span class="muted">— defina —</span>'}</td>
         <td class="num">${Math.round(+r.dia||1)}</td>
@@ -2258,10 +2285,12 @@ function htmlRec(){
             ? `<div style="font-size:10px;color:var(--muted)">só ${r.meses.map(m=>['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][m-1]).join(', ')}</div>`
             : ''}</td>
         ${isAdmin?`<td style="white-space:nowrap">
+          ${prox?`<button class="icon-btn" onclick="adiantarRec('${r.id}')"
+            title="Pagar agora a ocorrência de ${mesLabel(prox.mes)}, que só vence em ${dataBR(prox.venc)}">adiantar</button>`:''}
           <button class="icon-btn" onclick="editarRec('${r.id}')">editar</button>
           <button class="icon-btn" onclick="pausarRec('${r.id}',true)" title="Para de prever sem apagar o histórico">pausar</button>
           <button class="icon-btn" onclick="excluirRec('${r.id}')">excluir</button></td>`:''}
-      </tr>`).join('')}</tbody></table></div>
+      </tr>`;}).join('')}</tbody></table></div>
     </div>`;}).join('')}
 
   ${pausadas.length?`
@@ -2406,17 +2435,34 @@ async function excluirRec(id){
 // Confirmar = "este mês saiu 8.740 em vez de 8.500" — evento isolado.
 // Editar a regra = "reajustou, agora é 8.740 sempre" — muda o futuro.
 // Juntar as duas faria toda variação de um mês virar previsão permanente.
-function abrirConfirma(id, mes){
+// `adiantado` muda uma coisa só, e é a que importa: a data proposta deixa de
+// ser o vencimento e passa a ser HOJE, porque adiantar é justamente pagar num
+// dia que não é o combinado. Todo o resto — trava de duplicata, histórico,
+// botão de vincular — é o mesmo caminho já testado.
+function abrirConfirma(id, mes, adiantado){
   if (!isAdmin) return toast('Sem permissão para confirmar.');
   const r = recorrentes.find(x => x.id === id); if (!r) return;
   const oc = ocorrenciasDe(r, mes, mes)[0]; if (!oc) return toast('Essa regra não vale nesse mês.');
-  confRec = { id, mes };
-  document.getElementById('conf-title').textContent = 'Confirmar ' + mesLabel(mes);
+  const hoje = new Date().toISOString().slice(0,10);
+  const data = adiantado ? hoje : oc.venc;
+  confRec = { id, mes, adiantado: !!adiantado };
+  document.getElementById('conf-title').textContent =
+    (adiantado ? 'Adiantar ' : 'Confirmar ') + mesLabel(mes);
   document.getElementById('c-desc').textContent  = r.descricao || '—';
   document.getElementById('c-info').innerHTML =
-    `${esc(r.categoria || 'sem conta do plano')} · ${esc(r.conta || 'conta não informada')} ·
-     previsto <b>${fmt(oc.valor)}</b>`;
-  document.getElementById('c-data').value  = oc.venc;
+    // Sem conta do plano o lançamento nasce em REVISAR — dinheiro que saiu do
+    // caixa e não entrou em grupo nenhum do DFC. Dizer isso aqui, no momento
+    // em que ele vira lançamento, é mais barato que caçar depois.
+    `${r.categoria ? esc(r.categoria)
+       : '<b class="neg">sem conta do plano — vai cair em Revisar</b>'} ·
+     ${esc(r.conta || 'conta não informada')} · previsto <b>${fmt(oc.valor)}</b>` +
+    // Regime de caixa: o dinheiro entra no mês em que SAIU; a pendência que
+    // fecha é a da competência. Dizer isso na tela evita a pergunta "sumiu de
+    // outubro?" — não sumiu, outubro fica confirmado e o caixa é de setembro.
+    (adiantado ? `<br/><span class="muted">Vence em <b>${esc(dataBR(oc.venc))}</b>.
+       Pagando em ${esc(dataBR(data))}, a saída entra no caixa de
+       <b>${mesLabel(mesDe(data))}</b> e ${mesLabel(mes)} deixa de ficar pendente.</span>` : '');
+  document.getElementById('c-data').value  = data;
   document.getElementById('c-valor').value = Math.abs(oc.valor);
   document.getElementById('c-obs').value   = '';
 
@@ -2430,7 +2476,9 @@ function abrirConfirma(id, mes){
       ${h.length>1?` — média ${fmt(md)}`:''}`;
   } else hb.style.display = 'none';
 
-  pintarDupConfirma(oc.venc, oc.valor);
+  // Procura a duplicata na data PROPOSTA, não no vencimento: adiantando, o
+  // dinheiro que pode já estar no extrato é o de hoje.
+  pintarDupConfirma(data, oc.valor);
   document.getElementById('conf-modal').classList.add('show');
 }
 // Redesenha o aviso de dinheiro repetido a cada mudança de data ou valor:
@@ -2495,9 +2543,11 @@ async function salvarConfirma(){
     await lref.push(lancDaRegra(r, confRec.mes, data, valor, obs));
     fecharConfirma();
     const dif = Math.abs(valor) - Math.abs(+r.valor||0);
+    const adi = confRec && confRec.adiantado;
     toast(Math.abs(dif) < 0.005
-      ? `${r.descricao} confirmada em ${mesLabel(confRec.mes)}.`
-      : `Confirmada com ${fmt(dif)} ${dif>0?'a mais':'a menos'} que o previsto — a regra não mudou.`);
+      ? (adi ? `${r.descricao}: ${mesLabel(confRec.mes)} adiantado — saída de ${dataBR(data)}.`
+             : `${r.descricao} confirmada em ${mesLabel(confRec.mes)}.`)
+      : `${adi?'Adiantada':'Confirmada'} com ${fmt(dif)} ${dif>0?'a mais':'a menos'} que o previsto — a regra não mudou.`);
   } catch(e){ toast('Erro ao confirmar: ' + e.message); }
   btn.disabled = false;
 }
@@ -2545,6 +2595,21 @@ async function confirmarDireto(id, mes){
     await lref.push(lancDaRegra(r, mes, oc.venc, oc.valor, ''));
     toast(`${r.descricao} confirmada — ${fmt(oc.valor)} em ${dataBR(oc.venc)}.`);
   } catch(e){ toast('Erro ao confirmar: ' + e.message); }
+}
+// Adiantar abre a confirmação da PRÓXIMA ocorrência ainda em aberto — a que
+// ainda não venceu. O que já venceu e continua aberto não é adiantamento, é
+// pendência, e tem lugar próprio na fila "A confirmar" lá em cima; por isso
+// `proximaAbertaRec` filtra por `venc > hoje` em vez de pegar a primeira que
+// achar. Um botão só, com o mês escrito no título do modal: se ele abrisse
+// silenciosamente um mês diferente do que o Igor pensou, viraria pagamento
+// certo lançado no mês errado.
+function adiantarRec(id){
+  if (!isAdmin) return toast('Sem permissão para confirmar.');
+  const r = recorrentes.find(x => x.id === id); if (!r) return;
+  const oc = proximaAbertaRec(r);
+  if (!oc) return toast(`Nada a adiantar em "${r.descricao||'—'}"`
+    + ` nos próximos ${JANELA_ADIANTA} dias.`);
+  abrirConfirma(id, oc.mes, true);
 }
 async function confirmarTodasFixas(){
   if (!isAdmin) return toast('Sem permissão para confirmar.');
