@@ -238,6 +238,27 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   </div>
 </div>
 
+<!-- modal do cronograma mês a mês de uma dívida de valor variável.
+     Existe porque fatura de cartão muda todo mês e a única saída antes era
+     "exclua e importe de novo". Excluir apaga a dívida e deixa os lançamentos
+     já baixados apontando para um divId morto: `lancDaParcelaExistente` deixa
+     de achá-los, a baixa perde a idempotência e a mesma parcela pode ser
+     lançada duas vezes. Ou seja, o contorno custava o vínculo. -->
+<div class="modal-ov" id="val-modal">
+  <div class="modal-box" style="max-width:560px">
+    <h3 id="val-title">Atualizar valores</h3>
+    <div class="mb-hint" style="margin-bottom:10px">Um valor por parcela. Parcela já
+      baixada aparece marcada — mudar o valor dela <b>reescreve o lançamento</b> que
+      já está no fluxo, e isso é confirmado antes de gravar.</div>
+    <div id="val-lista" style="max-height:340px;overflow:auto"></div>
+    <div id="val-previa" class="alert" style="margin:10px 0 0;font-size:12.5px"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharValores()">Cancelar</button>
+      <button class="btn" id="val-save" onclick="salvarValores()">Salvar valores</button>
+    </div>
+  </div>
+</div>
+
 <!-- modal recorrente (a regra, não a ocorrência) -->
 <div class="modal-ov" id="rec-modal">
   <div class="modal-box" style="max-width:600px">
@@ -1311,6 +1332,8 @@ function htmlDivida(){
             <button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Baixa a próxima parcela e lança a saída no fluxo">+1 paga</button>
             ${pg?`<button class="icon-btn" onclick="pagarParcela('${d.id}',-1)" title="Desfazer a última baixa e apagar o lançamento">−1</button>`:''}
             <button class="icon-btn" onclick="editarDivida('${d.id}')">editar</button>
+            <button class="icon-btn" onclick="abrirValores('${d.id}')"
+              title="Corrigir o valor de cada mês — fatura de cartão muda toda vez">valores</button>
             <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
         </tr>`;}).join('')}
       ${ativas.length?'':'<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">Nenhum contrato em aberto.</td></tr>'}
@@ -1374,11 +1397,122 @@ function editarDivida(id){
       próprio mês a mês (${fmt(Math.min(...vs))} a ${fmt(Math.max(...vs))}). Você pode
       corrigir credor, descrição, conta e baixas normalmente — mas o campo
       <b>valor da parcela</b> abaixo não altera o cronograma. Para trocar os valores,
-      exclua e importe de novo pela planilha.`;
+      use o botão <b>valores</b> na linha da dívida.`;
     av.style.display = '';
   } else av.style.display = 'none';
 }
 function fecharDivida(){ document.getElementById('div-modal').classList.remove('show'); }
+
+/* ── cronograma mês a mês: editar sem excluir ─────────────────────────
+   Fatura de cartão muda de valor todo mês, e até aqui a única saída era
+   "exclua e importe de novo". O contorno funcionava e cobrava caro: excluir
+   leva a dívida embora e deixa os lançamentos já baixados com um `divId`
+   que não aponta mais para nada. `lancDaParcelaExistente` para de achá-los,
+   a idempotência de `pagarParcela` cai, e a mesma parcela pode ser lançada
+   duas vezes. Editar no lugar preserva o vínculo.
+
+   A decisão que importa está em `salvarValores`: parcela já baixada que
+   muda de valor **arrasta o lançamento junto**. Deixar os dois divergirem
+   seria a assimetria de sempre — o cronograma dizendo um número e o DFC
+   dizendo outro sobre o mesmo dinheiro. Mas reescrever realizado é grave o
+   bastante para ser confirmado nominalmente, nunca em silêncio. */
+let editVal = null;
+
+function abrirValores(id){
+  if (!isAdmin) return toast('Sem permissão para editar dívida.');
+  const d = dividas.find(x=>x.id===id); if(!d) return;
+  const cr = cronogramaDe(d);
+  if (!cr.length) return toast('Esta dívida não tem cronograma — confira o cadastro.');
+  editVal = id;
+  document.getElementById('val-title').textContent = `Valores de ${d.credor||'dívida'}`;
+  document.getElementById('val-lista').innerHTML = `<table style="width:100%;font-size:13px">
+    <thead><tr><th style="text-align:left">Parcela</th><th style="text-align:left">Vencimento</th>
+      <th style="text-align:right;width:130px">Valor (R$)</th></tr></thead>
+    <tbody>${cr.map(p=>{
+      const lc = lancDaParcelaExistente(id, p.n);
+      return `<tr>
+        <td style="padding:3px 0">${p.n}/${cr.length}${
+          p.paga?` <span class="pill p-finan" style="font-size:10px">baixada</span>`:''}${
+          lc?` <span class="muted" style="font-size:10px">· lançada</span>`:''}</td>
+        <td style="padding:3px 0">${esc(dataBR(p.venc))}</td>
+        <td style="text-align:right"><input type="number" step="0.01" min="0"
+          id="val-p${p.n}" value="${(+p.valor||0).toFixed(2)}" oninput="previaValores()"
+          style="width:120px;text-align:right"/></td></tr>`;}).join('')}
+    </tbody></table>`;
+  previaValores();
+  document.getElementById('val-modal').classList.add('show');
+}
+function fecharValores(){
+  editVal = null;
+  document.getElementById('val-modal').classList.remove('show');
+}
+// Lê o formulário uma vez só; prévia e gravação têm que enxergar o mesmo
+// número, senão o aviso fala de um total e o banco recebe outro.
+function lerValores(){
+  const d = dividas.find(x=>x.id===editVal); if(!d) return null;
+  const cr = cronogramaDe(d);
+  const vs = cr.map(p => {
+    const el = document.getElementById('val-p'+p.n);
+    const x  = el ? parseFloat(el.value) : NaN;
+    return isNaN(x) ? null : Math.abs(x);
+  });
+  return { d, cr, vs };
+}
+function previaValores(){
+  const r = lerValores(); if(!r) return;
+  const el = document.getElementById('val-previa');
+  const faltando = r.vs.filter(x => x === null).length;
+  if (faltando) {
+    el.className = 'alert warn';
+    el.innerHTML = `<b>${faltando}</b> parcela(s) sem valor. Preencha todas —
+      deixar em branco faria a parcela cair no valor fixo do cadastro e o
+      cronograma deixaria de ser o extrato.`;
+    return;
+  }
+  const total = r.vs.reduce((a,x)=>a+x, 0);
+  const aberto = r.vs.filter((x,i) => !r.cr[i].paga).reduce((a,x)=>a+x, 0);
+  const mexidas = r.vs.filter((x,i) => Math.round(x*100) !== Math.round(r.cr[i].valor*100));
+  const lanc = r.vs.filter((x,i) => Math.round(x*100) !== Math.round(r.cr[i].valor*100)
+                                 && lancDaParcelaExistente(editVal, r.cr[i].n)).length;
+  el.className = lanc ? 'alert warn' : 'alert';
+  el.innerHTML = `Total <b>${fmt(total)}</b> · em aberto <b>${fmt(aberto)}</b> ·
+    <b>${mexidas.length}</b> parcela(s) alterada(s).` +
+    (lanc ? `<br/><b>${lanc}</b> dela(s) já tem lançamento no fluxo — salvar
+             <b>reescreve o valor realizado</b>, não só a previsão.` : '');
+}
+
+async function salvarValores(){
+  // A checagem de permissão mora aqui também, e não só em `abrirValores`.
+  // Guardar a porta e deixar a escrita aberta é a mesma assimetria de sempre:
+  // quem decide estava protegido, quem grava não. A suíte pegou.
+  if (!isAdmin) return toast('Sem permissão para editar dívida.');
+  const r = lerValores(); if(!r) return;
+  if (r.vs.some(x => x === null)) return toast('Preencha o valor de todas as parcelas.');
+
+  // Quem muda de valor E já virou lançamento: é realizado sendo reescrito.
+  const reescrever = [];
+  r.cr.forEach((p,i) => {
+    if (Math.round(r.vs[i]*100) === Math.round(p.valor*100)) return;
+    const lc = lancDaParcelaExistente(editVal, p.n);
+    if (lc) reescrever.push({ lc, p, novo: r.vs[i] });
+  });
+  if (reescrever.length && !confirm(
+        `${reescrever.length} parcela(s) já lançada(s) no fluxo mudam de valor:\n\n`
+      + reescrever.map(x => `  ${dataBR(x.p.venc)} — parcela ${x.p.n}: `
+          + `${fmt(-Math.abs(x.p.valor))} → ${fmt(-Math.abs(x.novo))}`).join('\n')
+      + `\n\nIsso reescreve o que já está contado como realizado no DFC.\n\nConfirma?`)) return;
+
+  const btn = document.getElementById('val-save'); btn.disabled = true;
+  try {
+    await dref.child(editVal).update({ valores: r.vs, por: session?.nome||'—', ts: Date.now() });
+    // Cronograma e lançamento falam do mesmo dinheiro: não podem divergir.
+    for (const x of reescrever)
+      await lref.child(x.lc.id).update({ valor: -Math.abs(x.novo), ts: Date.now() });
+    fecharValores();
+    toast(`Valores atualizados${reescrever.length?` · ${reescrever.length} lançamento(s) corrigido(s)`:''}.`);
+  } catch(e){ toast('Erro ao salvar valores: ' + e.message); }
+  btn.disabled = false;
+}
 
 function previaDivida(){
   const el = document.getElementById('d-previa');
