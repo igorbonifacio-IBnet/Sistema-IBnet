@@ -326,10 +326,16 @@ RAGTEK - Link dedicado 1Gb	4200,00	10	Fixa	Custo Direto · Link/Trânsito	Conta 
     <div style="font-size:14px;font-weight:600;margin-bottom:2px" id="c-desc">—</div>
     <div class="muted" style="font-size:12px;margin-bottom:14px" id="c-info"></div>
     <div id="c-hist" class="alert" style="display:none;margin:0 0 12px;font-size:12px"></div>
+    <!-- O extrato já trouxe este dinheiro. Confirmar por cima lançaria duas
+         vezes; vincular fecha a pendência apontando para a linha que existe. -->
+    <div id="c-dup" class="alert" style="display:none;margin:0 0 12px;font-size:12px;
+         border-color:var(--red)"></div>
     <div class="mb-row">
-      <div class="mb-field"><label>Data em que saiu</label><input type="date" id="c-data"/></div>
+      <div class="mb-field"><label>Data em que saiu</label>
+        <input type="date" id="c-data" oninput="recalcDupConfirma()"/></div>
       <div class="mb-field"><label>Valor real (R$)</label>
-        <input type="number" step="0.01" id="c-valor" placeholder="0,00"/></div>
+        <input type="number" step="0.01" id="c-valor" placeholder="0,00"
+               oninput="recalcDupConfirma()"/></div>
     </div>
     <div class="mb-field"><label>Observação</label>
       <input type="text" id="c-obs" placeholder="opcional — ex.: reajuste, adiantamento"/></div>
@@ -339,6 +345,8 @@ RAGTEK - Link dedicado 1Gb	4200,00	10	Fixa	Custo Direto · Link/Trânsito	Conta 
     </div>
     <div class="mb-actions">
       <button class="btn btn-ghost" onclick="fecharConfirma()">Cancelar</button>
+      <button class="btn btn-ghost" id="c-link" style="display:none"
+              onclick="vincularConfirma()">Vincular a linha do extrato</button>
       <button class="btn" id="c-save" onclick="salvarConfirma()">Confirmar lançamento</button>
     </div>
   </div>
@@ -551,7 +559,8 @@ let recorrentes = [];
 let view = 'dfc';
 let editId = null, editDiv = null, editRec = null;
 let confRec = null;                       // {id, mes} da recorrente sendo confirmada
-let impRows = [];
+let confDup = null;                       // lançamento do extrato que é o mesmo dinheiro
+let impRows = [], impMarcas = [];         // linhas coladas e o que cada uma repete
 let filtroMes = 'todos', filtroCat = 'todas';
 
 /* Filtros da LISTA de regras recorrentes.
@@ -941,6 +950,70 @@ function dataBR(d){ if(!d) return '—'; const p=d.split('-'); return p.length==
 // tipo de bug que ninguém encontra depois.
 const diasEntre = (a,b) =>
   Math.round((Date.parse(b+'T00:00:00Z') - Date.parse(a+'T00:00:00Z')) / 86400000);
+
+/* ══════════════════════════════════════════════════════════════════
+   CONCILIAÇÃO — o mesmo dinheiro entrando por duas portas
+
+   Uma saída pode chegar aqui por dois caminhos: a confirmação de uma
+   recorrente (ou a baixa de uma parcela) e a importação do extrato. Cada
+   porta tem um autor diferente escrevendo a descrição, e autores
+   diferentes nunca escrevem igual: o banco manda `PAG FORNECEDOR UNITEL
+   LTDA`, a regra se chama `UNITEL VOIP`. `normalizar()` só tira acento e
+   caixa — não aproxima duas frases que nunca foram parecidas.
+
+   Por que a conta do plano NÃO entra na chave: o classificador do extrato
+   erra com frequência e erra em silêncio. `UNITEL` casa a regra de
+   `Transferência entre Contas` (linha ~496) antes de qualquer outra, então
+   exigir que as duas linhas concordem na conta desligaria a trava
+   justamente no exemplo que a motivou. Conta do plano é palpite do
+   classificador; valor e data são fato.
+
+   Sobra o que as duas portas produzem igual: **mesmo valor, ao centavo e
+   com o mesmo sinal, com as datas dentro de uma semana**. Sinal entra na
+   conta de propósito — comparar só o módulo deixaria uma entrada de R$ 900
+   engolir uma saída de R$ 900.
+
+   Tolerância zero no valor é decisão, não preguiça: regra `fixa` que muda
+   de valor está cadastrada errada e devia ser `Varia` (foi o que se
+   decidiu para a UNITEL VOIP), e confirmação de `Varia` é digitada
+   olhando o valor real. Se ainda assim escapar, o estrago é uma linha
+   repetida — visível, com duas datas próximas e o mesmo valor. Casar
+   frouxo produziria o erro inverso: sumir com uma despesa real do extrato,
+   que ninguém encontra depois.
+   ══════════════════════════════════════════════════════════════════ */
+const JANELA_CONCIL = 7;   // dias. Débito não erra valor; erra data, por feriado.
+
+const mesmoDinheiro = (l, dataISO, valor) =>
+     Math.abs((+l.valor||0) - (+valor||0)) < 0.005
+  && Math.abs(diasEntre(l.data, dataISO)) <= JANELA_CONCIL;
+
+// Lançamento "sem dono" — veio do extrato ou da mão, e não pertence a
+// nenhuma regra nem a nenhuma parcela. É esse que pode ser o mesmo dinheiro
+// de uma ocorrência que ainda está esperando confirmação.
+const semDono = l => !l.recId && !l.divId;
+
+// `usados` impede que UM lançamento absorva DUAS ocorrências diferentes na
+// mesma varredura. Sem isso, duas regras de R$ 900 na mesma semana casariam
+// as duas com a única linha de R$ 900 do extrato, e uma delas sumiria da
+// fila sem nunca ter sido paga. Empate resolve pela data mais próxima.
+function casarNoExtrato(dataISO, valor, usados){
+  return lancamentos
+    .filter(l => semDono(l) && !(usados && usados.has(l.id))
+              && mesmoDinheiro(l, dataISO, valor))
+    .sort((a,b) => Math.abs(diasEntre(a.data, dataISO)) - Math.abs(diasEntre(b.data, dataISO)))[0]
+    || null;
+}
+const noExtratoJa = (dataISO, valor) => casarNoExtrato(dataISO, valor, null);
+
+// O espelho: dado uma linha do extrato, o lançamento que JÁ tem dono e é o
+// mesmo dinheiro. Usado na importação.
+function casarComOrigem(dataISO, valor, usados){
+  return lancamentos
+    .filter(l => !semDono(l) && !(usados && usados.has(l.id))
+              && mesmoDinheiro(l, dataISO, valor))
+    .sort((a,b) => Math.abs(diasEntre(a.data, dataISO)) - Math.abs(diasEntre(b.data, dataISO)))[0]
+    || null;
+}
 
 /* ── 3. Revisar ──────────────────────────────────────────────────── */
 function htmlRev(){
@@ -1382,17 +1455,12 @@ function lancDaParcela(d, p){
 const lancDaParcelaExistente = (divId, nParc) =>
   lancamentos.find(l => l.divId===divId && Math.round(+l.divParc)===nParc) || null;
 
-// A trava do outro lado. As parcelas de jan a ago já entraram pelo extrato
-// do banco, com a descrição do banco — dar baixa nelas agora criaria uma
-// segunda linha do mesmo dinheiro. O extrato não escreve o nome do credor,
-// então o casamento é estrutural: mesmo valor, conta de serviço da dívida,
-// dentro de uma semana do vencimento. Não decide por ele: mostra a linha
-// que achou e pergunta. É raro o bastante para não virar aviso ignorado.
-const noExtratoJa = (venc, valor) => lancamentos.find(l =>
-     l.origem !== 'divida'
-  && CATS_DIVIDA.includes(l.categoria)
-  && Math.abs(Math.abs(+l.valor||0) - Math.abs(+valor||0)) < 0.005
-  && Math.abs(diasEntre(l.data, venc)) <= 7) || null;
+// A trava do outro lado mora em `noExtratoJa`, lá em cima, junto da trava
+// das recorrentes — as duas fazem a mesma pergunta e não podem responder
+// diferente. As parcelas de jan a ago já entraram pelo extrato do banco,
+// com a descrição do banco; dar baixa nelas agora criaria uma segunda linha
+// do mesmo dinheiro. Não decide por ele: mostra a linha que achou e
+// pergunta. É raro o bastante para não virar aviso ignorado.
 
 async function pagarParcela(id, delta){
   const d = dividas.find(x=>x.id===id); if(!d) return;
@@ -1411,7 +1479,9 @@ async function pagarParcela(id, delta){
       // Idempotente de propósito: se o lançamento daquela parcela já
       // existe (baixa refeita depois de um desfazer), só o contador anda.
       if (!lancDaParcelaExistente(id, alvo.n)){
-        const noExtrato = noExtratoJa(alvo.venc, alvo.valor);
+        // Sinal explícito: a parcela do cronograma é positiva, a linha do
+        // extrato é negativa, e a chave compara com sinal.
+        const noExtrato = noExtratoJa(alvo.venc, -Math.abs(+alvo.valor||0));
         if (noExtrato && !confirm(
               `O extrato já tem ${fmt(-Math.abs(+noExtrato.valor||0))} em ${dataBR(noExtrato.data)}`
             + ` — "${noExtrato.descricao}" — na conta ${noExtrato.categoria}.\n\n`
@@ -2360,9 +2430,38 @@ function abrirConfirma(id, mes){
       ${h.length>1?` — média ${fmt(md)}`:''}`;
   } else hb.style.display = 'none';
 
+  pintarDupConfirma(oc.venc, oc.valor);
   document.getElementById('conf-modal').classList.add('show');
 }
-function fecharConfirma(){ document.getElementById('conf-modal').classList.remove('show'); }
+// Redesenha o aviso de dinheiro repetido a cada mudança de data ou valor:
+// o casamento é por valor + data, então mudar qualquer um dos dois muda a
+// resposta. Aviso que não acompanha o formulário mente na segunda digitação.
+function pintarDupConfirma(dataISO, valor){
+  const cx = document.getElementById('c-dup');
+  const bt = document.getElementById('c-link');
+  const ja = (dataISO && valor) ? noExtratoJa(dataISO, valor) : null;
+  confDup = ja;
+  if (!ja){ cx.style.display = 'none'; bt.style.display = 'none'; return; }
+  cx.style.display = ''; bt.style.display = '';
+  cx.innerHTML = `<b class="neg">Esse dinheiro já está lançado.</b><br/>
+    ${esc(dataBR(ja.data))} — <b>${esc(ja.descricao||'—')}</b> — ${fmt(+ja.valor||0)}
+    ${ja.categoria?` · ${esc(ja.categoria)}`:' · <span class="neg">sem conta do plano</span>'}<br/>
+    Se for esta mesma conta, <b>Vincular</b> fecha o mês sem lançar de novo.
+    Confirmar por cima lança o mesmo dinheiro duas vezes.`;
+}
+// O sinal é o da REGRA, igual ao que `salvarConfirma` vai gravar — senão o
+// aviso procuraria uma entrada onde vai nascer uma saída.
+function recalcDupConfirma(){
+  if (!confRec) return;
+  const r = recorrentes.find(x => x.id === confRec.id); if (!r) return;
+  const d = document.getElementById('c-data').value;
+  const b = parseFloat(document.getElementById('c-valor').value);
+  pintarDupConfirma(d, isNaN(b) ? 0 : ((+r.valor >= 0) ? Math.abs(b) : -Math.abs(b)));
+}
+function fecharConfirma(){
+  document.getElementById('conf-modal').classList.remove('show');
+  confDup = null;
+}
 
 // Monta o lançamento a partir da regra. recId + recMes são o que amarra o
 // lançamento à ocorrência — sem eles a fila não sabe que este mês foi pago.
@@ -2382,6 +2481,15 @@ async function salvarConfirma(){
   if (realizadoDe(mapaRealizado(), r.id, confRec.mes))
     return toast('Esse mês já foi confirmado.');
   const valor = (+r.valor >= 0) ? Math.abs(bruto) : -Math.abs(bruto);
+  // Última checagem antes de gravar, sobre a data e o valor que ele digitou
+  // — não sobre os que estavam na tela quando o modal abriu.
+  const ja = noExtratoJa(data, valor);
+  if (ja && !confirm(
+        `O extrato já tem ${fmt(+ja.valor||0)} em ${dataBR(ja.data)}`
+      + ` — "${ja.descricao||'—'}".\n\n`
+      + `Se for esta mesma conta, confirmar aqui lança o dinheiro duas vezes.`
+      + ` O botão "Vincular a linha do extrato" fecha o mês sem duplicar.\n\n`
+      + `Lançar assim mesmo?`)) return;
   const btn = document.getElementById('c-save'); btn.disabled = true;
   try {
     await lref.push(lancDaRegra(r, confRec.mes, data, valor, obs));
@@ -2393,13 +2501,46 @@ async function salvarConfirma(){
   } catch(e){ toast('Erro ao confirmar: ' + e.message); }
   btn.disabled = false;
 }
+// Vincular: a linha já existe no extrato e é este mês da regra. Em vez de
+// gravar um segundo lançamento, marca o que existe com `recId` + `recMes`.
+// Fecha a pendência da fila e não move um centavo do caixa — que é a
+// verdade, porque o dinheiro já tinha saído.
+//
+// A conta do plano passa a ser a da REGRA: o classificador do extrato chuta
+// pelo texto do banco e erra (`UNITEL` cai em `Transferência entre Contas`);
+// a regra sabe. Só sobrescreve se a regra tiver conta definida.
+async function vincularConfirma(){
+  if (!confRec || !confDup) return;
+  const r = recorrentes.find(x => x.id === confRec.id); if (!r) return;
+  if (realizadoDe(mapaRealizado(), r.id, confRec.mes))
+    return toast('Esse mês já foi confirmado.');
+  const alvo = confDup;
+  const obs  = document.getElementById('c-obs').value.trim();
+  const bt = document.getElementById('c-link'); bt.disabled = true;
+  try {
+    await lref.child(alvo.id).update({
+      recId: r.id, recMes: confRec.mes,
+      categoria: r.categoria || alvo.categoria || '',
+      obs: obs || alvo.obs || `confirmação de ${r.descricao||'recorrente'} — ${mesLabel(confRec.mes)}`
+    });
+    fecharConfirma();
+    toast(`${r.descricao}: ${mesLabel(confRec.mes)} fechado pela linha de ${dataBR(alvo.data)} — nada foi lançado de novo.`);
+  } catch(e){ toast('Erro ao vincular: ' + e.message); }
+  bt.disabled = false;
+}
 // Atalho para conta fixa: o valor previsto é o valor real, então abrir um
 // formulário para redigitar o mesmo número só cria oportunidade de errar.
+// Exceção: se o extrato já trouxe esse dinheiro, o clique único vira o
+// modal — um clique que duplicaria caixa não pode ser um clique só.
 async function confirmarDireto(id, mes){
   if (!isAdmin) return toast('Sem permissão para confirmar.');
   const r = recorrentes.find(x => x.id === id); if (!r) return;
   const oc = ocorrenciasDe(r, mes, mes)[0]; if (!oc) return;
   if (realizadoDe(mapaRealizado(), id, mes)) return toast('Esse mês já foi confirmado.');
+  if (noExtratoJa(oc.venc, oc.valor)){
+    abrirConfirma(id, mes);
+    return toast('Esse valor já aparece no extrato — confira antes de confirmar.');
+  }
   try {
     await lref.push(lancDaRegra(r, mes, oc.venc, oc.valor, ''));
     toast(`${r.descricao} confirmada — ${fmt(oc.valor)} em ${dataBR(oc.venc)}.`);
@@ -2407,11 +2548,26 @@ async function confirmarDireto(id, mes){
 }
 async function confirmarTodasFixas(){
   if (!isAdmin) return toast('Sem permissão para confirmar.');
-  const fila = pendentesRec().filter(p => p.regra.fixa !== false);
-  if (!fila.length) return toast('Nada a confirmar.');
+  const todas = pendentesRec().filter(p => p.regra.fixa !== false);
+  if (!todas.length) return toast('Nada a confirmar.');
+  // As que o extrato já trouxe saem do lote. Em lote não dá para perguntar
+  // uma a uma sem virar aviso ignorado, e confirmar calado duplicaria caixa
+  // — então o lote faz só o que é seguro e diz o que deixou de fora.
+  // `usados` porque duas regras do mesmo valor na mesma semana não podem
+  // casar as duas com a única linha que existe.
+  const usados = new Set(), fila = [], suspeitas = [];
+  todas.forEach(p => {
+    const l = casarNoExtrato(p.venc, p.valor, usados);
+    if (l){ usados.add(l.id); suspeitas.push({ p, l }); } else fila.push(p);
+  });
+  if (!fila.length) return toast(
+    `Todas as ${suspeitas.length} já aparecem no extrato — confirme uma a uma para não duplicar.`);
   const tot = fila.reduce((a,p) => a + p.valor, 0);
   if (!confirm(`Confirmar ${fila.length} recorrente(s) fixa(s) pelo valor previsto, somando ${fmt(tot)}?\n\n` +
     fila.map(p => `• ${dataBR(p.venc)} — ${p.regra.descricao}: ${fmt(p.valor)}`).join('\n') +
+    (suspeitas.length ? `\n\n${suspeitas.length} ficaram DE FORA porque esse dinheiro já está no extrato:\n` +
+      suspeitas.map(({p,l}) => `• ${p.regra.descricao} → ${dataBR(l.data)} "${l.descricao||'—'}" ${fmt(+l.valor||0)}`).join('\n') +
+      `\nTrate essas em "ajustar", uma a uma.` : '') +
     `\n\nSe alguma saiu por outro valor, cancele e use "ajustar" nela.`)) return;
   const updates = {};
   fila.forEach(p => { updates[lref.push().key] = lancDaRegra(p.regra, p.mes, p.venc, p.valor, ''); });
@@ -2679,7 +2835,7 @@ function abrirImport(){
   document.getElementById('imp-txt').value = '';
   document.getElementById('imp-preview').innerHTML = '';
   document.getElementById('imp-save').disabled = true;
-  impRows = [];
+  impRows = []; impMarcas = [];
   document.getElementById('imp-modal').classList.add('show');
 }
 function fecharImport(){ document.getElementById('imp-modal').classList.remove('show'); }
@@ -2709,31 +2865,48 @@ function splitLinha(l){
   const p = l.split(',');
   return p.length >= 3 ? p : [l];
 }
-// Duas linhas são o mesmo dinheiro por dois motivos diferentes.
+// Uma linha do extrato já pode estar aqui dentro por dois motivos
+// diferentes, e eles pedem chaves diferentes.
 //
 // 1. Repetição literal — mesma data, mesmo valor, mesma descrição. É o
-//    caso de colar o extrato duas vezes.
-// 2. Parcela já baixada na aba Dívidas. Aqui o texto não ajuda: o banco
-//    escreve "DEB TIT COMP EFETI" e a baixa escreve o nome do credor.
-//    A chave tem que ser estrutural — mesmo valor, conta do plano de
-//    serviço da dívida, dentro de uma semana do vencimento. Débito
-//    automático de parcela não erra valor; erra data por feriado.
+//    caso de colar o mesmo extrato duas vezes. Não consome: duas linhas
+//    idênticas coladas juntas devem cair as duas.
+// 2. O dinheiro já entrou pela outra porta — recorrente confirmada na fila
+//    ou parcela baixada na aba Dívidas. Aqui o texto não ajuda e a conta do
+//    plano atrapalha (ver o bloco CONCILIAÇÃO); a chave é valor + data, e
+//    **cada lançamento só absorve uma linha**.
 //
-// Sem o item 2, importar o extrato depois de dar baixa contaria a dívida
-// duas vezes — e ela é o maior consumo de caixa da empresa.
-function jaLancado(r){
-  if (lancamentos.some(l => l.data===r.data
-        && Math.abs(+l.valor - r.valor) < 0.005
-        && normalizar(l.descricao)===normalizar(r.descricao))) return true;
-  if (!CATS_DIVIDA.includes(r.categoria)) return false;
-  return lancamentos.some(l => l.origem==='divida'
-        && Math.abs(Math.abs(+l.valor||0) - Math.abs(r.valor)) < 0.005
-        && Math.abs(diasEntre(l.data, r.data)) <= 7);
+// Sem o item 2, importar o extrato de um mês já confirmado contaria tudo
+// duas vezes — R$ 26.638/mês do lado das recorrentes, R$ 12.607/mês do
+// lado da dívida.
+//
+// Devolve um array paralelo a `rows`: `null` = linha nova, ou
+// `{motivo, lanc}` com o que ela repete.
+function conciliarImport(rows){
+  const marca = rows.map(() => null);
+  rows.forEach((r,i) => {
+    const l = lancamentos.find(l => l.data===r.data
+          && Math.abs((+l.valor||0) - r.valor) < 0.005
+          && normalizar(l.descricao)===normalizar(r.descricao));
+    if (l) marca[i] = { motivo:'repetida', lanc:l };
+  });
+  const usados = new Set();
+  rows.forEach((r,i) => {
+    if (marca[i]) return;
+    const l = casarComOrigem(r.data, r.valor, usados);
+    if (!l) return;
+    usados.add(l.id);
+    marca[i] = { motivo: l.recId ? 'recorrente' : 'divida', lanc:l };
+  });
+  return marca;
 }
+const MOTIVO_TXT = { repetida:'linha repetida',
+                     recorrente:'recorrente já confirmada',
+                     divida:'parcela já baixada' };
 function previewImport(){
   const txt = document.getElementById('imp-txt').value.trim();
   if (!txt) return toast('Cole as linhas primeiro.');
-  impRows = []; const erros = [];
+  impRows = []; impMarcas = []; const erros = [];
   txt.split(/\r?\n/).forEach((linha, i) => {
     if (!linha.trim()) return;
     const c = splitLinha(linha).map(x => x.trim().replace(/^"|"$/g,''));
@@ -2746,24 +2919,40 @@ function previewImport(){
     impRows.push({ data, descricao:desc, valor, categoria: classificar(desc) || '' });
   });
   const okCat = impRows.filter(r=>r.categoria).length;
-  const dups  = impRows.filter(jaLancado);
-  const dup   = dups.length;
-  const dupDiv= dups.filter(r => CATS_DIVIDA.includes(r.categoria)).length;
+  impMarcas   = conciliarImport(impRows);
+  const dup   = impMarcas.filter(Boolean).length;
+  const conta = m => impMarcas.filter(x => x && x.motivo===m).length;
+  // O que foi absorvido aparece nominalmente, não só como número. A chave
+  // de conciliação é valor + data, mais frouxa que a da dívida — então o
+  // que ela decidir engolir tem que ficar à vista, senão uma despesa real
+  // do extrato some sem deixar rastro.
+  const casadas = impRows.map((r,i) => [r, impMarcas[i]])
+                         .filter(([,m]) => m && m.motivo!=='repetida');
   document.getElementById('imp-preview').innerHTML = `
     <div class="alert" style="margin:12px 0 0">
       <b>${impRows.length}</b> linhas lidas · <b>${okCat}</b> classificadas automaticamente
       (${impRows.length?Math.round(100*okCat/impRows.length):0}%) ·
       <b>${impRows.length-okCat}</b> vão para Revisar.
-      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas${
-        dupDiv?` — <b>${dupDiv}</b> ${dupDiv===1?'é parcela já baixada':'são parcelas já baixadas'} na aba Dívidas`:''}.`:''}
+      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas — ${
+        ['repetida','recorrente','divida'].filter(m=>conta(m))
+          .map(m=>`<b>${conta(m)}</b> ${MOTIVO_TXT[m]}${conta(m)>1?'s':''}`).join(' · ')}.`:''}
       ${erros.length?`<br/><span class="neg">${erros.length} linhas com problema:</span> ${esc(erros.slice(0,3).join(' · '))}`:''}
     </div>
+    ${casadas.length?`<div class="alert" style="margin:8px 0 0;font-size:12px">
+      Estas linhas do extrato são o mesmo dinheiro que já está lançado —
+      confira antes de importar:<br/>${casadas.slice(0,12).map(([r,m])=>
+        `• ${esc(dataBR(r.data))} <b>${esc(r.descricao)}</b> ${fmt(r.valor)}
+         → já lançado em ${esc(dataBR(m.lanc.data))} como
+         <b>${esc(m.lanc.descricao||'—')}</b>`).join('<br/>')}
+      ${casadas.length>12?`<br/>… e mais ${casadas.length-12}.`:''}</div>`:''}
     ${impRows.length?`<div class="tbl-wrap" style="max-height:190px;overflow:auto;margin-top:10px">
-      <table><tbody>${impRows.slice(0,40).map(r=>`<tr>
+      <table><tbody>${impRows.slice(0,40).map((r,i)=>`<tr${impMarcas[i]?' style="opacity:.45"':''}>
         <td style="white-space:nowrap">${esc(dataBR(r.data))}</td>
         <td>${esc(r.descricao)}</td>
         <td class="num ${r.valor>=0?'pos':'neg'}">${fmt(r.valor)}</td>
-        <td style="font-size:11px;color:${r.categoria?'var(--muted)':'var(--red)'}">${r.categoria?esc(r.categoria):'sem categoria'}</td>
+        <td style="font-size:11px;color:${impMarcas[i]?'var(--muted)':(r.categoria?'var(--muted)':'var(--red)')}">${
+          impMarcas[i]?'ignorada · '+MOTIVO_TXT[impMarcas[i].motivo]
+                      :(r.categoria?esc(r.categoria):'sem categoria')}</td>
       </tr>`).join('')}</tbody></table></div>`:''}`;
   document.getElementById('imp-save').disabled = !impRows.length;
 }
@@ -2771,7 +2960,11 @@ async function confirmarImport(){
   if (!impRows.length) return;
   const btn = document.getElementById('imp-save');
   btn.disabled = true; btn.textContent = 'Importando…';
-  const novos = impRows.filter(r => !jaLancado(r));
+  // Reconcilia de novo na hora de gravar: entre o preview e o clique alguém
+  // pode ter confirmado uma recorrente noutra aba, e a decisão tem que valer
+  // sobre o estado de agora.
+  const marcas = conciliarImport(impRows);
+  const novos  = impRows.filter((r,i) => !marcas[i]);
   const updates = {};
   novos.forEach(r => {
     updates[lref.push().key] = { ...r, origem:'import', por: session?.nome||'—', ts: Date.now() };
