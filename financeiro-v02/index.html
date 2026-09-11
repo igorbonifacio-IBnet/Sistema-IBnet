@@ -864,8 +864,22 @@ function htmlDFC(){
   ${htmlEvolucao(meses)}`;
 }
 
+/* A coluna da direita é **fatia**, não progresso: quanto a conta pesa nos
+   custos e despesas operacionais do período. O rótulo era só "Peso", e num
+   lugar onde a MESMA barra (`bar-track`/`bar-fill`) significa progresso de
+   pagamento — parcelas pagas da dívida, lá em htmlDivida — isso lia errado
+   com naturalidade: o Igor viu pró-labore em 48,6% com a única regra do mês
+   já paga e concluiu que a barra estava quebrada. Não estava; estava
+   respondendo outra pergunta.
+
+   Por que não trocar pela leitura que ele esperava (% do previsto já pago):
+   o DFC é realizado por decisão — enquanto ninguém confirma, o previsto não
+   existe para o fluxo de caixa. Previsto × realizado é a coluna Previsto,
+   que é outra entrega. Aqui o conserto é dizer o que o número é, incluindo
+   o denominador, que é o que tira a ambiguidade de vez. */
 function detalhePorGrupo(rows, base){
   let out = '';
+  const den = Math.abs(+base || 0);
   for (const [g, def] of Object.entries(PLANO)) {
     const linhas = [];
     def.sub.forEach(s => {
@@ -877,7 +891,10 @@ function detalhePorGrupo(rows, base){
     const totG = linhas.flatMap(([,cs])=>cs).reduce((a,[,v])=>a+v,0);
     out += `<div class="section-title">${def.nome}</div>
     <div class="card"><div class="tbl-wrap"><table>
-      <thead><tr><th>Conta</th><th class="num">Valor</th><th class="num" style="width:120px">Peso</th></tr></thead>
+      <thead><tr><th>Conta</th><th class="num">Valor</th>
+        <th class="num" style="width:150px"
+            title="Fatia desta conta nas saídas operacionais do período. Não é quanto já foi pago.">
+          Fatia das saídas</th></tr></thead>
       <tbody>${linhas.map(([sub,cs]) => `
         <tr class="grp-row"><td colspan="3">${esc(sub)}</td></tr>
         ${cs.sort((a,b)=>a[1]-b[1]).map(([c,v]) => {
@@ -889,7 +906,10 @@ function detalhePorGrupo(rows, base){
         <tr class="tot-row"><td><b>Total ${esc(def.nome)}</b></td>
           <td class="num ${totG>=0?'pos':'neg'}"><b>${fmt(totG)}</b></td><td></td></tr>
       </tbody>
-    </table></div></div>`;
+    </table></div>
+    ${den?`<div class="mb-hint" style="padding:0 14px 12px">A fatia é sobre as saídas
+      operacionais do período — <b>${fmt(den)}</b>. Mede concentração de gasto,
+      não quanto já foi pago.</div>`:''}</div>`;
   }
   return out;
 }
