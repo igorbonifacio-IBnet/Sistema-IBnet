@@ -81,6 +81,15 @@ body.light .grp-row td{background:rgba(0,0,0,.03)}
 .tbl-scroll thead th{position:sticky;top:0;z-index:3;box-shadow:0 1px 0 var(--border)}
 .tbl-scroll .tot-row td{position:sticky;bottom:0;z-index:2;box-shadow:0 -1px 0 var(--border)}
 
+/* Gráfico em tela estreita. O SVG tem viewBox 1000×320 e `width:100%`, então
+   a altura acompanha a largura: em 313px de celular ele vira uma faixa de
+   100px com 36 barras de 5px — desenho ilegível que parece defeito. Em vez de
+   espremer, rola na horizontal e a barra fica do tamanho que dá para ler.
+   `overflow-y` explícito em `hidden`: com `overflow-x:auto` sozinho o eixo Y
+   computa `auto` também, e daí o contêiner passa a rolar sem precisar. */
+.graf-scroll{overflow-x:auto;overflow-y:hidden}
+.graf-scroll svg{min-width:620px}
+
 .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
 .p-oper{background:rgba(107,191,138,.15);color:var(--green)}
 .p-invest{background:rgba(107,140,206,.15);color:var(--blue)}
@@ -1011,17 +1020,22 @@ function kBR(v){
   return s + Math.round(a).toLocaleString('pt-BR');
 }
 
-function svgEvolucao(linhas){
-  const series = [
-    { k:'OPER',   nome:'Operacional',   cor:'var(--green)'  },
-    { k:'INVEST', nome:'Investimento',  cor:'var(--blue)'   },
-    { k:'FINAN',  nome:'Financiamento', cor:'var(--yellow)' },
-  ];
+/* Motor dos dois gráficos de barra por mês: o realizado do DFC e a projeção
+   das Recorrentes. Uma função só de propósito — duas cópias divergem, e a
+   parte que divergiria primeiro é justamente a que decide se a barra desce
+   (o tratamento do sinal). Quem chama passa:
+     series[] → as barras     { k, nome, cor }
+     linha    → a linha sobre elas { k, nome, cor }
+     aria     → rótulo do SVG para leitor de tela
+   Todo `k` tem que chegar aqui **já com o sinal certo**: quem sai é negativo.
+   Grandeza guardada como módulo (dívida) se nega no chamador, não aqui. */
+function svgBarrasMes(linhas, cfg){
+  const series = cfg.series, ln = cfg.linha;
 
   let max = 0, min = 0;                       // zero sempre dentro da escala
   linhas.forEach(l => {
     series.forEach(s => { max = Math.max(max, l[s.k]); min = Math.min(min, l[s.k]); });
-    max = Math.max(max, l.tot); min = Math.min(min, l.tot);
+    max = Math.max(max, l[ln.k]); min = Math.min(min, l[ln.k]);
   });
   if (max === min) { max = 1; min = -1; }
   const passo = escalaNice(max - min);
@@ -1067,19 +1081,20 @@ function svgEvolucao(linhas){
     }).join('');
   }).join('');
 
-  const pts = linhas.map((l, j) => `${cx(j).toFixed(1)},${y(l.tot).toFixed(1)}`).join(' ');
-  const linha = `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.4"
+  const pts = linhas.map((l, j) => `${cx(j).toFixed(1)},${y(l[ln.k]).toFixed(1)}`).join(' ');
+  const linha = `<polyline points="${pts}" fill="none" stroke="${ln.cor}" stroke-width="2.4"
       stroke-linejoin="round" stroke-linecap="round"/>` +
-    linhas.map((l, j) => `<circle cx="${cx(j).toFixed(1)}" cy="${y(l.tot).toFixed(1)}" r="4.2"
-      fill="var(--card)" stroke="var(--accent)" stroke-width="2.4"
-      ><title>${mesLabel(l.m)} · Variação de caixa: ${fmt(l.tot)}</title></circle>`).join('');
+    linhas.map((l, j) => `<circle cx="${cx(j).toFixed(1)}" cy="${y(l[ln.k]).toFixed(1)}" r="4.2"
+      fill="var(--card)" stroke="${ln.cor}" stroke-width="2.4"
+      ><title>${mesLabel(l.m)} · ${ln.nome}: ${fmt(l[ln.k])}</title></circle>`).join('');
 
   const rotulos = linhas.map((l, j) =>
-    `<text x="${cx(j).toFixed(1)}" y="${H-14}" text-anchor="middle" fill="var(--muted)"
-      font-size="11.5">${mesLabel(l.m)}</text>`).join('');
+    `<text x="${cx(j).toFixed(1)}" y="${H-14}" text-anchor="middle" fill="${
+      l.destaque ? 'var(--accent)' : 'var(--muted)'}"
+      font-size="11.5"${l.destaque ? ' font-weight="700"' : ''}>${mesLabel(l.m)}</text>`).join('');
 
   const legenda = [...series.map(s => ({nome:s.nome, cor:s.cor, tipo:'barra'})),
-                   {nome:'Variação de caixa', cor:'var(--accent)', tipo:'linha'}]
+                   {nome:ln.nome, cor:ln.cor, tipo:'linha'}]
     .map(i => `<span style="display:inline-flex;align-items:center;gap:6px">
       <span style="width:${i.tipo==='linha'?'14px':'10px'};height:${i.tipo==='linha'?'2.5px':'10px'};
         border-radius:${i.tipo==='linha'?'2px':'3px'};background:${i.cor};display:inline-block"></span>
@@ -1088,12 +1103,62 @@ function svgEvolucao(linhas){
   return `<div class="card" style="padding:16px 16px 6px">
     <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);
       margin-bottom:10px;font-weight:600">${legenda}</div>
+    <div class="graf-scroll">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-      aria-label="Evolução mês a mês do fluxo de caixa"
+      aria-label="${cfg.aria}"
       style="width:100%;height:auto;display:block;font-family:inherit;overflow:visible">
       ${grade}${barras}${linha}${rotulos}
     </svg>
+    </div>
   </div>`;
+}
+
+/* Projeção das Recorrentes: mesmo desenho do DFC, outro assunto. Lá é o que
+   ACONTECEU; aqui é o que as regras dizem que vai acontecer — nenhum destes
+   meses está gravado. Usar o mesmo motor é o que garante que as duas telas se
+   leiam igual; o que muda é a legenda, e ela diz "previsto".
+
+   O sinal é a parte perigosa. `entra` já vem positivo e `sai` já vem negativo,
+   mas `divida` é guardada como MÓDULO — a tabela ao lado imprime `fmt(-divida)`.
+   Plotar o campo cru poria a dívida ACIMA do zero, desenhando a parcela como
+   se fosse entrada de caixa. Negar aqui, no chamador, é o que mantém o motor
+   ingênuo: ver "Sinal forçado no display é regra de negócio escondida". */
+function htmlProjecaoRec(linhaMeses, mesAtual){
+  if (linhaMeses.length < 2) return '';
+  /* Regra pausada, ou com vigência toda fora da janela, deixa os 12 meses em
+     zero. Doze barras de altura zero não são "sem movimento": leem como
+     gráfico quebrado. Nesse caso a tabela abaixo já diz tudo com traços. */
+  if (linhaMeses.every(x => !x.entra && !x.sai && !x.divida)) return '';
+  const pts = linhaMeses.map(x => ({
+    m: x.mes,
+    entra: x.entra,
+    sai:   x.sai,
+    div:  -x.divida,
+    sobra: x.entra + x.sai - x.divida,
+    destaque: x.mes === mesAtual
+  }));
+  return svgBarrasMes(pts, {
+    series: [
+      { k:'entra', nome:'Entra previsto',  cor:'var(--green)'  },
+      { k:'sai',   nome:'Sai previsto',    cor:'var(--red)'    },
+      { k:'div',   nome:'Parcela de dívida', cor:'var(--yellow)' },
+    ],
+    linha: { k:'sobra', nome:'Sobra prevista', cor:'var(--accent)' },
+    aria: 'Projeção mês a mês das regras recorrentes e das parcelas de dívida'
+  });
+}
+
+// Realizado do DFC: os três grupos do plano, com a variação de caixa por cima.
+function svgEvolucao(linhas){
+  return svgBarrasMes(linhas, {
+    series: [
+      { k:'OPER',   nome:'Operacional',   cor:'var(--green)'  },
+      { k:'INVEST', nome:'Investimento',  cor:'var(--blue)'   },
+      { k:'FINAN',  nome:'Financiamento', cor:'var(--yellow)' },
+    ],
+    linha: { k:'tot', nome:'Variação de caixa', cor:'var(--accent)' },
+    aria: 'Evolução mês a mês do fluxo de caixa'
+  });
 }
 
 function htmlEvolucao(meses){
@@ -2568,7 +2633,8 @@ function htmlRec(){
     (<b>${fmt((anoEnt+anoSai-anoDiv)/12)}/mês</b>).
     Nenhum desses meses está gravado — tudo aqui é derivado das regras.
   </div>
-  <div class="card"><div class="tbl-wrap"><table>
+  ${htmlProjecaoRec(linha, mes)}
+  <div class="card" style="margin-top:12px"><div class="tbl-wrap"><table>
     <thead><tr><th>Mês</th><th class="num">Itens</th><th class="num">Entra</th>
       <th class="num">Sai</th><th class="num">Dívida</th><th class="num">Sobra</th>
       <th style="width:20%" title="Quanto sai no mês — recorrente + dívida — em relação ao mês mais pesado">Peso da saída</th></tr></thead>
