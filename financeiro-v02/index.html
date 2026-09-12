@@ -914,6 +914,124 @@ function detalhePorGrupo(rows, base){
   return out;
 }
 
+/* ── gráfico de evolução ──────────────────────────────────────────────
+   SVG escrito à mão de propósito. O projeto não tem build nem CDN de
+   biblioteca de gráfico, e três barras e uma linha não justificam uma
+   dependência nova num app de arquivo único → [[Sem framework no
+   Dashboard IBnet]].
+
+   Duas escolhas que não são estéticas:
+
+   - **As cores saem de `var(--green|blue|yellow|accent)`**, os mesmos
+     tokens que pintam os grupos nas tabelas. Um desenho só serve dark e
+     light, e a cor de "Investimento" no gráfico é a mesma da barra de
+     Investimento na tabela — senão o leitor aprende duas legendas.
+   - **O zero entra sempre na escala.** Sem isso um mês só de saída teria
+     barra pequena começando no topo do próprio mínimo, e barra pequena
+     lê como "pouco", não como "negativo".
+
+   Tooltip é `<title>` nativo: passa o mouse e vê o valor exato. Zero JS,
+   funciona no toque e no teclado.                                      */
+function escalaNice(span){
+  if (!(span > 0)) return 1;
+  const alvo = span / 4;
+  const mag  = Math.pow(10, Math.floor(Math.log10(alvo)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (mag * m >= alvo) return mag * m;
+  return mag * 10;
+}
+// Rótulo de eixo é para dar ordem de grandeza, não para conferir centavo —
+// quem confere centavo usa a tabela logo abaixo.
+function kBR(v){
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1000) return s + (a/1000).toLocaleString('pt-BR',{maximumFractionDigits: a >= 10000 ? 0 : 1}) + 'k';
+  return s + Math.round(a).toLocaleString('pt-BR');
+}
+
+function svgEvolucao(linhas){
+  const series = [
+    { k:'OPER',   nome:'Operacional',   cor:'var(--green)'  },
+    { k:'INVEST', nome:'Investimento',  cor:'var(--blue)'   },
+    { k:'FINAN',  nome:'Financiamento', cor:'var(--yellow)' },
+  ];
+
+  let max = 0, min = 0;                       // zero sempre dentro da escala
+  linhas.forEach(l => {
+    series.forEach(s => { max = Math.max(max, l[s.k]); min = Math.min(min, l[s.k]); });
+    max = Math.max(max, l.tot); min = Math.min(min, l.tot);
+  });
+  if (max === min) { max = 1; min = -1; }
+  const passo = escalaNice(max - min);
+  max = Math.ceil(max / passo) * passo;
+  min = Math.floor(min / passo) * passo;
+
+  const W = 1000, H = 320, ML = 82, MR = 18, MT = 18, MB = 38;
+  const pw = W - ML - MR, ph = H - MT - MB;
+  const y  = v => MT + (max - v) / (max - min) * ph;
+  const gw = pw / linhas.length;
+  /* A largura sai do grupo, não da barra. Travar a barra num máximo fixo
+     deixava 3 meses com barras de 24px perdidas num slot de 300 — o gráfico
+     lia como "faltou dado". Aqui o grupo ocupa 62% do slot até um teto, e as
+     barras dividem o que sobrou: enche bem com 3 meses e não vira mancha
+     sólida com 12. */
+  const larguraGrupo = Math.min(gw * 0.62, 132);
+  const gap = larguraGrupo * 0.06;
+  const bw  = (larguraGrupo - gap * (series.length - 1)) / series.length;
+  const cx = j => ML + gw * j + gw / 2;
+
+  const ticks = [];
+  for (let v = min; v <= max + 1e-6; v += passo) ticks.push(v);
+
+  const grade = ticks.map(v => {
+    const zero = Math.abs(v) < 1e-6;
+    return `<line x1="${ML}" x2="${W-MR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"
+      stroke="var(--border)" stroke-width="${zero ? 1.6 : 1}" ${zero ? '' : 'stroke-dasharray="3 4"'} opacity="${zero ? 1 : .65}"/>
+    <text x="${ML-10}" y="${(y(v)+3.5).toFixed(1)}" text-anchor="end"
+      fill="var(--muted)" font-size="11">${kBR(v)}</text>`;
+  }).join('');
+
+  const barras = linhas.map((l, j) => {
+    const x0 = cx(j) - larguraGrupo / 2;
+    return series.map((s, i) => {
+      const v = l[s.k];
+      if (!v) return '';
+      const yv = y(v), y0 = y(0);
+      const topo = Math.min(yv, y0);
+      const alt  = Math.max(1.5, Math.abs(y0 - yv));
+      return `<rect x="${(x0 + i*(bw+gap)).toFixed(1)}" y="${topo.toFixed(1)}"
+        width="${bw.toFixed(1)}" height="${alt.toFixed(1)}" rx="2" fill="${s.cor}" opacity=".92"
+        ><title>${mesLabel(l.m)} · ${s.nome}: ${fmt(v)}</title></rect>`;
+    }).join('');
+  }).join('');
+
+  const pts = linhas.map((l, j) => `${cx(j).toFixed(1)},${y(l.tot).toFixed(1)}`).join(' ');
+  const linha = `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.4"
+      stroke-linejoin="round" stroke-linecap="round"/>` +
+    linhas.map((l, j) => `<circle cx="${cx(j).toFixed(1)}" cy="${y(l.tot).toFixed(1)}" r="4.2"
+      fill="var(--card)" stroke="var(--accent)" stroke-width="2.4"
+      ><title>${mesLabel(l.m)} · Variação de caixa: ${fmt(l.tot)}</title></circle>`).join('');
+
+  const rotulos = linhas.map((l, j) =>
+    `<text x="${cx(j).toFixed(1)}" y="${H-14}" text-anchor="middle" fill="var(--muted)"
+      font-size="11.5">${mesLabel(l.m)}</text>`).join('');
+
+  const legenda = [...series.map(s => ({nome:s.nome, cor:s.cor, tipo:'barra'})),
+                   {nome:'Variação de caixa', cor:'var(--accent)', tipo:'linha'}]
+    .map(i => `<span style="display:inline-flex;align-items:center;gap:6px">
+      <span style="width:${i.tipo==='linha'?'14px':'10px'};height:${i.tipo==='linha'?'2.5px':'10px'};
+        border-radius:${i.tipo==='linha'?'2px':'3px'};background:${i.cor};display:inline-block"></span>
+      <span>${i.nome}</span></span>`).join('');
+
+  return `<div class="card" style="padding:16px 16px 6px">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);
+      margin-bottom:10px;font-weight:600">${legenda}</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+      aria-label="Evolução mês a mês do fluxo de caixa"
+      style="width:100%;height:auto;display:block;font-family:inherit;overflow:visible">
+      ${grade}${barras}${linha}${rotulos}
+    </svg>
+  </div>`;
+}
+
 function htmlEvolucao(meses){
   if (meses.length < 2) return '';
   const linhas = meses.map(m => {
@@ -922,7 +1040,8 @@ function htmlEvolucao(meses){
     return {m, ...t, tot:t.OPER+t.INVEST+t.FINAN+t.REVISAR};
   });
   return `<div class="section-title">Evolução mês a mês</div>
-  <div class="card"><div class="tbl-wrap"><table>
+  ${svgEvolucao(linhas)}
+  <div class="card" style="margin-top:12px"><div class="tbl-wrap"><table>
     <thead><tr><th>Mês</th><th class="num">Operacional</th><th class="num">Investimento</th>
       <th class="num">Financiamento</th><th class="num">Variação</th></tr></thead>
     <tbody>${linhas.map(l=>`<tr>
