@@ -2100,9 +2100,23 @@ function proximaAbertaRec(r, hojeISO, mapa){
               && !realizadoDe(mp, r.id, o.mes))[0] || null;
 }
 
-// Previsto x realizado de um mês. Onde já houve confirmação vale o valor
-// real, não o da regra — senão o total do mês seria uma estimativa mesmo
-// depois de o dinheiro ter saído.
+// Previsto x realizado de um mês, em baldes que NÃO se misturam.
+//
+// `entra`/`sai` são a ESTIMATIVA pura — a soma das regras, igual à coluna da
+// lista logo abaixo e igual à linha do mês na projeção de 12 meses. Esta aba
+// responde uma pergunta só: quanto é para entrar e sair num mês típico. Quem
+// responde "quanto entrou de verdade" é a aba Fluxo de Caixa, que lê
+// lançamento e mais nada.
+//
+// Até 11/09/2026 estes dois campos eram híbridos — real onde tinha confirmação,
+// estimativa onde não — e o resultado era um terceiro número que não era nem o
+// plano nem o caixa: 60.958,63 no cartão e 72.320,16 na projeção, para o mesmo
+// setembro, a poucos pixels de distância. O Igor somou a coluna na mão e
+// perguntou por que não batia. Decisão dele: cada aba com um regime só.
+//
+// `entraReal`/`saiReal` guardam o confirmado só para a legenda do cartão. Não
+// entram no total: existem para a tela dizer o tamanho da defasagem em vez de
+// deixar o Igor descobri-la subtraindo duas abas.
 //
 // Entrada e saída somam SEPARADO. O líquido sozinho responde "sobra quanto"
 // e apaga "quanto entra" e "quanto sai" — que é o que decide se o mês apertou
@@ -2115,18 +2129,22 @@ function proximaAbertaRec(r, hojeISO, mapa){
 function resumoRecMes(mes){
   const mapa = mapaRealizado();
   const r = { previsto:0, realizado:0, aberto:0, nAberto:0, nConf:0,
-              entra:0, sai:0, nEntra:0, nSai:0, nConfEntra:0, nConfSai:0, itens:[] };
+              entra:0, sai:0, nEntra:0, nSai:0, nConfEntra:0, nConfSai:0,
+              entraReal:0, saiReal:0, entraPrevConf:0, saiPrevConf:0, itens:[] };
   recorrentes.forEach(g => ocorrenciasDe(g, mes, mes).forEach(o => {
     const l = realizadoDe(mapa, g.id, o.mes);
-    const v = l ? (+l.valor || 0) : o.valor;   // real onde já confirmou
+    const v = l ? (+l.valor || 0) : 0;         // confirmado; 0 = ainda não veio
     r.previsto += o.valor;
-    if (l){ r.realizado += (+l.valor || 0); r.nConf++; }
-    else  { r.aberto    += o.valor;         r.nAberto++; }
-    if (o.valor >= 0){ r.entra += v; r.nEntra++; if (l) r.nConfEntra++; }
-    else             { r.sai   += v; r.nSai++;   if (l) r.nConfSai++;   }
+    if (l){ r.realizado += v; r.nConf++; }
+    else  { r.aberto    += o.valor; r.nAberto++; }
+    // o balde soma SEMPRE a estimativa; o real anda ao lado, nunca dentro
+    if (o.valor >= 0){ r.entra += o.valor; r.nEntra++;
+                       if (l){ r.nConfEntra++; r.entraReal += v; r.entraPrevConf += o.valor; } }
+    else             { r.sai   += o.valor; r.nSai++;
+                       if (l){ r.nConfSai++;   r.saiReal   += v; r.saiPrevConf   += o.valor; } }
     r.itens.push({ ...o, regra:g, lanc:l });
   }));
-  r.total = r.realizado + r.aberto;   // === r.entra + r.sai
+  r.total = r.entra + r.sai;          // estimativa do mês, ponta a ponta
   return r;
 }
 
@@ -2308,21 +2326,44 @@ function htmlRec(){
        despesa cadastrada dava certo por acidente, e no dia em que entrou
        receita passou a imprimir a sobra positiva como se fosse conta a pagar. */
     const sobra = resumo.entra + resumo.sai - divMes;
+
+    /* Legenda do que JÁ foi confirmado. Fica fora do número grande de
+       propósito: o número grande é a estimativa, e o realizado mora na aba
+       Fluxo de Caixa. O que esta linha entrega é a DEFASAGEM — o número que
+       antes só existia num toast de 3 segundos e que o Igor tinha que achar
+       subtraindo duas telas.
+
+       O sinal é lido por lado, nunca por Math.abs: receber menos que o
+       previsto é má notícia, gastar menos é boa. Um texto só para os dois
+       lados apagaria exatamente a parte que decide. É a armadilha que já
+       custou R$ 101 mil neste arquivo — ver htmlDFC. */
+    const jaVeio = (n, real, prev, lado) => {
+      if (!n) return '<div class="sub">nada confirmado ainda</div>';
+      const dif  = real - prev;                     // >0 sempre = boa notícia
+      const bom  = dif > 0;
+      const pal  = lado === 'entra' ? (bom ? 'a mais' : 'a menos')
+                                    : (bom ? 'a menos' : 'a mais');
+      return `<div class="sub">${n} já confirmada(s): <b>${fmt(real)}</b>${
+        Math.abs(dif) < 0.005 ? ' — exatamente o previsto'
+        : ` · <b class="${bom?'pos':'neg'}">${fmt(Math.abs(dif))} ${pal}</b> que o previsto`}</div>`;
+    };
     return `
   <div class="dfc-grid" style="margin-top:14px">
-    <div class="dfc-box op"><div class="lbl">Entra em ${mesLabel(mes)}</div>
+    <div class="dfc-box op"><div class="lbl">Previsto entrar em ${mesLabel(mes)}</div>
       <div class="val ${resumo.nEntra?'pos':'muted'}">${resumo.nEntra?fmt(resumo.entra):'—'}</div>
-      <div class="sub">${resumo.nEntra} receita(s) · ${resumo.nConfEntra} confirmada(s)</div></div>
-    <div class="dfc-box"><div class="lbl">Sai em ${mesLabel(mes)}</div>
+      <div class="sub">${resumo.nEntra} receita(s) pelas regras</div>
+      ${jaVeio(resumo.nConfEntra, resumo.entraReal, resumo.entraPrevConf, 'entra')}</div>
+    <div class="dfc-box"><div class="lbl">Previsto sair em ${mesLabel(mes)}</div>
       <div class="val ${resumo.nSai?'neg':'muted'}">${resumo.nSai?fmt(resumo.sai):'—'}</div>
-      <div class="sub">${resumo.nSai} despesa(s) · ${resumo.nConfSai} confirmada(s)</div></div>
+      <div class="sub">${resumo.nSai} despesa(s) pelas regras</div>
+      ${jaVeio(resumo.nConfSai, resumo.saiReal, resumo.saiPrevConf, 'sai')}</div>
     <div class="dfc-box fin"><div class="lbl">Parcelas de dívida</div>
       <div class="val ${divMes?'neg':'muted'}">${divMes?fmt(-divMes):'—'}</div>
       <div class="sub">${divMes?'ainda em aberto no mês':'nada vencendo no mês'}</div></div>
-    <div class="dfc-box tot"><div class="lbl">Sobra do mês</div>
+    <div class="dfc-box tot"><div class="lbl">Sobra prevista no mês</div>
       <div class="val ${sobra>=0?'pos':'neg'}">${fmt(sobra)}</div>
-      <div class="sub">${resumo.itens.length} recorrente(s) + dívida${
-        resumo.nConf?` · ${resumo.nConf} já confirmada(s) pelo valor real`:''}</div></div>
+      <div class="sub">${resumo.itens.length} recorrente(s) + dívida, pelo valor da regra</div>
+      <div class="sub">o que entrou de verdade está na aba <b>Fluxo de Caixa</b></div></div>
   </div>`;})()}
 
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
