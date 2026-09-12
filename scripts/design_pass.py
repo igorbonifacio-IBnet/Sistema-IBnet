@@ -12,7 +12,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = [
     "index.html",
     "comercial/index.html",
-    "financeiro/index.html",
     "suporte/index.html",
     "cac/index.html",
     "cac/ativacao.html",
