@@ -1686,9 +1686,29 @@ window.addEventListener('message',function(e){
   }
   // Busca global: abre modal da atividade pelo ID
   if(e.data?.type==='openActivity' && e.data.id){
-    openActModal(e.data.id);
+    abrirAtividadeQuandoCarregar(e.data.id);
   }
 });
+
+/* O portal agora carrega este módulo só quando a aba abre, então a mensagem da
+   busca global chega junto com o nascimento da página — muitas vezes antes do
+   Firebase responder. `openActModal` faz `_activities.find(...)`: com a lista
+   ainda vazia ele não acha nada, e o modal sobe TODO EM BRANCO, sem erro no
+   console e sem aviso na tela. Quem abriu leria isso como "a atividade sumiu".
+
+   `_activitiesLoaded` é o que separa "não existe" de "ainda não chegou" —
+   distinção que só o módulo pode fazer, porque só ele sabe quando o dado
+   chegou. Esgotado o prazo, abre assim mesmo e diz no console: degradar para
+   o comportamento antigo é aceitável, ficar mudo não é. */
+function abrirAtividadeQuandoCarregar(id, restam = 60) {
+  if (_activitiesLoaded) { openActModal(id); return; }
+  if (restam <= 0) {
+    console.warn('[suporte] openActivity: dado não chegou em 6s — abrindo modal possivelmente vazio para', id);
+    openActModal(id);
+    return;
+  }
+  setTimeout(() => abrirAtividadeQuandoCarregar(id, restam - 1), 100);
+}
 (function(){const t=localStorage.getItem('ibnet_theme')||'dark';document.body.classList.toggle('light',t==='light');})();
 
 // ── KANBAN — VIEW MODE ────────────────────────────────────────────────────

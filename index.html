@@ -689,39 +689,43 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       </div>
     </div>
 
+    <!-- TODOS os módulos usam `data-src`, nunca `src`. Iframe com `src` carrega
+         mesmo dentro de `#platform{display:none}` — ou seja, carregava na tela
+         de LOGIN, antes de existir usuário. Eram seis módulos (~460KB) baixados
+         e seis conexões Firebase abertas por quem talvez nem tivesse senha, e
+         um usuário de Suporte executava o CAC e o Financeiro inteiros.
+         Quem troca `data-src` por `src` é `carregarModulo()`, chamado pelo
+         `switchTab()` DEPOIS do `canAccess()` — o módulo passa a existir no
+         momento em que alguém com direito de ver abre a aba, e não antes. -->
     <div class="tab-panel" id="tab-comercial">
-      <iframe src="comercial/index.html" id="iframe-comercial" title="Dashboard Comercial"></iframe>
+      <iframe data-src="comercial/index.html" id="iframe-comercial" title="Dashboard Comercial"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-financeiro">
-      <iframe src="financeiro/index.html" id="iframe-financeiro" title="Painel Financeiro"></iframe>
+      <iframe data-src="financeiro/index.html" id="iframe-financeiro" title="Painel Financeiro"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-fv02">
-      <!-- data-src pelo mesmo motivo do fluxo: só carrega após canAccess(). -->
       <iframe data-src="financeiro-v02/index.html" id="iframe-fv02" title="Financeiro IBnet V02"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-fluxo">
-      <!-- src fica em data-src de propósito: o módulo só é carregado depois
-           que canAccess() aprova o usuário. Sem isso, o navegador de qualquer
-           pessoa logada baixaria o fluxo de caixa e assinaria o Firebase. -->
       <iframe data-src="fluxo/index.html" id="iframe-fluxo" title="Fluxo de Caixa"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-suporte">
-      <iframe src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
+      <iframe data-src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-cac">
-      <iframe src="cac/index.html" id="iframe-cac" title="Operações"></iframe>
+      <iframe data-src="cac/index.html" id="iframe-cac" title="Operações"></iframe>
     </div>
 
     <div class="tab-panel" id="tab-logs">
-      <iframe src="logs/index.html" id="iframe-logs" title="Log de Atividades"></iframe>
+      <iframe data-src="logs/index.html" id="iframe-logs" title="Log de Atividades"></iframe>
     </div>
     <div class="tab-panel" id="tab-ponto">
-      <iframe src="ponto/index.html" id="iframe-ponto" title="Ponto Eletrônico"></iframe>
+      <iframe data-src="ponto/index.html" id="iframe-ponto" title="Ponto Eletrônico"></iframe>
     </div>
   </div>
 </div>
@@ -866,13 +870,11 @@ function bootPlatform(session) {
       }
     }
     if (lockEl) lockEl.style.display = hasAccess ? 'none' : '';
-
-    // Só carrega o iframe de abas restritas se o usuário tiver acesso.
-    const frame = document.getElementById('iframe-' + tab);
-    if (frame && frame.dataset.src && hasAccess && !frame.src) {
-      frame.src = frame.dataset.src;
-    }
   });
+  // Nenhum iframe é carregado aqui de propósito. Antes o login disparava todos
+  // os módulos acessíveis de uma vez; agora quem carrega é o switchTab(), na
+  // primeira vez que a aba é aberta. Para um admin que cai na Home, isso é
+  // zero módulo carregado no login.
 
   // Abre a primeira aba acessível (Home se disponível, senão Comercial)
   const firstTab = ROLE_ACCESS[session.role]?.[0] || 'comercial';
@@ -882,9 +884,37 @@ function bootPlatform(session) {
   setupPortalFirebase();
 }
 
+// Conjunto dos módulos que já dispararam `load` com conteúdo de verdade
+// dentro. Serve para quem precisa falar com o iframe saber se pode falar agora
+// ou se tem de esperar — ver aoCarregar().
+const modulosProntos = new Set();
+
+// Troca `data-src` por `src` na primeira vez que a aba é aberta. Idempotente:
+// a partir da segunda chamada o `frame.src` já está preenchido e não faz nada,
+// então trocar de aba não recarrega o módulo nem perde o estado da tela.
+function carregarModulo(tab) {
+  const frame = document.getElementById('iframe-' + tab);
+  if (frame && frame.dataset.src && !frame.src) frame.src = frame.dataset.src;
+  return frame;
+}
+
+// Executa `cb` quando o módulo estiver de pé; se já estiver, executa agora.
+// Existe porque com carga sob demanda o iframe pode estar nascendo no exato
+// momento em que alguém quer mandar uma mensagem para ele.
+function aoCarregar(tab, cb) {
+  const frame = document.getElementById('iframe-' + tab);
+  if (!frame) return;
+  if (modulosProntos.has(tab)) { cb(); return; }
+  frame.addEventListener('load', cb, { once: true });
+}
+
 function switchTab(tab) {
   const session = getSession();
   if (!session || !canAccess(session.role, tab, session.username)) return;
+
+  // Depois do canAccess(), nunca antes: é essa ordem que garante que ninguém
+  // baixa um módulo que não tem direito de abrir.
+  carregarModulo(tab);
 
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
@@ -936,9 +966,9 @@ function applyTheme(t) {
 
 function toggleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); }
 
-// Os iframes carregam antes do login, então os módulos que dependem do usuário
-// (Ponto, Fluxo) precisam receber a sessão via postMessage assim que o usuário
-// entra / abre a aba / o iframe recarrega.
+// O módulo só existe depois que a aba é aberta, então tema e sessão não podem
+// ser entregues no login: o `load` do iframe é o primeiro instante em que
+// existe `contentWindow` para receber postMessage.
 function postSessionTo(id) {
   const s = getSession();
   try { document.getElementById(id)?.contentWindow?.postMessage({ type: 'session', value: s }, '*'); } catch (e) {}
@@ -946,13 +976,24 @@ function postSessionTo(id) {
 // mantido por compatibilidade com chamadas antigas
 function postSessionToPonto() { postSessionTo('iframe-ponto'); }
 
-document.getElementById('iframe-comercial').addEventListener('load', () => applyTheme(currentTheme));
-document.getElementById('iframe-financeiro').addEventListener('load', () => applyTheme(currentTheme));
-document.getElementById('iframe-suporte').addEventListener('load', () => applyTheme(currentTheme));
-document.getElementById('iframe-logs').addEventListener('load', () => applyTheme(currentTheme));
-document.getElementById('iframe-ponto').addEventListener('load', () => { applyTheme(currentTheme); postSessionTo('iframe-ponto'); });
-document.getElementById('iframe-fluxo').addEventListener('load',  () => { applyTheme(currentTheme); postSessionTo('iframe-fluxo'); });
-document.getElementById('iframe-fv02').addEventListener('load',   () => { applyTheme(currentTheme); postSessionTo('iframe-fv02'); });
+// Um registro só para os oito módulos. `cac` estava fora desta lista e nunca
+// recebia o tema ao carregar — passava despercebido porque ele subia junto com
+// o portal, já com o tema aplicado. Carregado sob demanda, ele abriria no tema
+// errado: bug que não é novo, só deixou de estar escondido.
+[['comercial', false], ['financeiro', false], ['suporte', false], ['logs', false],
+ ['cac', false], ['ponto', true], ['fluxo', true], ['fv02', true]
+].forEach(([tab, precisaSessao]) => {
+  const frame = document.getElementById('iframe-' + tab);
+  if (!frame) return;
+  frame.addEventListener('load', () => {
+    // Iframe sem src dispara um `load` do about:blank inicial. Marcar esse
+    // como "pronto" faria aoCarregar() liberar mensagem para uma página vazia.
+    if (!frame.src) return;
+    modulosProntos.add(tab);
+    applyTheme(currentTheme);
+    if (precisaSessao) postSessionTo('iframe-' + tab);
+  });
+});
 
 // ── SUGGESTIONS ───────────────────────────────────────────────────────────
 const SUG_KEY = 'ibnet_sugestoes';
@@ -1399,10 +1440,15 @@ function doSearch(q) {
 function openSearchResult(id) {
   closeSearch();
   switchTab('suporte');
-  setTimeout(() => {
+  // Era um setTimeout(400) fixo, e funcionava só porque o Suporte já estava
+  // carregado desde antes do login. Agora ele pode estar começando agora, e
+  // 400ms não são garantia nenhuma — esperar o `load` é o que garante que
+  // existe alguém do outro lado para receber a mensagem. (Quem espera o *dado*
+  // chegar é o próprio Suporte, que é quem sabe quando ele chegou.)
+  aoCarregar('suporte', () => {
     document.getElementById('iframe-suporte')?.contentWindow
       ?.postMessage({ type: 'openActivity', id }, '*');
-  }, 400);
+  });
 }
 
 function openOpsResult(id) {
