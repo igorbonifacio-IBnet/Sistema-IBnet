@@ -119,6 +119,16 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .muted{color:var(--muted)}
 .bar-track{height:6px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:5px}
 .bar-fill{height:100%;border-radius:99px}
+
+/* Barra e número na MESMA linha. Estavam em linhas separadas — o número
+   alinhado à direita e a barra começando na esquerda — e nada dizia que um
+   era a leitura do outro. Lado a lado, a barra vira a régua do número.
+   `min-width:2px` no preenchimento: 0,4% dá menos de um pixel e some, e
+   barra ausente lê como "sem dado" em vez de "quase nada". */
+.fatia{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.fatia .bar-track{flex:1;min-width:46px;margin-top:0}
+.fatia .bar-fill{min-width:2px}
+.fatia-num{flex:none;width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
 @media(max-width:640px){
   main{padding:14px}
   .mb-row{grid-template-columns:1fr}
@@ -877,6 +887,26 @@ function htmlDFC(){
    existe para o fluxo de caixa. Previsto × realizado é a coluna Previsto,
    que é outra entrega. Aqui o conserto é dizer o que o número é, incluindo
    o denominador, que é o que tira a ambiguidade de vez. */
+/* Maior primeiro — nos dois sinais. A ordem era `a[1]-b[1]` crescente, que em
+   despesa (tudo negativo) põe a maior no topo, mas em RECEITA inverte: a
+   mensalidade, que é a maior linha do negócio, caía por último. Lista de
+   dinheiro se lê de cima para baixo e o topo é onde mora a decisão.
+
+   Por que não simplesmente `Math.abs()` descendente: já está registrado neste
+   arquivo (ver filtrarRecs) que ordenar por módulo encosta receita e despesa
+   de tamanho parecido como se fossem a mesma coisa — foi o erro de R$ 101 mil.
+   Aqui o sinal continua sendo a chave primária: os blocos não se misturam, e o
+   bloco que manda no subgrupo vem primeiro. Subgrupo com sinal misto é o caso
+   raro (estorno dentro de uma conta de custo), e é justamente ele que o
+   `Math.abs()` puro estragaria em silêncio. */
+function ordenarContas(cs){
+  const sinalSub = cs.reduce((a,[,v]) => a + v, 0) >= 0 ? 1 : -1;
+  return cs.slice().sort((a,b) => {
+    const sa = a[1] >= 0 ? 1 : -1, sb = b[1] >= 0 ? 1 : -1;
+    if (sa !== sb) return sa === sinalSub ? -1 : 1;
+    return Math.abs(b[1]) - Math.abs(a[1]);
+  });
+}
 function detalhePorGrupo(rows, base){
   let out = '';
   const den = Math.abs(+base || 0);
@@ -892,16 +922,18 @@ function detalhePorGrupo(rows, base){
     out += `<div class="section-title">${def.nome}</div>
     <div class="card"><div class="tbl-wrap"><table>
       <thead><tr><th>Conta</th><th class="num">Valor</th>
-        <th class="num" style="width:150px"
+        <th class="num" style="width:190px"
             title="Fatia desta conta nas saídas operacionais do período. Não é quanto já foi pago.">
           Fatia das saídas</th></tr></thead>
       <tbody>${linhas.map(([sub,cs]) => `
         <tr class="grp-row"><td colspan="3">${esc(sub)}</td></tr>
-        ${cs.sort((a,b)=>a[1]-b[1]).map(([c,v]) => {
+        ${ordenarContas(cs).map(([c,v]) => {
           const pct = base ? Math.min(100, Math.abs(100*v/base)) : 0;
           return `<tr><td>${esc(c)}</td><td class="num ${v>=0?'pos':'neg'}">${fmt(v)}</td>
-            <td class="num" style="color:var(--muted)">${v<0&&base?pct.toFixed(1)+'%':'—'}
-            ${v<0&&base?`<div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${def.cor}"></div></div>`:''}</td></tr>`;
+            <td>${v<0&&base ? `<div class="fatia">
+              <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${def.cor}"></div></div>
+              <span class="fatia-num">${pct.toFixed(1)}%</span></div>`
+              : `<div class="fatia"><span class="fatia-num">—</span></div>`}</td></tr>`;
         }).join('')}`).join('')}
         <tr class="tot-row"><td><b>Total ${esc(def.nome)}</b></td>
           <td class="num ${totG>=0?'pos':'neg'}"><b>${fmt(totG)}</b></td><td></td></tr>
