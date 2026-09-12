@@ -69,7 +69,17 @@ body.light tbody tr:hover td{background:rgba(0,0,0,.02)}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .grp-row td{background:rgba(255,255,255,.04);font-weight:600}
 body.light .grp-row td{background:rgba(0,0,0,.03)}
-.tot-row td{border-top:2px solid var(--border);font-weight:600}
+.tot-row td{border-top:2px solid var(--border);font-weight:600;background:var(--card)}
+.tot-row:hover td{background:var(--card)}
+
+/* Lista longa: cabeçalho e total ficam presos, o miolo rola entre os dois.
+   `position:sticky` só funciona dentro de um contêiner que ROLA — e
+   `.tbl-wrap` não rola no eixo Y (tem altura livre), então sticky ali nunca
+   dispara. Por isso a lista de lançamentos usa `.tbl-scroll`, que tem teto de
+   altura: é o teto que cria a rolagem que faz o sticky existir. */
+.tbl-scroll{overflow:auto;max-height:calc(100vh - 250px)}
+.tbl-scroll thead th{position:sticky;top:0;z-index:3;box-shadow:0 1px 0 var(--border)}
+.tbl-scroll .tot-row td{position:sticky;bottom:0;z-index:2;box-shadow:0 -1px 0 var(--border)}
 
 .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
 .p-oper{background:rgba(107,191,138,.15);color:var(--green)}
@@ -93,8 +103,13 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);opacity:1}
 .btn-sm{padding:4px 10px;font-size:12px;border-radius:7px}
 .icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;
-  padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit}
+  padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s,opacity .12s}
 .icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* Ação destrutiva não compete com a comum: sem moldura e mais apagada em
+   repouso, vermelha só quando o cursor já está em cima. Peso visual igual
+   entre "editar" e "excluir" é convite a errar o alvo numa lista de 400. */
+.icon-btn.quiet{border-color:transparent;opacity:.55}
+.icon-btn.quiet:hover{border-color:var(--red);color:var(--red);opacity:1}
 
 /* ── modal ───────────────────────────────────────────────────────── */
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;
@@ -593,6 +608,23 @@ let confRec = null;                       // {id, mes} da recorrente sendo confi
 let confDup = null;                       // lançamento do extrato que é o mesmo dinheiro
 let impRows = [], impMarcas = [];         // linhas coladas e o que cada uma repete
 let filtroMes = 'todos', filtroCat = 'todas';
+
+/* Busca livre da lista de lançamentos. Mesma regra dos filtros das recorrentes:
+   recorta a LISTA, e o total que aparece embaixo é o total do que está na tela
+   — nunca o do mês inteiro. Total que ignora o recorte faz o operador achar que
+   sobrou dinheiro que ele só escondeu num filtro.
+   O `render()` redesenha a aba inteira e o input morre junto, então a posição
+   do cursor é devolvida à mão: sem isso o cursor pula para o fim a cada tecla
+   e corrigir o meio de uma palavra fica impossível. */
+let buscaLanc = '';
+function buscarLanc(v, pos){
+  buscaLanc = v;
+  render();
+  const i = document.getElementById('busca-lanc');
+  if (!i) return;
+  i.focus();
+  try { i.setSelectionRange(pos, pos); } catch (e) {}
+}
 
 /* Filtros da LISTA de regras recorrentes.
    Recortam só a lista. Não tocam nos totais do mês nem na projeção de 12 meses:
@@ -1096,6 +1128,9 @@ function htmlLanc(){
   let rows = lancamentos;
   if (filtroMes!=='todos') rows = rows.filter(l => mesDe(l.data)===filtroMes);
   if (filtroCat!=='todas') rows = rows.filter(l => (l.categoria||'')===filtroCat);
+  const q = normalizar(buscaLanc);
+  if (q) rows = rows.filter(l =>
+    normalizar([l.descricao, l.obs, l.categoria].join(' ')).includes(q));
   const cats = [...new Set(lancamentos.map(l=>l.categoria).filter(Boolean))].sort();
   const tot = rows.reduce((a,l)=>a+ +l.valor,0);
   return `
@@ -1108,9 +1143,15 @@ function htmlLanc(){
       <option value="todas">Todas</option>
       ${cats.map(c=>`<option value="${esc(c)}" ${c===filtroCat?'selected':''}>${esc(c)}</option>`).join('')}
     </select></label>
+    <label style="flex:1;min-width:190px;max-width:320px">Buscar
+      <input id="busca-lanc" type="search" value="${esc(buscaLanc)}"
+             placeholder="descrição, observação ou conta"
+             oninput="buscarLanc(this.value, this.selectionStart)"></label>
     <button class="btn btn-ghost" onclick="exportarCSV()">Exportar CSV</button>
   </div>
-  <div class="card"><div class="tbl-wrap"><table>
+  ${q && !rows.length ? `<div class="alert">Nenhum lançamento com
+     <b>${esc(buscaLanc)}</b> no recorte atual.</div>` : ''}
+  <div class="card"><div class="tbl-wrap tbl-scroll"><table>
     <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Grupo</th>
       <th class="num">Valor</th>${isAdmin?'<th></th>':''}</tr></thead>
     <tbody>
@@ -1124,7 +1165,7 @@ function htmlLanc(){
         <td class="num ${+l.valor>=0?'pos':'neg'}">${fmt(+l.valor)}</td>
         ${isAdmin?`<td style="white-space:nowrap">
           <button class="icon-btn" onclick="editarLanc('${l.id}')">editar</button>
-          <button class="icon-btn" onclick="excluirLanc('${l.id}')">excluir</button></td>`:''}
+          <button class="icon-btn quiet" onclick="excluirLanc('${l.id}')">excluir</button></td>`:''}
       </tr>`;}).join('')}
       <tr class="tot-row"><td colspan="4"><b>Total (${rows.length} lançamentos)</b></td>
         <td class="num ${tot>=0?'pos':'neg'}"><b>${fmt(tot)}</b></td>${isAdmin?'<td></td>':''}</tr>
