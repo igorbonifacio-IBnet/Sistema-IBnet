@@ -757,9 +757,12 @@ const ROLE_LABELS = {
   admin: 'Administrador', financeiro: 'Financeiro', comercial: 'Comercial', suporte: 'Suporte', funcionario: 'Funcionário'
 };
 
+// Uma entrada para CADA aba da barra. Faltar aqui não é detalhe cosmético: o
+// switchTab() lê `meta.title` e estoura TypeError, abortando o resto da função.
 const TAB_META = {
   home:       { title: 'Início — Resumo do Dia',    badge: 'HOME' },
   comercial:  { title: 'Dashboard Comercial',       badge: 'COMERCIAL' },
+  fv02:       { title: 'Financeiro IBnet',          badge: 'FINANCEIRO' },
   fluxo:      { title: 'Fluxo de Caixa',            badge: 'FLUXO' },
   suporte:    { title: 'Painel de Suporte',         badge: 'SUPORTE' },
   cac:        { title: 'Operações',                 badge: 'OPS' },
@@ -901,6 +904,15 @@ function aoCarregar(tab, cb) {
   frame.addEventListener('load', cb, { once: true });
 }
 
+// Último recurso quando a aba não está no TAB_META: aproveita o rótulo que já
+// existe na barra lateral, que é justamente onde o nome da aba é escrito.
+function metaDeEmergencia(tab) {
+  console.warn('[portal] TAB_META sem entrada para "' + tab + '" — caindo no rótulo da barra lateral');
+  const btn = document.querySelector(`.sb-item[data-tab="${tab}"]`);
+  const rotulo = btn ? btn.textContent.replace('🔒', '').trim() : tab;
+  return { title: rotulo, badge: tab.toUpperCase() };
+}
+
 function switchTab(tab) {
   const session = getSession();
   if (!session || !canAccess(session.role, tab, session.username)) return;
@@ -915,7 +927,13 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
   document.querySelector(`.sb-item[data-tab="${tab}"]`).classList.add('active');
 
-  const meta = TAB_META[tab];
+  // Rede de proteção para o caso de alguém acrescentar aba e esquecer o
+  // TAB_META. Sem ela, a entrada que falta derruba a navegação inteira: o
+  // `fv02` ficou assim de 6dfa968 até aqui — o painel trocava e o módulo
+  // carregava (a exceção vem depois disso), então o topbar só mostrava o
+  // título da aba anterior e nada era registrado no Log. Degradar com aviso
+  // é melhor que abortar em silêncio no meio da função.
+  const meta = TAB_META[tab] || metaDeEmergencia(tab);
   document.getElementById('topbar-title').textContent = meta.title;
   document.getElementById('topbar-badge').textContent = meta.badge;
   if (currentTab && currentTab !== tab) logAction('Portal', 'Navegação', `Acessou aba: ${meta.title}`);
