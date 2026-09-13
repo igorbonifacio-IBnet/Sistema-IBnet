@@ -30,7 +30,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   box-shadow:0 24px 64px rgba(0,0,0,0.28)
 }
 .login-logo{display:flex;align-items:center;justify-content:center;margin-bottom:4px}
-.login-logo img{width:180px;height:auto}
+.login-logo img{width:200px;height:auto;display:block}
 .login-logo-text h2{font-size:16px;font-weight:600}
 .login-logo-text p{font-size:12px;color:var(--muted)}
 .login-box h3{font-size:17px;font-weight:600}
@@ -104,7 +104,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
   padding:16px 18px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;
 }
-.sb-brand img{width:130px;height:auto}
+.sb-brand img{width:150px;height:auto;display:block}
+
+/* A logo é JPEG-sem-alfa recortado: `logo-dark.png` vem sobre preto,
+   `logo-light.png` sobre branco. O blend faz esse fundo sumir na cor de quem
+   está atrás, em vez de desenhar um retângulo. É isso que também apaga os
+   vazados do símbolo (as listras da esfera e o contorno do "b"), que no
+   arquivo são fundo, não tinta. NÃO pôr `isolation:isolate` nos contêineres:
+   eles são transparentes, e isolar faria o blend acontecer contra o nada —
+   o fundo voltaria a aparecer. */
+.sb-brand img,.login-logo img{mix-blend-mode:lighten}
+body.light .sb-brand img,body.light .login-logo img{mix-blend-mode:darken}
 .sb-brand-text{line-height:1.3}
 .sb-brand-text strong{font-size:13px;font-weight:600;display:block}
 .sb-brand-text span{font-size:10px;color:var(--muted)}
@@ -444,7 +454,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
-      <img src="logo.jpeg" alt="IBnet Telecom"/>
+      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema"/>
     </div>
     <h3>Bem-vindo</h3>
     <div class="lf">
@@ -529,7 +539,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <!-- Sidebar -->
   <aside id="sidebar">
     <div class="sb-brand">
-      <img src="logo.jpeg" alt="IBnet Telecom"/>
+      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema"/>
     </div>
 
     <button class="sb-item" data-tab="home" id="sb-home" style="margin:8px 8px 4px;border:1px solid rgba(217,84,46,.25);background:rgba(217,84,46,.06)">
@@ -956,6 +966,10 @@ function applyTheme(t) {
   document.body.classList.toggle('light', t === 'light');
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
+  // O arquivo da logo segue o nome do tema (`logo-dark` / `logo-light`) de
+  // propósito: não existe tabela de-para para dessincronizar. Os dois arquivos
+  // trazem o MESMO recorte, então trocar de tema não desloca a logo.
+  document.querySelectorAll('.logo-tema').forEach(img => { img.src = `logo-${t}.png`; });
   localStorage.setItem('ibnet_theme', t);
   ['iframe-comercial','iframe-fv02','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
