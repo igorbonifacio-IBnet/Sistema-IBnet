@@ -1371,7 +1371,9 @@ function htmlPlano(){
 function vazio(){
   return `<div class="card"><div class="empty">
     <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Base zerada — começando do zero</div>
-    Esta é a base nova. O histórico até ago/2026 ficou congelado em <b>Fluxo de Caixa_V01</b>.<br/>
+    Esta é a base nova. O histórico até ago/2026 continua guardado na base antiga
+    (<code>financeiro/lancamentos</code>), que já não tem tela — a aba
+    <b>Fluxo de Caixa_V01</b> foi aposentada.<br/>
     Use <b>+ Lançamento</b> para registrar um a um, na ordem que fizer sentido.<br/>
     Cada linha é classificada automaticamente pelas regras de provedor.</div></div>`;
 }

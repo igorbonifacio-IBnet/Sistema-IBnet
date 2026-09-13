@@ -568,12 +568,6 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       <span class="sb-lock" id="fv02-lock">🔒</span>
     </button>
 
-    <button class="sb-item" data-tab="fluxo" id="sb-fluxo">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Fluxo de Caixa_V01
-      <span class="sb-lock" id="fluxo-lock">🔒</span>
-    </button>
-
     <button class="sb-item" data-tab="cac" id="sb-cac">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Operações
@@ -699,10 +693,6 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       <iframe data-src="financeiro-v02/index.html" id="iframe-fv02" title="Financeiro IBnet V02"></iframe>
     </div>
 
-    <div class="tab-panel" id="tab-fluxo">
-      <iframe data-src="fluxo/index.html" id="iframe-fluxo" title="Fluxo de Caixa"></iframe>
-    </div>
-
     <div class="tab-panel" id="tab-suporte">
       <iframe data-src="suporte/index.html" id="iframe-suporte" title="Painel de Suporte"></iframe>
     </div>
@@ -742,7 +732,7 @@ async function hashSenha(senha) {
 }
 
 const ROLE_ACCESS = {
-  admin:       ['home', 'comercial', 'fv02', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'],
+  admin:       ['home', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'],
   // Papel sem nenhum usuário hoje. Existia para dar acesso ao Financeiro_V01,
   // que foi aposentado — sobrou um papel chamado "Financeiro" que não abre nada
   // de financeiro. Para voltar a fazer sentido precisaria de `fv02` aqui E do
@@ -763,7 +753,6 @@ const TAB_META = {
   home:       { title: 'Início — Resumo do Dia',    badge: 'HOME' },
   comercial:  { title: 'Dashboard Comercial',       badge: 'COMERCIAL' },
   fv02:       { title: 'Financeiro IBnet',          badge: 'FINANCEIRO' },
-  fluxo:      { title: 'Fluxo de Caixa',            badge: 'FLUXO' },
   suporte:    { title: 'Painel de Suporte',         badge: 'SUPORTE' },
   cac:        { title: 'Operações',                 badge: 'OPS' },
   logs:       { title: 'Log de Atividades',         badge: 'LOG' },
@@ -799,7 +788,6 @@ function clearSession() { sessionStorage.removeItem('ibnet_session'); }
 // Mesmo que outro usuário venha a ser 'admin' no futuro, só quem estiver
 // listado aqui enxerga a aba.
 const TAB_USERS = {
-  fluxo: ['igor'],
   fv02:  ['igor'],
 };
 
@@ -849,7 +837,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['home', 'comercial', 'fv02', 'fluxo', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
+  ['home', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab, session.username);
@@ -940,7 +928,6 @@ function switchTab(tab) {
   currentTab = tab;
   if (tab === 'home') renderHome();
   if (tab === 'ponto') postSessionTo('iframe-ponto');
-  if (tab === 'fluxo') postSessionTo('iframe-fluxo');
   if (tab === 'fv02')  postSessionTo('iframe-fv02');
 }
 
@@ -970,7 +957,7 @@ function applyTheme(t) {
   const btn = document.getElementById('btn-theme');
   if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-fv02','iframe-fluxo','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
+  ['iframe-comercial','iframe-fv02','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -987,12 +974,12 @@ function postSessionTo(id) {
 // mantido por compatibilidade com chamadas antigas
 function postSessionToPonto() { postSessionTo('iframe-ponto'); }
 
-// Um registro só para os sete módulos. `cac` estava fora desta lista e nunca
+// Um registro só para os seis módulos. `cac` estava fora desta lista e nunca
 // recebia o tema ao carregar — passava despercebido porque ele subia junto com
 // o portal, já com o tema aplicado. Carregado sob demanda, ele abriria no tema
 // errado: bug que não é novo, só deixou de estar escondido.
 [['comercial', false], ['suporte', false], ['logs', false],
- ['cac', false], ['ponto', true], ['fluxo', true], ['fv02', true]
+ ['cac', false], ['ponto', true], ['fv02', true]
 ].forEach(([tab, precisaSessao]) => {
   const frame = document.getElementById('iframe-' + tab);
   if (!frame) return;
