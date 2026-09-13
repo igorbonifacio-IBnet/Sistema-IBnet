@@ -115,6 +115,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
    o fundo voltaria a aparecer. */
 .sb-brand img,.login-logo img{mix-blend-mode:lighten}
 body.light .sb-brand img,body.light .login-logo img{mix-blend-mode:darken}
+
+/* Ícone do sprite. Tamanho em `em` porque cada ícone ocupa o lugar de um emoji,
+   que era texto e acompanhava o `font-size` de quem o continha — manter isso
+   evita decorar um px por lugar. `currentColor` no sprite + `color` herdado
+   aqui é o que faz o ícone trocar de cor junto com o tema sozinho; emoji tem
+   cor própria e ignorava. `vertical-align` alinha o traço com a linha de base
+   do texto ao lado (SVG inline senta na baseline e sobe demais). `flex:none`
+   impede o ícone de encolher quando o rótulo ao lado é longo. */
+.ic{width:1em;height:1em;vertical-align:-.15em;flex:none}
+.ic-lg{width:1.2em;height:1.2em}
 .sb-brand-text{line-height:1.3}
 .sb-brand-text strong{font-size:13px;font-weight:600;display:block}
 .sb-brand-text span{font-size:10px;color:var(--muted)}
@@ -130,7 +140,9 @@ body.light .sb-brand img,body.light .login-logo img{mix-blend-mode:darken}
 .sb-item.active{background:rgba(217,84,46,.15);color:var(--accent);font-weight:600}
 .sb-item svg{flex-shrink:0;opacity:.7}
 .sb-item.active svg{opacity:1}
-.sb-lock{margin-left:auto;font-size:10px;opacity:.5}
+/* 12px, não os 10px do emoji: glifo colorido é legível pequeno, traço de 2px
+   fecha e vira borrão. Ícone de contorno precisa de um pouco mais de caixa. */
+.sb-lock{margin-left:auto;font-size:12px;opacity:.5;display:flex}
 .sb-footer{margin-top:auto;padding:16px;border-top:1px solid var(--border)}
 .sb-user{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .sb-avatar{
@@ -279,7 +291,14 @@ body.light .sug-status-sel{background:#ffffff;border-color:#dfe3ea;color:#2b3444
   display:flex;align-items:center;padding:0 24px;gap:12px
 }
 #topbar h2{font-size:14px;font-weight:600;color:var(--text)}
-#topbar span{font-size:12px;color:var(--muted)}
+/* ERA `#topbar span`, e isso era um bug de cor. Seletor com id pesa (1,0,1) e
+   ganhava de QUALQUER regra de classe abaixo dele — e os painéis de busca e de
+   notificação moram dentro do topbar. Resultado: o badge HOME saía cinza em
+   vez de laranja, o contador de não lidas cinza em vez de branco no vermelho,
+   e as tags Vencida/Vence hoje/Em breve cinza em vez de vermelho/amarelo/azul.
+   Só o fundo tingido escapava, o que fazia parecer escolha de design.
+   O alvo sempre foi um span só — nomear ele. */
+#topbar-user{font-size:12px;color:var(--muted)}
 .topbar-badge{
   padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
   background:rgba(217,84,46,.15);color:var(--accent)
@@ -450,6 +469,39 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 </head>
 <body>
 
+<!-- ── SPRITE DE ÍCONES ──────────────────────────────────────────────────────
+     Cada ícone é definido UMA vez aqui e usado com <svg class="ic"><use .../></svg>.
+     Por que sprite e não SVG solto em cada lugar: o mesmo ícone aparece em até
+     quatro pontos (o fone está no card, no KPI, na busca e na barra lateral) —
+     com SVG solto, corrigir um desenho vira caça ao rato.
+
+     `stroke="currentColor"` é o motivo de tudo isso existir: emoji tem cor
+     própria e ignora o tema, o ícone herda a cor de quem o contém. É o que
+     faz o ícone ficar laranja na aba ativa e cinza na inativa sozinho.
+
+     Traço 2 em grade de 24 para casar com os ícones que já estavam na barra
+     lateral — a régua tinha de ser a que já existia, não uma nova. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <symbol id="ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
+  <symbol id="ic-busca" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="ic-sino" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+  <symbol id="ic-sol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></symbol>
+  <symbol id="ic-lua" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+  <symbol id="ic-lampada" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></symbol>
+  <symbol id="ic-cadeado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="ic-sair" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+  <symbol id="ic-raio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="ic-fone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></symbol>
+  <symbol id="ic-caixa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></symbol>
+  <symbol id="ic-grafico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="ic-antena" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
+  <symbol id="ic-elo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="ic-chave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+  <symbol id="ic-alerta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="ic-relogio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+</defs></svg>
+
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
@@ -493,7 +545,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <div class="sug-box">
     <div class="sug-head">
       <div class="sug-head-row">
-        <h3>💡 Sugestões &amp; Bugs</h3>
+        <h3><svg class="ic"><use href="#ic-lampada"/></svg> Sugestões &amp; Bugs</h3>
         <button class="sug-close" onclick="closeSugestoes()">×</button>
       </div>
       <div class="sug-tabs">
@@ -506,6 +558,9 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
         <div class="sug-msg" id="sug-msg"></div>
         <div class="sug-field">
           <label>Tipo</label>
+          <!-- Emoji aqui de propósito: <option> é desenhado pelo sistema
+               operacional e mostra SÓ texto — um <svg> dentro some sem erro.
+               É o único lugar do portal onde o emoji não tinha substituto. -->
           <select id="sug-tipo">
             <option value="sugestao">💡 Sugestão de Melhoria</option>
             <option value="bug">🐛 Reportar Erro</option>
@@ -545,7 +600,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <button class="sb-item" data-tab="home" id="sb-home" style="margin:8px 8px 4px;border:1px solid rgba(217,84,46,.25);background:rgba(217,84,46,.06)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Início
-      <span class="sb-lock" id="home-lock" style="display:none">🔒</span>
+      <span class="sb-lock" id="home-lock" style="display:none"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Dashboards</div>
@@ -553,7 +608,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <button class="sb-item" data-tab="comercial">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
       Comercial
-      <span class="sb-lock" style="display:none">🔒</span>
+      <span class="sb-lock" style="display:none"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Operacional</div>
@@ -561,13 +616,13 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <button class="sb-item" data-tab="suporte" id="sb-suporte">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
       Suporte
-      <span class="sb-lock" id="sup-lock">🔒</span>
+      <span class="sb-lock" id="sup-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <button class="sb-item" data-tab="ponto" id="sb-ponto">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
       Ponto Eletrônico
-      <span class="sb-lock" id="ponto-lock">🔒</span>
+      <span class="sb-lock" id="ponto-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Financeiro</div>
@@ -575,13 +630,13 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <button class="sb-item" data-tab="fv02" id="sb-fv02">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><polyline points="7 14 11 10 15 13 21 6"/></svg>
       Financeiro IBnet_V02
-      <span class="sb-lock" id="fv02-lock">🔒</span>
+      <span class="sb-lock" id="fv02-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <button class="sb-item" data-tab="cac" id="sb-cac">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Operações
-      <span class="sb-lock" id="cac-lock">🔒</span>
+      <span class="sb-lock" id="cac-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Sistema</div>
@@ -589,7 +644,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
     <button class="sb-item" data-tab="logs" id="sb-logs">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       Log de Atividades
-      <span class="sb-lock" id="log-lock">🔒</span>
+      <span class="sb-lock" id="log-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-footer">
@@ -607,7 +662,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <!-- Content -->
   <div id="content-area">
     <div id="topbar">
-      <button class="hamburger-btn" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+      <button class="hamburger-btn" id="btn-hamburger" onclick="toggleSidebar()"><svg class="ic"><use href="#ic-menu"/></svg></button>
       <h2 id="topbar-title">Dashboard Comercial</h2>
       <span class="topbar-badge" id="topbar-badge">COMERCIAL</span>
       <div id="topbar-right">
@@ -615,10 +670,10 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 
         <!-- BUSCA GLOBAL -->
         <div class="search-wrap">
-          <button class="tb-btn" id="btn-search" onclick="toggleSearch()" title="Buscar">🔍</button>
+          <button class="tb-btn" id="btn-search" onclick="toggleSearch()" title="Buscar"><svg class="ic"><use href="#ic-busca"/></svg></button>
           <div class="search-panel" id="search-panel">
             <div class="search-input-wrap">
-              <span>🔍</span>
+              <span><svg class="ic"><use href="#ic-busca"/></svg></span>
               <input type="text" id="search-input" placeholder="Buscar atividades, parceiros…" oninput="doSearch(this.value)" autocomplete="off"/>
               <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px" onclick="closeSearch()">×</button>
             </div>
@@ -632,11 +687,11 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
         <!-- NOTIFICAÇÕES -->
         <div class="notif-wrap">
           <button class="tb-btn notif-btn" id="btn-notif" onclick="toggleNotifications()" title="Notificações">
-            🔔 <span class="notif-badge" id="notif-badge"></span>
+            <svg class="ic"><use href="#ic-sino"/></svg> <span class="notif-badge" id="notif-badge"></span>
           </button>
           <div class="notif-panel" id="notif-panel">
             <div class="notif-head">
-              <h4>🔔 Notificações</h4>
+              <h4><svg class="ic"><use href="#ic-sino"/></svg> Notificações</h4>
               <button class="notif-mark-read" onclick="clearNotifications()">Limpar tudo</button>
             </div>
             <div class="notif-list" id="notif-list">
@@ -645,9 +700,9 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
           </div>
         </div>
 
-        <button class="tb-btn" id="btn-theme" onclick="toggleTheme()">☀️ Claro</button>
-        <button class="tb-btn" id="btn-sugestoes" onclick="openSugestoes()">💡 Sugestões</button>
-        <button class="tb-btn tb-btn-danger" onclick="doLogout()">⏏ Sair</button>
+        <button class="tb-btn" id="btn-theme" onclick="toggleTheme()"><svg class="ic"><use href="#ic-sol"/></svg> Claro</button>
+        <button class="tb-btn" id="btn-sugestoes" onclick="openSugestoes()"><svg class="ic"><use href="#ic-lampada"/></svg> Sugestões</button>
+        <button class="tb-btn tb-btn-danger" onclick="doLogout()"><svg class="ic"><use href="#ic-sair"/></svg> Sair</button>
       </div>
     </div>
 
@@ -664,14 +719,14 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
         <div class="home-grid">
           <div class="home-card">
             <div class="home-card-head">
-              <div class="home-card-title">🔌 Ativações Recentes</div>
+              <div class="home-card-title"><svg class="ic"><use href="#ic-raio"/></svg> Ativações Recentes</div>
               <button class="home-card-link" onclick="switchTab('cac')">Ver tudo →</button>
             </div>
             <div id="home-ativacoes-list"><div class="home-empty">Carregando…</div></div>
           </div>
           <div class="home-card">
             <div class="home-card-head">
-              <div class="home-card-title">🎧 Tickets em Aberto</div>
+              <div class="home-card-title"><svg class="ic"><use href="#ic-fone"/></svg> Tickets em Aberto</div>
               <button class="home-card-link" onclick="switchTab('suporte')">Ver tudo →</button>
             </div>
             <div id="home-tickets-list"><div class="home-empty">Carregando…</div></div>
@@ -679,7 +734,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
         </div>
         <div class="home-card">
           <div class="home-card-head">
-            <div class="home-card-title">📦 Estoque de Insumos</div>
+            <div class="home-card-title"><svg class="ic"><use href="#ic-caixa"/></svg> Estoque de Insumos</div>
             <button class="home-card-link" onclick="switchTab('cac')">Gerenciar →</button>
           </div>
           <div id="home-stock-list"><div class="home-empty">Carregando…</div></div>
@@ -907,7 +962,12 @@ function aoCarregar(tab, cb) {
 function metaDeEmergencia(tab) {
   console.warn('[portal] TAB_META sem entrada para "' + tab + '" — caindo no rótulo da barra lateral');
   const btn = document.querySelector(`.sb-item[data-tab="${tab}"]`);
-  const rotulo = btn ? btn.textContent.replace('🔒', '').trim() : tab;
+  // O `.replace('🔒','')` daqui existia porque o cadeado era TEXTO e entrava no
+  // textContent junto com o nome da aba. Virou `<svg>`, que não contribui com
+  // texto nenhum — some sozinho da leitura. Trocar por uma limpeza genérica
+  // (tirar tudo que não é letra/dígito das pontas) para o rótulo não depender
+  // de qual enfeite mora dentro do botão.
+  const rotulo = btn ? btn.textContent.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') : tab;
   return { title: rotulo, badge: tab.toUpperCase() };
 }
 
@@ -965,7 +1025,9 @@ function applyTheme(t) {
   currentTheme = t;
   document.body.classList.toggle('light', t === 'light');
   const btn = document.getElementById('btn-theme');
-  if (btn) btn.innerHTML = t === 'light' ? '🌙 Escuro' : '☀️ Claro';
+  if (btn) btn.innerHTML = t === 'light'
+    ? `<svg class="ic"><use href="#ic-lua"/></svg> Escuro`
+    : `<svg class="ic"><use href="#ic-sol"/></svg> Claro`;
   // O arquivo da logo segue o nome do tema (`logo-dark` / `logo-light`) de
   // propósito: não existe tabela de-para para dessincronizar. Os dois arquivos
   // trazem o MESMO recorte, então trocar de tema não desloca a logo.
@@ -1018,8 +1080,8 @@ function updateSugCount() {
   const btn = document.getElementById('btn-sugestoes');
   if (!btn) return;
   btn.innerHTML = pending > 0 && session?.role === 'admin'
-    ? `💡 Sugestões <span class="sug-count">${pending}</span>`
-    : '💡 Sugestões';
+    ? `<svg class="ic"><use href="#ic-lampada"/></svg> Sugestões <span class="sug-count">${pending}</span>`
+    : `<svg class="ic"><use href="#ic-lampada"/></svg> Sugestões`;
 }
 
 function openSugestoes() {
@@ -1294,14 +1356,14 @@ function refreshNotifications() {
   if (!list) return;
 
   if (!notifs.length) {
-    list.innerHTML = '<div class="notif-empty">✅ Tudo em dia! Sem alertas.</div>';
+    list.innerHTML = '<div class="notif-empty"><svg class="ic"><use href="#ic-check"/></svg> Tudo em dia! Sem alertas.</div>';
     return;
   }
 
   const tagMap = {
-    vencida: ['ntag-red',    '⚠️ Vencida'],
-    hoje:    ['ntag-yellow', '⚡ Vence hoje'],
-    proxima: ['ntag-blue',   '🕐 Em breve'],
+    vencida: ['ntag-red',    `<svg class="ic"><use href="#ic-alerta"/></svg> Vencida`],
+    hoje:    ['ntag-yellow', `<svg class="ic"><use href="#ic-raio"/></svg> Vence hoje`],
+    proxima: ['ntag-blue',   `<svg class="ic"><use href="#ic-relogio"/></svg> Em breve`],
   };
 
   list.innerHTML = notifs.map(n => {
@@ -1310,7 +1372,7 @@ function refreshNotifications() {
       ? `${Math.abs(n.diff)} dia${Math.abs(n.diff)>1?'s':''} de atraso`
       : n.diff === 0 ? 'Hoje' : `${n.diff} dia${n.diff>1?'s':''} restante${n.diff>1?'s':''}`;
     return `<div class="notif-item" onclick="handleNotifClick('${n.id}')">
-      <div class="notif-icon">${n.tipo==='vencida'?'🚨':n.tipo==='hoje'?'⚡':'🔔'}</div>
+      <div class="notif-icon">${n.tipo==='vencida'?`<svg class="ic"><use href="#ic-alerta"/></svg>`:n.tipo==='hoje'?`<svg class="ic"><use href="#ic-raio"/></svg>`:`<svg class="ic"><use href="#ic-sino"/></svg>`}</div>
       <div class="notif-body">
         <span class="notif-tag ${cls}">${label}</span>
         <div class="notif-title">${n.acao}</div>
@@ -1345,7 +1407,7 @@ function clearNotifications() {
   const all = buildNotifications().map(n => n.id);
   markSeen(all);
   document.getElementById('notif-badge').style.display = 'none';
-  document.getElementById('notif-list').innerHTML = '<div class="notif-empty">✅ Tudo em dia! Sem alertas.</div>';
+  document.getElementById('notif-list').innerHTML = '<div class="notif-empty"><svg class="ic"><use href="#ic-check"/></svg> Tudo em dia! Sem alertas.</div>';
 }
 
 function handleNotifClick(id) {
@@ -1412,7 +1474,7 @@ function doSearch(q) {
   let html = '';
 
   if (foundOps.length) {
-    html += `<div class="sr-section-hdr">🏗 Operações</div>`;
+    html += `<div class="sr-section-hdr"><svg class="ic"><use href="#ic-chave"/></svg> Operações</div>`;
     html += foundOps.map(a => {
       const tipo = a.tipo || 'instalacao';
       const cor  = TIPO_COLORS_S[tipo] || '#8b94a7';
@@ -1429,7 +1491,7 @@ function doSearch(q) {
   }
 
   if (foundSup.length) {
-    html += `<div class="sr-section-hdr">🎧 Suporte</div>`;
+    html += `<div class="sr-section-hdr"><svg class="ic"><use href="#ic-fone"/></svg> Suporte</div>`;
     html += foundSup.map(a => {
       const cor   = PRI_COLORS[a.prioridade] || '#8b94a7';
       const stCls = 'sr-st-' + (a.status || 'a_fazer');
@@ -1480,6 +1542,9 @@ function renderHome() {
   const h       = now.getHours();
   const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   const greetEl = document.getElementById('home-greeting-title');
+  // O 👋 continua emoji porque esta linha é `textContent` com `session.nome`
+  // dentro. Trocar por `innerHTML` só para caber um <svg> abriria injeção por
+  // um campo de usuário — enfeite não vale esse preço.
   if (greetEl) greetEl.textContent = `${saudacao}, ${session.nome}! 👋`;
   const dateEl = document.getElementById('home-date-lbl');
   if (dateEl) dateEl.textContent = now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -1504,25 +1569,25 @@ function renderHome() {
   const kpisEl = document.getElementById('home-kpis');
   if (kpisEl) kpisEl.innerHTML = `
     <div class="home-kpi" style="--hkpi-c:#d9542e">
-      <div class="home-kpi-icon">🔌</div>
+      <div class="home-kpi-icon"><svg class="ic"><use href="#ic-raio"/></svg></div>
       <div class="home-kpi-val">${hoje.length}</div>
       <div class="home-kpi-lbl">Ativações Hoje</div>
       <div class="home-kpi-sub">${doMes.length} no mês</div>
     </div>
     <div class="home-kpi" style="--hkpi-c:#6b8cce">
-      <div class="home-kpi-icon">📊</div>
+      <div class="home-kpi-icon"><svg class="ic"><use href="#ic-grafico"/></svg></div>
       <div class="home-kpi-val">${doMes.filter(a=>(a.tipo||'instalacao')==='instalacao').length}</div>
       <div class="home-kpi-lbl">Instalações no Mês</div>
       <div class="home-kpi-sub">${doMes.filter(a=>a.tipo==='manutencao').length} manutenções</div>
     </div>
     <div class="home-kpi" style="--hkpi-c:#c6a667">
-      <div class="home-kpi-icon">🎧</div>
+      <div class="home-kpi-icon"><svg class="ic"><use href="#ic-fone"/></svg></div>
       <div class="home-kpi-val">${tickets.length}</div>
       <div class="home-kpi-lbl">Tickets Abertos</div>
       <div class="home-kpi-sub">${urgentes.length} urgentes</div>
     </div>
     <div class="home-kpi" style="--hkpi-c:${critico > 0 ? '#cf8080' : '#6bbf8a'}">
-      <div class="home-kpi-icon">📦</div>
+      <div class="home-kpi-icon"><svg class="ic"><use href="#ic-caixa"/></svg></div>
       <div class="home-kpi-val">${critico}</div>
       <div class="home-kpi-lbl">Estoque Crítico</div>
       <div class="home-kpi-sub">${critico ? 'Reposição necessária' : 'Tudo em ordem'}</div>
@@ -1559,7 +1624,7 @@ function renderHome() {
     const PRI_ORDER = {alta:0,media:1,baixa:2};
     const sorted = [...tickets].sort((a,b)=>(PRI_ORDER[a.prioridade]||1)-(PRI_ORDER[b.prioridade]||1)).slice(0,7);
     if (!sorted.length) {
-      tickEl.innerHTML = '<div class="home-empty">✅ Nenhum ticket em aberto!</div>';
+      tickEl.innerHTML = '<div class="home-empty"><svg class="ic"><use href="#ic-check"/></svg> Nenhum ticket em aberto!</div>';
     } else {
       const ST2 = {a_fazer:'A Fazer', em_andamento:'Em Andamento', concluido:'Concluído'};
       tickEl.innerHTML = sorted.map(a => {
@@ -1581,9 +1646,9 @@ function renderHome() {
   const stockEl = document.getElementById('home-stock-list');
   if (stockEl) {
     const items = [
-      { icon:'📡', name:'ONT',      qty:ontQtd,  unit:'un', alr:ontAlr  },
-      { icon:'🔌', name:'DROP',     qty:dropQtd, unit:'m',  alr:dropAlr },
-      { icon:'🔗', name:'Conector', qty:conQtd,  unit:'un', alr:conAlr  },
+      { icon:`<svg class="ic"><use href="#ic-antena"/></svg>`, name:'ONT',      qty:ontQtd,  unit:'un', alr:ontAlr  },
+      { icon:`<svg class="ic"><use href="#ic-raio"/></svg>`, name:'DROP',     qty:dropQtd, unit:'m',  alr:dropAlr },
+      { icon:`<svg class="ic"><use href="#ic-elo"/></svg>`, name:'Conector', qty:conQtd,  unit:'un', alr:conAlr  },
     ];
     stockEl.innerHTML = items.map(item => {
       const st  = item.qty <= 0 ? 'crit' : item.qty <= item.alr ? 'crit' : item.qty <= item.alr*2 ? 'low' : 'ok';
