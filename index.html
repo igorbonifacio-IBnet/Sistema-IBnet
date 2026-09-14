@@ -12,7 +12,7 @@
   --accent:#dd5c33;--accent2:#c4491f;
   --green:#6bbf8a;--red:#cf8080;--yellow:#c6a667;
   --text:#dfe3ea;--muted:#8b94a7;
-  --sidebar-w:230px;--font:'Segoe UI',system-ui,sans-serif;
+  --sidebar-w:230px;--sidebar-rail:64px;--font:'Segoe UI',system-ui,sans-serif;
   --brand-gradient:linear-gradient(135deg,#b8431f,#d9542e);
 }
 body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh}
@@ -103,8 +103,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 .sb-brand{
   padding:16px 18px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;
+  /* Altura declarada, e não deduzida do conteúdo: no trilho entra uma imagem
+     menor no lugar do wordmark, e uma caixa que se ajusta sozinha encolheria
+     ~27px — os sete itens abaixo saltariam na vertical no meio de uma animação
+     que é só horizontal. Medido: wordmark de 150px tem 56,7px de altura;
+     56,7 + 32 de padding + 1 de borda = 89,7, arredondado para 90. */
+  height:90px;box-sizing:border-box;
 }
 .sb-brand img{width:150px;height:auto;display:block}
+/* `marca-*.png` é o símbolo recortado do MESMO arquivo do wordmark, medido em
+   pixel (x 12..151, y 7..197) e centrado num quadrado. Existe porque o
+   wordmark é deitado: encolhido para 64px ele vira borrão, e esconder tudo
+   deixava o topo do trilho vazio parecendo defeito. Fora do trilho fica
+   escondido — quem mostra é a regra de `.rail`. */
+.sb-brand .sb-marca{display:none;width:30px}
 
 /* A logo é JPEG-sem-alfa recortado: `logo-dark.png` vem sobre preto,
    `logo-light.png` sobre branco. O blend faz esse fundo sumir na cor de quem
@@ -156,7 +168,8 @@ body.light .sb-brand img,body.light .login-logo img{mix-blend-mode:darken}
 .btn-logout{
   width:100%;background:transparent;border:1px solid var(--border);
   color:var(--muted);padding:8px;border-radius:8px;font-size:12px;
-  cursor:pointer;font-family:var(--font);transition:all .2s
+  cursor:pointer;font-family:var(--font);transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:7px
 }
 .btn-logout:hover{border-color:var(--red);color:var(--red)}
 
@@ -291,14 +304,15 @@ body.light .sug-status-sel{background:#ffffff;border-color:#dfe3ea;color:#2b3444
   display:flex;align-items:center;padding:0 24px;gap:12px
 }
 #topbar h2{font-size:14px;font-weight:600;color:var(--text)}
-/* ERA `#topbar span`, e isso era um bug de cor. Seletor com id pesa (1,0,1) e
-   ganhava de QUALQUER regra de classe abaixo dele — e os painéis de busca e de
-   notificação moram dentro do topbar. Resultado: o badge HOME saía cinza em
-   vez de laranja, o contador de não lidas cinza em vez de branco no vermelho,
-   e as tags Vencida/Vence hoje/Em breve cinza em vez de vermelho/amarelo/azul.
-   Só o fundo tingido escapava, o que fazia parecer escolha de design.
-   O alvo sempre foi um span só — nomear ele. */
-#topbar-user{font-size:12px;color:var(--muted)}
+/* Aqui morava `#topbar span{font-size:12px;color:var(--muted)}`, e era um bug
+   de cor. Seletor com id pesa (1,0,1) e ganhava de QUALQUER regra de classe
+   abaixo dele — e os painéis de busca e de notificação moram dentro do topbar.
+   O badge HOME saía cinza em vez de laranja, o contador de não lidas cinza em
+   vez de branco no vermelho, e as tags Vencida/Vence hoje/Em breve cinza em
+   vez de vermelho/amarelo/azul. Só o fundo tingido escapava, o que fazia
+   parecer escolha de design.
+   Não precisou de regra nova: `#topbar-user` logo abaixo já dizia exatamente
+   isso. A linha era sobra — nascera larga e nunca foi estreitada. */
 .topbar-badge{
   padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
   background:rgba(217,84,46,.15);color:var(--accent)
@@ -307,8 +321,11 @@ body.light .sug-status-sel{background:#ffffff;border-color:#dfe3ea;color:#2b3444
 #topbar-user{font-size:12px;color:var(--muted)}
 
 /* ── HAMBURGER ─────────────────────────────────────────────────────────── */
+/* Passou a aparecer também no desktop: é o controle do trilho. O mesmo botão
+   serve aos dois modos porque, para o Igor, a ação é uma só — "encolhe essa
+   barra". Quem decide o que fazer é o toggleSidebar(), pela largura da tela. */
 .hamburger-btn{
-  display:none;background:transparent;border:1px solid var(--border);
+  display:flex;background:transparent;border:1px solid var(--border);
   color:var(--muted);width:34px;height:34px;border-radius:8px;
   cursor:pointer;font-size:16px;align-items:center;justify-content:center;
   transition:all .15s;flex-shrink:0
@@ -443,6 +460,70 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 /* ── SEARCH SECTION HEADER ─────────────────────────────────────────────── */
 .sr-section-hdr{padding:7px 18px 3px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;background:rgba(255,255,255,.02)}
 
+/* ── BARRA RETRÁTIL (trilho) ───────────────────────────────────────────── */
+/* Só existe no desktop. No celular a barra já é gaveta (`.mob-open`), e as
+   duas coisas na mesma classe brigariam: gaveta some para a esquerda, trilho
+   fica visível e estreito. São modos diferentes, então media queries
+   separadas — `min-width:769px` aqui, `max-width:768px` lá embaixo.
+
+   `--sidebar-w` NÃO é alterado: a regra do celular calcula
+   `left:calc(-1 * var(--sidebar-w))` a partir dela, e mexer na variável moveria
+   a gaveta junto. Largura do trilho é variável própria. */
+@media (min-width:769px){
+  #sidebar{transition:width .22s ease,min-width .22s ease}
+  #sidebar.rail{width:var(--sidebar-rail);min-width:var(--sidebar-rail)}
+
+  /* O rótulo era nó de texto solto dentro do <button> — CSS não esconde nó de
+     texto. Por isso cada um ganhou <span class="sb-label">. */
+  #sidebar.rail .sb-label,
+  #sidebar.rail .sb-lock,
+  #sidebar.rail .sb-user-info,
+  /* `.logo-tema`, e não `img`: dentro de `.sb-brand` moram DOIS <img> agora, e
+     esconder por tipo esconderia o símbolo que a linha de baixo quer mostrar.
+     Nomear o alvo em vez de subir especificidade — mesma lição do `#topbar span`. */
+  #sidebar.rail .sb-brand .logo-tema{display:none}
+
+  #sidebar.rail .sb-item{justify-content:center;padding:10px 0;margin:2px 8px;width:calc(100% - 16px)}
+  #sidebar.rail .sb-item svg{width:18px;height:18px}
+  #sidebar.rail .sb-user{justify-content:center;margin-bottom:8px}
+  #sidebar.rail .sb-footer{padding:12px 8px}
+  #sidebar.rail .btn-logout{padding:8px 0}
+
+  /* Título de grupo vira risco: sem ele os sete ícones viram uma coluna só e
+     o agrupamento (Dashboards / Operacional / Financeiro / Sistema) some. */
+  #sidebar.rail .sb-section{
+    font-size:0;padding:8px 16px 4px;height:1px;overflow:hidden;
+    border-top:1px solid var(--border);margin:6px 12px 2px;box-sizing:content-box
+  }
+  /* O wordmark sai e entra o símbolo quadrado. Só o padding lateral muda: a
+     altura vem da regra base (`height:90px`) e é o que impede os itens de
+     saltarem na vertical enquanto a barra encolhe. */
+  #sidebar.rail .sb-brand{padding:16px 0}
+  #sidebar.rail .sb-brand .sb-marca{display:block}
+}
+
+/* Balão do trilho. `position:fixed` e fora do #sidebar de propósito:
+   `overflow-y:auto` faz o eixo X computar como `auto` também, então um
+   ::after saindo pela direita seria RECORTADO pelo próprio sidebar — mesmo
+   tropeço do `position:sticky`. Fixed ignora overflow de ancestral. */
+#rail-tip{
+  position:fixed;z-index:2000;pointer-events:none;
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:7px;font-size:12px;white-space:nowrap;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+  opacity:0;transition:opacity .12s ease;transform:translateY(-50%)
+}
+#rail-tip.show{opacity:1}
+
+/* Desliga a animação para RESTAURAR estado, não para mudar de estado. Quem
+   deixou a barra recolhida e recarrega a página não pediu para ver a barra
+   larga encolher na cara: aquilo não é feedback, é o sistema se montando em
+   público. Animação só quando o clique foi agora.
+   Fica FORA do @media porque a regra do celular também anima (`left .25s`) e
+   a restauração precisa ser muda nos dois modos. `#sidebar.no-anim` pesa
+   (1,1,0) e ganha das duas sem precisar de `!important`. */
+#sidebar.no-anim{transition:none}
+
 /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
 @media (max-width:768px){
   .hamburger-btn{display:flex}
@@ -500,13 +581,16 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <symbol id="ic-alerta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
   <symbol id="ic-relogio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
   <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <!-- Só aparece via JS (aplicarTrilho troca o href do botão), nunca como
+       <use> escrito no fonte. -->
+  <symbol id="ic-expandir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="13 9 16 12 13 15"/></symbol>
 </defs></svg>
 
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
-      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema"/>
+      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema" data-img-tema="logo"/>
     </div>
     <h3>Bem-vindo</h3>
     <div class="lf">
@@ -594,56 +678,60 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <!-- Sidebar -->
   <aside id="sidebar">
     <div class="sb-brand">
-      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema"/>
+      <img src="logo-dark.png" alt="IBnet Telecom" class="logo-tema" data-img-tema="logo"/>
+      <!-- Só aparece no trilho. `alt=""` porque é a MESMA marca do <img> acima:
+           só um dos dois está visível por vez, e anunciar "IBnet Telecom" duas
+           vezes seria ruído para leitor de tela. -->
+      <img src="marca-dark.png" alt="" class="sb-marca" data-img-tema="marca"/>
     </div>
 
-    <button class="sb-item" data-tab="home" id="sb-home" style="margin:8px 8px 4px;border:1px solid rgba(217,84,46,.25);background:rgba(217,84,46,.06)">
+    <button class="sb-item" data-label="Início" data-tab="home" id="sb-home" style="margin:8px 8px 4px;border:1px solid rgba(217,84,46,.25);background:rgba(217,84,46,.06)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Início
+      <span class="sb-label">Início</span>
       <span class="sb-lock" id="home-lock" style="display:none"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Dashboards</div>
 
-    <button class="sb-item" data-tab="comercial">
+    <button class="sb-item" data-label="Comercial" data-tab="comercial">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
-      Comercial
+      <span class="sb-label">Comercial</span>
       <span class="sb-lock" style="display:none"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Operacional</div>
 
-    <button class="sb-item" data-tab="suporte" id="sb-suporte">
+    <button class="sb-item" data-label="Suporte" data-tab="suporte" id="sb-suporte">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-      Suporte
+      <span class="sb-label">Suporte</span>
       <span class="sb-lock" id="sup-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
-    <button class="sb-item" data-tab="ponto" id="sb-ponto">
+    <button class="sb-item" data-label="Ponto Eletrônico" data-tab="ponto" id="sb-ponto">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
-      Ponto Eletrônico
+      <span class="sb-label">Ponto Eletrônico</span>
       <span class="sb-lock" id="ponto-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Financeiro</div>
 
-    <button class="sb-item" data-tab="fv02" id="sb-fv02">
+    <button class="sb-item" data-label="Financeiro IBnet_V02" data-tab="fv02" id="sb-fv02">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><polyline points="7 14 11 10 15 13 21 6"/></svg>
-      Financeiro IBnet_V02
+      <span class="sb-label">Financeiro IBnet_V02</span>
       <span class="sb-lock" id="fv02-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
-    <button class="sb-item" data-tab="cac" id="sb-cac">
+    <button class="sb-item" data-label="Operações" data-tab="cac" id="sb-cac">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-      Operações
+      <span class="sb-label">Operações</span>
       <span class="sb-lock" id="cac-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
     <div class="sb-section">Sistema</div>
 
-    <button class="sb-item" data-tab="logs" id="sb-logs">
+    <button class="sb-item" data-label="Log de Atividades" data-tab="logs" id="sb-logs">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      Log de Atividades
+      <span class="sb-label">Log de Atividades</span>
       <span class="sb-lock" id="log-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
@@ -655,7 +743,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
           <span id="sb-role-label">—</span>
         </div>
       </div>
-      <button class="btn-logout" id="btn-logout">Sair da plataforma</button>
+      <button class="btn-logout" id="btn-logout" data-label="Sair da plataforma"><svg class="ic"><use href="#ic-sair"/></svg><span class="sb-label">Sair da plataforma</span></button>
     </div>
   </aside>
 
@@ -776,6 +864,13 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 </div>
 
 <script>
+// Declarados aqui em cima, e não junto do resto da barra lateral, porque
+// bootPlatform() os usa e `const` tem zona morta temporal: se a chamada do
+// auto-login subir uma linha que seja acima da declaração, estoura
+// ReferenceError. Depender de posição no arquivo é quebra silenciosa à espera.
+const SIDEBAR_KEY = 'ibnet_sidebar';  // localStorage: 'rail' | 'full'
+const MOBILE_MAX  = 768;              // mesmo limiar do @media da gaveta
+
 // ── USERS & ROLES ─────────────────────────────────────────────────────────
 // As senhas NÃO ficam no código (este arquivo é público). Guardamos apenas o
 // hash SHA-256 com salt. Para gerar o hash de uma senha nova, rode no console
@@ -894,6 +989,11 @@ let currentTab = 'comercial';
 function bootPlatform(session) {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('platform').classList.add('show');
+
+  // Estado da barra antes da plataforma pintar, e SEM animar (2º argumento):
+  // isto é restaurar o que ele deixou, não responder a um clique de agora.
+  // Só vale no desktop — no celular a barra é gaveta e nasce fechada.
+  if (window.innerWidth > MOBILE_MAX) aplicarTrilho(lerPreferenciaTrilho(), false);
 
   // User info in sidebar
   document.getElementById('sb-username').textContent = session.nome;
@@ -1028,10 +1128,15 @@ function applyTheme(t) {
   if (btn) btn.innerHTML = t === 'light'
     ? `<svg class="ic"><use href="#ic-lua"/></svg> Escuro`
     : `<svg class="ic"><use href="#ic-sol"/></svg> Claro`;
-  // O arquivo da logo segue o nome do tema (`logo-dark` / `logo-light`) de
-  // propósito: não existe tabela de-para para dessincronizar. Os dois arquivos
-  // trazem o MESMO recorte, então trocar de tema não desloca a logo.
-  document.querySelectorAll('.logo-tema').forEach(img => { img.src = `logo-${t}.png`; });
+  // O arquivo segue o nome do tema (`-dark` / `-light`) de propósito: não
+  // existe tabela de-para para dessincronizar. Os dois arquivos de cada par
+  // trazem o MESMO recorte, então trocar de tema não desloca a imagem.
+  // O prefixo vem do atributo porque agora são dois pares (`logo` no modo
+  // largo, `marca` no trilho) — parametrizar evita uma segunda linha igual
+  // que alguém esqueceria de atualizar junto.
+  document.querySelectorAll('[data-img-tema]').forEach(img => {
+    img.src = `${img.dataset.imgTema}-${t}.png`;
+  });
   localStorage.setItem('ibnet_theme', t);
   ['iframe-comercial','iframe-fv02','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
@@ -1230,21 +1335,113 @@ document.getElementById('reset-user').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') sendReset();
 });
 
-// ── MOBILE SIDEBAR ────────────────────────────────────────────────────────
-function toggleSidebar() {
-  const sb  = document.getElementById('sidebar');
-  const ov  = document.getElementById('sidebar-overlay');
-  const open = sb.classList.toggle('mob-open');
-  ov.classList.toggle('show', open);
+// ── BARRA LATERAL ────────────────────────────────────────────────────────
+// Dois modos que NÃO se misturam, e o divisor é a mesma largura do @media:
+//   celular (<=768px) → gaveta que entra e sai por cima (`.mob-open`)
+//   desktop  (>768px) → trilho de ícones de 64px (`.rail`)
+// O mesmo botão dispara os dois porque, para quem usa, a ação é uma só.
+
+// `animar:false` quando o estado está sendo RESTAURADO (boot, volta do celular
+// para o desktop) e não escolhido agora. Sem isso, quem deixa a barra recolhida
+// vê 230px→64px correndo a cada carga de página.
+function aplicarTrilho(recolhida, animar = true) {
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  if (!animar) sb.classList.add('no-anim');
+  sb.classList.toggle('rail', recolhida);
+  if (!animar) {
+    // Ler `offsetWidth` obriga o navegador a calcular o layout AGORA, com o
+    // `transition:none` ainda valendo — é o que fixa a largura nova. Sem essa
+    // leitura ele junta add+toggle+remove num quadro só, enxerga largura velha
+    // → nova já com a transição de volta, e anima do mesmo jeito.
+    void sb.offsetWidth;
+    sb.classList.remove('no-anim');
+  }
+  // O ícone do botão diz para onde o clique LEVA, não onde você está: com a
+  // barra recolhida ele mostra a seta de abrir.
+  const uso = document.querySelector('#btn-hamburger use');
+  if (uso) uso.setAttribute('href', recolhida ? '#ic-expandir' : '#ic-menu');
+  const btn = document.getElementById('btn-hamburger');
+  if (btn) btn.title = recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral';
+  esconderBalao();
 }
+
+function toggleSidebar() {
+  if (window.innerWidth <= MOBILE_MAX) {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebar-overlay');
+    const open = sb.classList.toggle('mob-open');
+    ov.classList.toggle('show', open);
+    return;
+  }
+  const recolhida = !document.getElementById('sidebar').classList.contains('rail');
+  aplicarTrilho(recolhida);
+  try { localStorage.setItem(SIDEBAR_KEY, recolhida ? 'rail' : 'full'); } catch (e) {}
+}
+
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('mob-open');
   document.getElementById('sidebar-overlay').classList.remove('show');
 }
+
+// Balão do trilho: um elemento só, reaproveitado, em position:fixed. Não pode
+// morar dentro do #sidebar — lá o `overflow-y:auto` recortaria ele.
+let balao = null;
+function esconderBalao() { if (balao) balao.classList.remove('show'); }
+function mostrarBalao(alvo) {
+  const sb = document.getElementById('sidebar');
+  // Só no trilho e só no desktop: com o rótulo visível o balão seria ruído.
+  if (!sb.classList.contains('rail') || window.innerWidth <= MOBILE_MAX) return;
+  const texto = alvo.dataset.label;
+  if (!texto) return;
+  if (!balao) {
+    balao = document.createElement('div');
+    balao.id = 'rail-tip';
+    document.body.appendChild(balao);
+  }
+  balao.textContent = texto;               // textContent: o rótulo é dado, não HTML
+  const r = alvo.getBoundingClientRect();
+  balao.style.left = (r.right + 10) + 'px';
+  balao.style.top  = (r.top + r.height / 2) + 'px';
+  balao.classList.add('show');
+}
+
+document.querySelectorAll('.sb-item[data-label],.btn-logout[data-label]').forEach(el => {
+  el.addEventListener('mouseenter', () => mostrarBalao(el));
+  el.addEventListener('mouseleave', esconderBalao);
+  el.addEventListener('click', esconderBalao);
+});
+
 // Fecha sidebar ao clicar em item (mobile)
 document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
-  btn.addEventListener('click', () => { if (window.innerWidth <= 768) closeSidebar(); });
+  btn.addEventListener('click', () => { if (window.innerWidth <= MOBILE_MAX) closeSidebar(); });
 });
+
+// Atravessar o limiar do @media deixa estado do outro modo pendurado: gaveta
+// aberta que vira trilho expandido, ou trilho que vira gaveta recolhida sem
+// jeito de abrir. Limpar o modo que não vale mais.
+//
+// O guarda de `modoAtual` não é economia de ciclo: `resize` dispara a cada
+// quadro do arraste, e sem ele a barra seria reescrita dezenas de vezes por
+// segundo a partir do localStorage — leitura síncrona no meio de uma animação
+// de layout. Reagir à TRAVESSIA é também o que a regra diz.
+let modoAtual = window.innerWidth <= MOBILE_MAX ? 'gaveta' : 'trilho';
+window.addEventListener('resize', () => {
+  const modo = window.innerWidth <= MOBILE_MAX ? 'gaveta' : 'trilho';
+  if (modo === modoAtual) return;
+  modoAtual = modo;
+  if (modo === 'gaveta') {
+    document.getElementById('sidebar').classList.remove('rail');
+    esconderBalao();
+  } else {
+    closeSidebar();
+    aplicarTrilho(lerPreferenciaTrilho(), false);
+  }
+});
+
+function lerPreferenciaTrilho() {
+  try { return localStorage.getItem(SIDEBAR_KEY) === 'rail'; } catch (e) { return false; }
+}
 
 // ── FIREBASE (notificações + busca) ──────────────────────────────────────
 const fbCfg = {
