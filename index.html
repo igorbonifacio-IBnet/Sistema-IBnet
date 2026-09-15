@@ -443,7 +443,70 @@ body.light .search-result-item:hover{background:rgba(0,0,0,.03)}
 .home-item-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .home-badge{display:inline-block;padding:1px 8px;border-radius:5px;font-size:10px;font-weight:600;flex-shrink:0}
+/* ── TRÊS ESTADOS QUE NÃO PODEM SE PARECER ─────────────────────────────────
+   Um card de lista fica em um de três estados, e eles não são variações de
+   humor do mesmo estado:
+
+     carregando → transitório, ninguém precisa fazer nada, ainda vai mudar
+     vazio      → terminal e é BOA notícia ("nenhum ticket em aberto")
+     erro       → terminal, é MÁ notícia, e alguém precisa agir
+
+   Os três dividiam `.home-empty` — itálico cinza centralizado — e saíam
+   idênticos na tela. "Erro ao carregar" parecia a mesma coisa que "tudo em
+   ordem", que parecia a mesma coisa que "espera aí".
+   A diferença vai na FORMA, não na palavra: quem bate o olho lê a silhueta
+   antes de ler a frase. Ver [[Forma visual fala mais alto que rotulo]]. */
+
+/* VAZIO: o que `.home-empty` sempre foi — discreto de propósito, porque é o
+   estado que não pede nada de ninguém. */
 .home-empty{text-align:center;color:var(--muted);font-size:12px;padding:24px;font-style:italic}
+
+/* CARREGANDO: esqueleto com a silhueta do conteúdo que vem. Diz "espera" sem
+   escrever a palavra — e não deixa o card pular de altura quando o dado chega.
+   Sem texto nenhum também tira do caminho a tentação de o código voltar a
+   descobrir o estado lendo o rótulo da tela. */
+.cx-load{padding:6px 0}
+.cx-load-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.cx-load-row:last-child{border-bottom:none}
+.cx-load-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cx-load-bar{height:9px;border-radius:4px}
+.cx-load-dot,.cx-load-bar{
+  background:linear-gradient(90deg,
+    rgba(255,255,255,.05) 25%, rgba(255,255,255,.11) 37%, rgba(255,255,255,.05) 63%);
+  background-size:400% 100%;animation:cx-brilho 1.4s ease infinite
+}
+body.light .cx-load-dot,body.light .cx-load-bar{
+  background:linear-gradient(90deg,
+    rgba(20,28,45,.06) 25%, rgba(20,28,45,.13) 37%, rgba(20,28,45,.06) 63%);
+  background-size:400% 100%
+}
+@keyframes cx-brilho{0%{background-position:100% 50%}100%{background-position:0 50%}}
+/* Quem pediu para reduzir animação não deve levar brilho pulsando na cara: o
+   esqueleto continua sendo esqueleto parado, que já diz "ainda não é conteúdo". */
+@media (prefers-reduced-motion:reduce){ .cx-load-dot,.cx-load-bar{animation:none} }
+
+/* ERRO: caixa com borda e fundo tingido de vermelho — a única das três que
+   desenha um retângulo. Não é enfeite: é o que faz a falha ser vista de
+   relance, sem ler. E leva botão, porque estado terminal ruim sem ação é só
+   má notícia. */
+.cx-erro{
+  display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;
+  padding:20px 16px;margin:6px 0;border-radius:9px;
+  border:1px solid rgba(207,128,128,.4);background:rgba(207,128,128,.08)
+}
+.cx-erro-ico{color:#cf8080;font-size:20px;display:flex}
+.cx-erro-txt{font-size:12px;color:var(--text);font-weight:600}
+/* O detalhe técnico (PERMISSION_DENIED, sem resposta em 12s) fica aqui, menor:
+   quem só quer saber que quebrou lê a linha de cima; quem vai consertar lê
+   esta. Mensagem única para os dois públicos não serve a nenhum. */
+.cx-erro-det{font-size:11px;color:var(--muted);font-style:normal}
+.cx-erro-btn{
+  margin-top:2px;padding:5px 14px;border-radius:7px;cursor:pointer;
+  font-family:var(--font);font-size:11px;font-weight:600;
+  border:1px solid rgba(207,128,128,.5);background:transparent;color:#cf8080;
+  display:flex;align-items:center;gap:6px
+}
+.cx-erro-btn:hover{background:rgba(207,128,128,.14)}
 .home-stock-item{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .home-stock-item:last-child{border-bottom:none}
 .home-stock-icon{font-size:16px;width:26px;text-align:center;flex-shrink:0}
@@ -584,6 +647,8 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
   <!-- Só aparece via JS (aplicarTrilho troca o href do botão), nunca como
        <use> escrito no fonte. -->
   <symbol id="ic-expandir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="13 9 16 12 13 15"/></symbol>
+  <!-- Só aparece via JS, dentro do card de erro. -->
+  <symbol id="ic-recarregar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
 </defs></svg>
 
 <!-- LOGIN -->
@@ -810,14 +875,14 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
               <div class="home-card-title"><svg class="ic"><use href="#ic-raio"/></svg> Ativações Recentes</div>
               <button class="home-card-link" onclick="switchTab('cac')">Ver tudo →</button>
             </div>
-            <div id="home-ativacoes-list"><div class="home-empty">Carregando…</div></div>
+            <div id="home-ativacoes-list" data-estado="carregando"></div>
           </div>
           <div class="home-card">
             <div class="home-card-head">
               <div class="home-card-title"><svg class="ic"><use href="#ic-fone"/></svg> Tickets em Aberto</div>
               <button class="home-card-link" onclick="switchTab('suporte')">Ver tudo →</button>
             </div>
-            <div id="home-tickets-list"><div class="home-empty">Carregando…</div></div>
+            <div id="home-tickets-list" data-estado="carregando"></div>
           </div>
         </div>
         <div class="home-card">
@@ -825,7 +890,7 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
             <div class="home-card-title"><svg class="ic"><use href="#ic-caixa"/></svg> Estoque de Insumos</div>
             <button class="home-card-link" onclick="switchTab('cac')">Gerenciar →</button>
           </div>
-          <div id="home-stock-list"><div class="home-empty">Carregando…</div></div>
+          <div id="home-stock-list" data-estado="carregando"></div>
         </div>
       </div>
     </div>
@@ -864,12 +929,52 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
 </div>
 
 <script>
-// Declarados aqui em cima, e não junto do resto da barra lateral, porque
-// bootPlatform() os usa e `const` tem zona morta temporal: se a chamada do
-// auto-login subir uma linha que seja acima da declaração, estoura
-// ReferenceError. Depender de posição no arquivo é quebra silenciosa à espera.
+// ── CONSTANTES QUE O BOOT LÊ ──────────────────────────────────────────────
+// Tudo que `bootPlatform()` alcança, direta ou indiretamente, mora AQUI e não
+// junto do código que usa. `const` tem zona morta temporal: ler antes da linha
+// da declaração não devolve `undefined`, estoura `ReferenceError` e mata a
+// função inteira no meio.
+//
+// A regra "declarar perto do uso" é a errada neste arquivo, e isso custou duas
+// vezes: `SIDEBAR_KEY`/`MOBILE_MAX` na rodada da barra lateral e `FONTES` e
+// companhia nesta. O motivo é que o auto-login é uma IIFE no meio do <script>
+// que dispara bootPlatform → switchTab → renderHome; quem estiver declarado
+// abaixo dela existe para o clique do usuário e não existe para o boot. O
+// sintoma engana: a tela monta, só a cauda morre
+// ([[Excecao depois do efeito visivel passa por defeito cosmetico]]).
 const SIDEBAR_KEY = 'ibnet_sidebar';  // localStorage: 'rail' | 'full'
 const MOBILE_MAX  = 768;              // mesmo limiar do @media da gaveta
+
+// Estado por FONTE e não por card, porque a relação não é 1:1 — o card de
+// estoque lê `cac/estoque` E `cac/config`, e basta uma falhar para o número
+// sair errado. Guardar no card faria a segunda fonte apagar o estado da primeira.
+const FONTES = {
+  'suporte/atividades': { caixas: ['tickets'],    rotulo: 'tickets'   },
+  'cac/ativacoes':      { caixas: ['ativacoes'],  rotulo: 'ativações' },
+  'cac/estoque':        { caixas: ['estoque'],    rotulo: 'estoque'   },
+  'cac/config':         { caixas: ['estoque'],    rotulo: 'estoque'   },
+};
+const CAIXA_EL = { ativacoes:'home-ativacoes-list', tickets:'home-tickets-list', estoque:'home-stock-list' };
+
+// 'carregando' | 'ok' | 'erro'. Começa em carregando, que é a verdade: nada
+// chegou ainda.
+const estadoFonte  = {};
+const detalheFonte = {};
+Object.keys(FONTES).forEach(p => { estadoFonte[p] = 'carregando'; });
+
+// Firebase não tem timeout: `on()` fica pendurado para sempre se a resposta
+// nunca vem e o erro nunca chega. Sem este relógio, "não respondeu" é
+// indistinguível de "está lento" — para sempre.
+// 12s, não 3: aviso que grita à toa em conexão ruim vira aviso ignorado
+// ([[Aviso que grita a toa e aviso ignorado]]). E o relógio não cancela a
+// inscrição — se o dado chegar em 20s, o card se recupera sozinho.
+const TIMEOUT_FONTE = 12000;
+const relogios = {};
+
+// Guarda as inscrições para poder desligá-las antes de religar (botão
+// "Tentar de novo"); `on()` empilha, e duas inscrições no mesmo caminho fazem
+// renderHome rodar em dobro a cada mudança.
+let _refsLigadas = [];
 
 // ── USERS & ROLES ─────────────────────────────────────────────────────────
 // As senhas NÃO ficam no código (este arquivo é público). Guardamos apenas o
@@ -1479,33 +1584,125 @@ function fbToArr(val) {
   return Object.values(val).filter(Boolean);
 }
 
+// ── ESTADO DE CADA FONTE ──────────────────────────────────────────────────
+// Medido em 13/09/2026, não suposto: `ref.on('value', cb)` com UM callback
+// **emudece** quando a leitura é negada. Sonda contra `financeiro/lancamentos`
+// (que já nega hoje): o callback nunca foi chamado, não houve `window.onerror`
+// nem `unhandledrejection`, e o mesmo `ref` COM o terceiro argumento recebeu
+// `PERMISSION_DENIED` na hora. Controle positivo num caminho aberto respondeu,
+// então a sonda estava conectada.
+//
+// Consequência: o portal não tinha caminho de erro nenhum para a falha que de
+// fato acontece. O `try/catch` do renderHome só pega bug DENTRO do render — a
+// leitura falhando não chama ninguém. Os três cards ficavam em "Carregando…"
+// para sempre. Ver [[Ausencia de sinal de erro nao e sinal de acerto]].
+//
+// Isto vai doer no dia em que as regras do RTDB forem fechadas: hoje `cac` e
+// `suporte` são abertos e por isso o buraco não aparece.
+
+// `FONTES`, `CAIXA_EL`, `estadoFonte`, `detalheFonte`, `TIMEOUT_FONTE`,
+// `relogios` e `_refsLigadas` estão declarados no topo do <script>, junto das
+// outras constantes que o boot alcança — ver o comentário de lá.
+
+function marcarFonte(path, estado, detalhe) {
+  clearTimeout(relogios[path]);
+  estadoFonte[path]  = estado;
+  detalheFonte[path] = detalhe || '';
+  renderHome();
+}
+
+// Uma caixa está em erro se QUALQUER fonte dela falhou, e carregando se
+// qualquer fonte ainda não respondeu. A ordem importa: erro ganha de
+// carregando, porque erro é notícia e carregando é ausência de notícia.
+function estadoCaixa(caixa) {
+  const fontes = Object.keys(FONTES).filter(p => FONTES[p].caixas.includes(caixa));
+  if (fontes.some(p => estadoFonte[p] === 'erro'))       return { estado:'erro',
+    detalhe: fontes.filter(p => estadoFonte[p]==='erro').map(p => detalheFonte[p]).join(' · ') };
+  if (fontes.some(p => estadoFonte[p] === 'carregando')) return { estado:'carregando' };
+  return { estado:'ok' };
+}
+
+function htmlEsqueleto(linhas = 3) {
+  // Larguras variadas de propósito: barra toda do mesmo tamanho lê como tabela
+  // vazia, não como conteúdo chegando.
+  const larg = ['72%','54%','63%','48%','68%'];
+  return `<div class="cx-load">` + Array.from({length:linhas}, (_,i) => `
+    <div class="cx-load-row">
+      <div class="cx-load-dot"></div>
+      <div style="flex:1">
+        <div class="cx-load-bar" style="width:${larg[i % larg.length]}"></div>
+        <div class="cx-load-bar" style="width:38%;height:7px;margin-top:6px;opacity:.6"></div>
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+function htmlErro(detalhe) {
+  return `<div class="cx-erro">
+    <div class="cx-erro-ico"><svg class="ic ic-lg"><use href="#ic-alerta"/></svg></div>
+    <div class="cx-erro-txt">Não deu para carregar</div>
+    <div class="cx-erro-det">${escaparHtml(detalhe || 'falha desconhecida')}</div>
+    <button class="cx-erro-btn" onclick="setupPortalFirebase()">
+      <svg class="ic"><use href="#ic-recarregar"/></svg> Tentar de novo
+    </button>
+  </div>`;
+}
+
+// O detalhe vem de mensagem do Firebase, não de texto meu. Entra por
+// innerHTML junto com o resto do card, então tem de ser escapado — string de
+// fora do meu controle não vira marcação.
+function escaparHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Chamável de novo: é o botão "Tentar de novo". Por isso começa desligando o
+// que já estava ligado (`_refsLigadas`, declarada no topo).
 function setupPortalFirebase() {
-  _db2.ref('suporte/atividades').on('value', snap => {
+  _refsLigadas.forEach(({ ref, cb }) => { try { ref.off('value', cb); } catch (e) {} });
+  _refsLigadas = [];
+
+  const ligar = (path, aoReceber) => {
+    estadoFonte[path] = 'carregando';
+    clearTimeout(relogios[path]);
+    relogios[path] = setTimeout(
+      () => marcarFonte(path, 'erro', `sem resposta em ${TIMEOUT_FONTE / 1000}s`),
+      TIMEOUT_FONTE);
+
+    const ref = _db2.ref(path);
+    const cb = ref.on('value',
+      snap => { aoReceber(snap); marcarFonte(path, 'ok'); },
+      // O terceiro argumento — o que faltava. Sem ele a negação é silêncio.
+      err  => {
+        console.error('[portal] leitura negada em ' + path, err);
+        marcarFonte(path, 'erro', err.code || err.message || 'erro de leitura');
+      });
+    _refsLigadas.push({ ref, cb });
+  };
+
+  ligar('suporte/atividades', snap => {
     _allActivities = fbToArr(snap.val());
     refreshNotifications();
-    renderHome();
   });
-  _db2.ref('cac/ativacoes').on('value', snap => {
+  ligar('cac/ativacoes', snap => {
     const v = snap.val() || {};
     _allAtivacoes = Object.entries(v)
       .map(([id,a]) => ({...a, id}))
       .sort((a,b) => (b.data||'').localeCompare(a.data||''));
-    renderHome();
   });
-  _db2.ref('cac/estoque').on('value', snap => {
+  ligar('cac/estoque', snap => {
     const v = snap.val() || {};
     _cacEstoque.ont      = v.ont      || {qtd:0};
     _cacEstoque.drop     = v.drop     || {metros:0};
     _cacEstoque.conector = v.conector || {qtd:0};
-    renderHome();
   });
-  _db2.ref('cac/config').on('value', snap => {
+  ligar('cac/config', snap => {
     const v = snap.val() || {};
     if (v.ont)      _cacConfig.ont      = v.ont;
     if (v.drop)     _cacConfig.drop     = v.drop;
     if (v.conector) _cacConfig.conector = v.conector;
-    renderHome();
   });
+
+  renderHome();
 }
 
 // ── NOTIFICAÇÕES ──────────────────────────────────────────────────────────
@@ -1793,7 +1990,7 @@ function renderHome() {
 
   // Ativações recentes
   const ativEl = document.getElementById('home-ativacoes-list');
-  if (ativEl) {
+  if (ativEl && pintarEstado(ativEl, 'ativacoes')) {
     const recent = _allAtivacoes.slice(0,7);
     if (!recent.length) {
       ativEl.innerHTML = '<div class="home-empty">Nenhuma ativação registrada ainda.</div>';
@@ -1817,7 +2014,7 @@ function renderHome() {
 
   // Tickets
   const tickEl = document.getElementById('home-tickets-list');
-  if (tickEl) {
+  if (tickEl && pintarEstado(tickEl, 'tickets')) {
     const PRI_ORDER = {alta:0,media:1,baixa:2};
     const sorted = [...tickets].sort((a,b)=>(PRI_ORDER[a.prioridade]||1)-(PRI_ORDER[b.prioridade]||1)).slice(0,7);
     if (!sorted.length) {
@@ -1841,7 +2038,7 @@ function renderHome() {
 
   // Estoque
   const stockEl = document.getElementById('home-stock-list');
-  if (stockEl) {
+  if (stockEl && pintarEstado(stockEl, 'estoque')) {
     const items = [
       { icon:`<svg class="ic"><use href="#ic-antena"/></svg>`, name:'ONT',      qty:ontQtd,  unit:'un', alr:ontAlr  },
       { icon:`<svg class="ic"><use href="#ic-raio"/></svg>`, name:'DROP',     qty:dropQtd, unit:'m',  alr:dropAlr },
@@ -1866,14 +2063,48 @@ function renderHome() {
     }).join('');
   }
   } catch(err) {
-    // Captura qualquer erro silencioso em renderHome para facilitar diagnóstico
+    // Este catch pega bug DENTRO do render — dado malformado, campo que sumiu.
+    // Não pega leitura negada: aquela nunca chega aqui (ver setupPortalFirebase).
+    // São duas falhas diferentes e as duas precisam aparecer.
     console.error('[renderHome] Erro:', err);
-    // Mostra estado de erro nos cards para evitar "Carregando..." eterno
-    const ativEl = document.getElementById('home-ativacoes-list');
-    if (ativEl && ativEl.querySelector('.home-empty')?.textContent === 'Carregando…') {
-      ativEl.innerHTML = '<div class="home-empty">Erro ao carregar — recarregue a página.</div>';
-    }
+    // ANTES, esta linha decidia comparando o TEXTO da tela:
+    //   ativEl.querySelector('.home-empty')?.textContent === 'Carregando…'
+    // Duas coisas erradas. Primeira: só consertava UM dos três cards — tickets
+    // e estoque ficavam em "Carregando…" para sempre mesmo com o erro na mão.
+    // Segunda, pior: o rótulo virava lógica. Trocar "Carregando…" por
+    // "Carregando..." (reticências de três pontos) desligava o tratamento de
+    // erro sem quebrar nada visível. Mesma armadilha do 🔒 que o
+    // metaDeEmergencia lia como texto — ver [[Icone herda a cor, emoji nao]].
+    // Agora o estado é declarado num atributo, não deduzido da tela.
+    Object.keys(CAIXA_EL).forEach(caixa => {
+      const el = document.getElementById(CAIXA_EL[caixa]);
+      if (el) pintarCaixa(el, 'erro', err.message || 'falha ao montar o painel');
+    });
   }
+}
+
+// Devolve `true` quando a caixa pode desenhar dado; `false` quando ela já foi
+// preenchida com esqueleto ou com erro e o chamador deve parar por aqui.
+//
+// A sutileza que motiva isto: renderHome roda a CADA resposta de QUALQUER
+// fonte. Sem esta trava, `cac/ativacoes` respondendo enquanto
+// `suporte/atividades` falhava desenhava "Nenhum ticket em aberto!" — zero
+// tickets porque a leitura quebrou, exibido como boa notícia. Vazio-porque-
+// -quebrou com a cara de vazio-porque-está-tudo-bem é exatamente o erro de
+// [[Ausencia de sinal de erro nao e sinal de acerto]], e aqui ele mentiria
+// para quem toma decisão olhando o painel.
+function pintarEstado(el, caixa) {
+  const { estado, detalhe } = estadoCaixa(caixa);
+  if (estado === 'ok') { el.dataset.estado = 'ok'; return true; }
+  pintarCaixa(el, estado, detalhe);
+  return false;
+}
+
+function pintarCaixa(el, estado, detalhe) {
+  // `data-estado` é a fonte da verdade e existe para ser lida por código e por
+  // teste — nunca mais descobrir o estado lendo a frase que está na tela.
+  el.dataset.estado = estado;
+  el.innerHTML = estado === 'erro' ? htmlErro(detalhe) : htmlEsqueleto();
 }
 
 // Fecha painéis ao clicar fora
