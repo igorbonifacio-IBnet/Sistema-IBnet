@@ -96,6 +96,19 @@ body.light .grp-row td{background:rgba(0,0,0,.03)}
 .p-finan{background:rgba(198,166,103,.15);color:var(--yellow)}
 .p-rev{background:rgba(207,128,128,.15);color:var(--red)}
 
+/* Estado da ocorrência do mês na lista de regras. Nomes próprios em vez de
+   reusar `p-oper`/`p-rev`: lá dentro do DFC aquelas classes querem dizer GRUPO
+   (Operacional, Revisar). Mesma cor, outro significado — e classe com dois
+   significados é a que alguém troca no lugar errado depois. */
+.p-pago   {background:rgba(107,191,138,.15);color:var(--green)}
+.p-vencido{background:rgba(207,128,128,.15);color:var(--red)}
+/* Aberto é o estado NORMAL: a conta do dia 20 não estar paga no dia 15 não é
+   notícia. Sem cor, senão a lista vira um mural de alertas e o vermelho de quem
+   realmente venceu se perde no meio. */
+.p-aberto {background:rgba(120,131,154,.14);color:var(--muted)}
+.rec-obs  {font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.rec-obs b{color:var(--yellow);font-weight:600}
+
 /* ── controles ───────────────────────────────────────────────────── */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
 .filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;
@@ -2359,6 +2372,84 @@ function proximaAbertaRec(r, hojeISO, mapa){
               && !realizadoDe(mp, r.id, o.mes))[0] || null;
 }
 
+/* ── ESTADO DA OCORRÊNCIA DO MÊS ───────────────────────────────────────────
+   O dado sempre existiu — a confirmação carimba `recId` + `recMes` desde o
+   início. O que faltava era ele aparecer na LINHA DA REGRA, que é onde a
+   decisão de pagar acontece.
+
+   Antes, para saber se a conta deste mês já saiu, o caminho era passar o mouse
+   sobre `adiantar` e ler o tooltip. Três problemas nisso, e o terceiro é o que
+   deixa duplicar:
+     1. informação escondida atrás de hover não existe em tela sem mouse e não
+        existe para quem está com pressa, que é exatamente quando se duplica;
+     2. o tooltip responde outra pergunta — qual é a próxima ocorrência ABERTA,
+        não se a atual foi paga;
+     3. quando nada está aberto o botão **some**, e ausência de botão não se lê.
+        Ver [[Ausencia de sinal de erro nao e sinal de acerto]].
+
+   Quatro estados, e o quarto é o que costuma ser esquecido: */
+function estadoRecMes(r, mes, hojeISO, mapa){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaRealizado();
+  const oc   = ocorrenciasDe(r, mes, mes)[0];
+  // `fora` = a regra não vale neste mês (13º com `meses:[11,12]`, vigência
+  // encerrada, início no futuro). Precisa de rótulo próprio: célula vazia lê
+  // como "não pago", e o 13º apareceria em setembro como conta esquecida.
+  if (!oc) return { estado:'fora' };
+  const lanc = realizadoDe(mp, r.id, mes);
+  if (lanc) return { estado:'confirmada', oc, lanc };
+  // Vencida é a mesma população da fila de pendências lá em cima. Repetir aqui
+  // não é redundância: a fila diz o que fazer, a linha é onde se faz.
+  return oc.venc < hoje
+    ? { estado:'vencida', oc, atraso: diasEntre(oc.venc, hoje) }
+    : { estado:'aberta',  oc };
+}
+
+/* Ocorrências FUTURAS já confirmadas — o rastro que o botão `adiantar` deixa.
+   Sem isto o buraco só muda de mês: quem adiantou outubro veria "set · pago",
+   nada sobre outubro, e pagaria de novo em outubro achando que era a primeira
+   vez. O único sinal que existe hoje é o botão sumir. */
+function adiantadasRec(r, mes, mapa){
+  const mp = mapa || mapaRealizado();
+  // 3 meses cobrem a janela de 62 dias do `adiantar` inteira.
+  return ocorrenciasDe(r, proxMes(mes), somaMeses(mes + '-01', 3).slice(0,7))
+    .filter(o => realizadoDe(mp, r.id, o.mes));
+}
+
+function htmlEstadoRec(r, mes, hoje, mapa){
+  const e = estadoRecMes(r, mes, hoje, mapa);
+  // "pago" para saída, "recebido" para entrada. A mensalidade do dia 15 é
+  // receita: dizer que ela foi "paga" inverte quem pagou quem.
+  const verbo = (+r.valor >= 0) ? 'recebido' : 'pago';
+
+  const adi = adiantadasRec(r, mes, mapa);
+  const extra = adi.length
+    ? `<div class="rec-obs"><b>${adi.map(a => mesLabel(a.mes)).join(', ')} já ${verbo}</b></div>`
+    : '';
+
+  if (e.estado === 'fora')
+    return `<span class="muted" style="font-size:11px">não vale neste mês</span>${extra}`;
+
+  if (e.estado === 'confirmada'){
+    const real = Math.abs(+e.lanc.valor || 0);
+    const prev = Math.abs(+e.oc.valor   || 0);
+    // O valor só aparece quando DIFERE do previsto. Repetir o número que já
+    // está duas colunas à esquerda é ruído; a diferença é a única parte que a
+    // tela ainda não contava — e ela é digitada, então a tolerância é de
+    // centavo de float e nada mais ([[Aviso que grita a toa e aviso ignorado]]).
+    const dif = Math.abs(real - prev) >= 0.005
+      ? `<div class="rec-obs">confirmado por <b>${fmt(real)}</b></div>` : '';
+    return `<span class="pill p-pago">✓ ${verbo}</span>${dif}${extra}`;
+  }
+
+  if (e.estado === 'vencida')
+    return `<span class="pill p-vencido">em aberto</span>` +
+           `<div class="rec-obs"><b>venceu há ${e.atraso} dia${e.atraso===1?'':'s'}</b></div>${extra}`;
+
+  return `<span class="pill p-aberto">em aberto</span>` +
+         `<div class="rec-obs">vence ${dataBR(e.oc.venc)}</div>${extra}`;
+}
+
 // Previsto x realizado de um mês, em baldes que NÃO se misturam.
 //
 // `entra`/`sai` são a ESTIMATIVA pura — a soma das regras, igual à coluna da
@@ -2727,10 +2818,27 @@ function htmlRec(){
             <b class="${gEnt+gSai>=0?'pos':'neg'}">${fmt(gEnt+gSai)}</b>` : ''}<span
             class="muted" style="font-size:11px">/mês</span></span></div>
       <div class="tbl-wrap"><table>
-      <thead><tr><th>Descrição</th><th>Conta do plano</th><th class="num">Dia</th>
-        <th class="num">Valor</th><th>Vigência</th>${isAdmin?'<th></th>':''}</tr></thead>
+      <thead><tr><th>Descrição</th>
+        <!-- SEGUNDA coluna, não última. Duas razões, e a segunda é medida:
+             lê-se o nome da regra e a pergunta seguinte é "já paguei esta?" —
+             pôr a resposta no fim obriga a atravessar quatro colunas de
+             CONFIGURAÇÃO da regra (conta, dia, valor, vigência) para achar um
+             fato sobre ESTE mês. E a 390px a tabela tem 903px e rola dentro da
+             div .tbl-wrap: no fim da linha o estado nasce fora da tela, que é a
+             mesma queixa do tooltip — existe e não se vê.
+             (Sem crase e sem cifrão-chave neste comentário: ele mora DENTRO de
+             um template literal, onde comentário de HTML não é comentário —
+             a crase fecha a string e o resto vira expressão.)
+             O mês vai no CABEÇALHO, não em cada célula: dito uma vez ele
+             responde "de que mês estamos falando"; repetido 48 vezes vira
+             ruído e ainda empurra a coluna para o dobro da largura. -->
+        <th title="Se a ocorrência deste mês já virou lançamento">Em ${mesLabel(mes)}</th>
+        <th>Conta do plano</th><th class="num">Dia</th>
+        <th class="num">Valor</th><th>Vigência</th>
+        ${isAdmin?'<th></th>':''}</tr></thead>
       <tbody>${itens.map(r => { const prox = proximaAbertaRec(r, hoje, mapaReal); return `<tr>
         <td><b>${esc(r.descricao||'—')}</b>${r.obs?`<div style="font-size:11px;color:var(--muted)">${esc(r.obs)}</div>`:''}</td>
+        <td>${htmlEstadoRec(r, mes, hoje, mapaReal)}</td>
         <td style="font-size:12px">${r.categoria?esc(r.categoria):'<span class="muted">— defina —</span>'}</td>
         <td class="num">${Math.round(+r.dia||1)}</td>
         <td class="num ${+r.valor>=0?'pos':'neg'}">${fmt(+r.valor||0)}${
