@@ -109,6 +109,43 @@ body.light .grp-row td{background:rgba(0,0,0,.03)}
 .rec-obs  {font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
 .rec-obs b{color:var(--yellow);font-weight:600}
 
+/* Navegação de mês da lista de regras. A coluna de estado nasceu presa ao mês
+   corrente, e aí não havia como conferir o que já foi adiantado para o mês que
+   vem — que é justamente o pagamento fácil de repetir. */
+.rec-nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.rec-nav .cap{font-size:11px;color:var(--muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;margin-right:4px}
+.mchip{background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer;
+  padding:5px 12px;border-radius:999px;font-size:12px;font-family:inherit;white-space:nowrap}
+.mchip:hover{border-color:var(--accent);color:var(--accent)}
+.mchip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.mchip.on:hover{color:#fff}
+.mchip small{opacity:.7;font-size:10px}
+
+/* Placar. É a parte "de bate pronto": responde quantas faltam ANTES de a pessoa
+   ler uma linha sequer. Clicar recorta a lista para aquele estado — o número e
+   o filtro são a mesma coisa, então não dá para eles discordarem. */
+.placar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pl{display:flex;align-items:center;gap:8px;text-align:left;cursor:pointer;font-family:inherit;
+  border:1px solid var(--border);border-radius:11px;padding:8px 14px;background:transparent;color:var(--text)}
+.pl:hover{border-color:var(--accent)}
+.pl.on{border-color:var(--accent);background:rgba(221,92,51,.09)}
+.pl.vazio{opacity:.4}
+.pl .n{font-size:20px;font-weight:700;line-height:1}
+.pl .t{font-size:11px;color:var(--muted);line-height:1.25}
+.pl-pago .n{color:var(--green)}
+.pl-venc .n{color:var(--red)}
+.pl-fora .n{color:var(--muted)}
+
+/* Varredura sem leitura: a barra à esquerda dá o estado da linha inteira, então
+   dá para achar o vermelho no meio de 48 regras sem ler nenhuma delas. `aberta`
+   continua sem marca — é o estado normal, e marcar tudo é não marcar nada. */
+tr.st-pago    td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tr.st-vencido td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+tr.st-vencido{background:rgba(207,128,128,.06)}
+tr.st-fora    td:first-child{box-shadow:inset 3px 0 0 var(--border)}
+tr.st-fora    td{opacity:.62}
+
 /* ── controles ───────────────────────────────────────────────────── */
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
 .filters label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;
@@ -656,12 +693,20 @@ function buscarLanc(v, pos){
 const REC_SEM_CAT = '__sem__';   // acha regra sem conta do plano: sem categoria
                                  // o lançamento cai em REVISAR e some do
                                  // resultado operacional sem avisar ninguém.
-const REC_F0 = { dia:'todos', cat:'todas', busca:'', ord:'desc' };
+const REC_F0 = { dia:'todos', cat:'todas', busca:'', ord:'desc', estado:'todos' };
 let recF = { ...REC_F0 };
 function limparFiltroRec(){ recF = { ...REC_F0 }; render(); }
 function filtrandoRec(){
-  return recF.dia!=='todos' || recF.cat!=='todas' || !!String(recF.busca||'').trim();
+  return recF.dia!=='todos' || recF.cat!=='todas' || recF.estado!=='todos'
+      || !!String(recF.busca||'').trim();
 }
+
+/* Mês de referência da coluna de estado. `null` em vez do mês corrente resolvido
+   na carga: a aba fica aberta a semana inteira, e um valor congelado viraria
+   "mês atual" errado depois da virada. Null pergunta as horas toda vez. */
+let recMesRef = null;
+function mesRefRec(){ return recMesRef || new Date().toISOString().slice(0,7); }
+function irMesRec(m){ recMesRef = m; render(); }
 
 // Natureza da dívida. Serve para separar o que é dívida de crescimento
 // (capex parcelado) do que é dívida de operação — leituras bem diferentes.
@@ -2416,13 +2461,17 @@ function adiantadasRec(r, mes, mapa){
     .filter(o => realizadoDe(mp, r.id, o.mes));
 }
 
-function htmlEstadoRec(r, mes, hoje, mapa){
+function htmlEstadoRec(r, mes, hojeISO, mapa){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
   const e = estadoRecMes(r, mes, hoje, mapa);
   // "pago" para saída, "recebido" para entrada. A mensalidade do dia 15 é
   // receita: dizer que ela foi "paga" inverte quem pagou quem.
   const verbo = (+r.valor >= 0) ? 'recebido' : 'pago';
 
-  const adi = adiantadasRec(r, mes, mapa);
+  /* O aviso de adiantada existe para pagamento que está FORA da janela na tela.
+     Olhando um mês passado ele perde a função e vira ruído: o "set já pago" que
+     apareceria em toda linha de agosto é um clique de distância no seletor. */
+  const adi = (mes >= hoje.slice(0,7)) ? adiantadasRec(r, mes, mapa) : [];
   const extra = adi.length
     ? `<div class="rec-obs"><b>${adi.map(a => mesLabel(a.mes)).join(', ')} já ${verbo}</b></div>`
     : '';
@@ -2448,6 +2497,38 @@ function htmlEstadoRec(r, mes, hoje, mapa){
 
   return `<span class="pill p-aberto">em aberto</span>` +
          `<div class="rec-obs">vence ${dataBR(e.oc.venc)}</div>${extra}`;
+}
+
+/* Contagem por estado — o placar. Funções puras (recebem as regras, não leem
+   `recorrentes` de fora) pelo mesmo motivo de `filtrarRecs`: dá para testar sem
+   navegador. `verbo` sai daqui junto com os números porque depende deles: lista
+   só de despesa diz "pagas", só de receita diz "recebidas", e misturada diz
+   "confirmadas" — inventar um verbo só inverteria quem pagou quem em metade. */
+function contarEstadosRec(rs, mes, hojeISO, mapa){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaRealizado();
+  const c = { confirmada:0, vencida:0, aberta:0, fora:0, cEnt:0, cSai:0 };
+  (rs||[]).forEach(r => {
+    const e = estadoRecMes(r, mes, hoje, mp).estado;
+    c[e]++;
+    if (e === 'confirmada'){ if (+r.valor >= 0) c.cEnt++; else c.cSai++; }
+  });
+  c.verbo = (c.cEnt && c.cSai) ? 'confirmadas' : (c.cEnt ? 'recebidas' : 'pagas');
+  return c;
+}
+
+function filtrarEstadoRec(rs, estado, mes, hojeISO, mapa){
+  if (!estado || estado === 'todos') return rs || [];
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaRealizado();
+  return (rs||[]).filter(r => estadoRecMes(r, mes, hoje, mp).estado === estado);
+}
+
+// Classe da linha por estado. Função e não `const` de módulo: `const` tem zona
+// morta temporal, e este arquivo tem boot no meio ([[Declarar perto do uso
+// quebra quando ha boot no meio do arquivo]] — já quebrou duas vezes aqui).
+function classeLinhaRec(estado){
+  return { confirmada:'st-pago', vencida:'st-vencido', fora:'st-fora' }[estado] || '';
 }
 
 // Previsto x realizado de um mês, em baldes que NÃO se misturam.
@@ -2620,9 +2701,29 @@ function htmlRec(){
   const pausadas= recorrentes.filter(r => r.ativo === false);
 
   /* O recorte vale só daqui para baixo. Tudo que já foi calculado acima —
-     fila, resumo do mês, 12 meses — usa `recorrentes` inteiro de propósito. */
-  const vistas   = filtrarRecs(ativas, recF);
+     fila, resumo do mês, 12 meses — usa `recorrentes` inteiro de propósito.
+     `mesRef` entra na mesma regra: navegar de mês aqui embaixo NÃO mexe nos
+     totais nem na projeção, que continuam sendo do mês corrente. Total que
+     muda quando a pessoa só foi olhar outro mês faz parecer que o negócio
+     mudou — mesma razão que vale para os filtros. */
+  const mesRef   = mesRefRec();
+  const base     = filtrarRecs(ativas, recF);
+  const placar   = contarEstadosRec(base, mesRef, hoje, mapaReal);
+  const vistas   = filtrarEstadoRec(base, recF.estado, mesRef, hoje, mapaReal);
   const filtrado = filtrandoRec();
+
+  /* Dois meses para trás e três para frente. Para frente cobre a janela de 62
+     dias do `adiantar` com folga — é lá que mora o pagamento que se repete sem
+     querer. Para trás é pouco de propósito: conferir 2025 é trabalho da aba
+     Fluxo de Caixa, não desta lista, que fala de REGRA. */
+  const navMeses = [];
+  for (let i = -2; i <= 3; i++) navMeses.push(somaMeses(mes + '-01', i).slice(0,7));
+
+  const plBotao = (chave, n, rotulo, dica, cls) => `
+    <button class="pl ${cls} ${recF.estado===chave?'on':''} ${n?'':'vazio'}"
+      onclick="recF.estado = recF.estado==='${chave}' ? 'todos' : '${chave}'; render()"
+      title="${esc(dica)}${n?' — clique para ver só estas':''}">
+      <span class="n">${n}</span><span class="t">${rotulo}</span></button>`;
   const porDia   = contarRecs(ativas, 'dia');
   const porCat   = contarRecs(ativas, 'cat');
   const nSemCat  = porCat.get('') || 0;
@@ -2748,6 +2849,30 @@ function htmlRec(){
   <div class="section-title">Regras cadastradas (${
     filtrado ? `${vistas.length} de ${ativas.length}` : ativas.length})</div>
 
+  <div class="rec-nav">
+    <span class="cap">Situação em</span>
+    ${navMeses.map(m => `<button class="mchip ${m===mesRef?'on':''}" onclick="irMesRec('${m}')"
+      >${mesLabel(m)}${m===mes?' <small>hoje</small>':''}</button>`).join('')}
+  </div>
+
+  <div class="placar">
+    ${plBotao('confirmada', placar.confirmada, `já ${placar.verbo}`,
+      `A ocorrência de ${mesLabel(mesRef)} já virou lançamento`, 'pl-pago')}
+    ${plBotao('vencida', placar.vencida, 'vencidas',
+      'Passou do vencimento e ninguém confirmou', 'pl-venc')}
+    ${plBotao('aberta', placar.aberta, 'a vencer',
+      'Ainda não chegou o dia — é o estado normal', 'pl-abre')}
+    ${placar.fora ? plBotao('fora', placar.fora, 'fora do mês',
+      'A regra não vale neste mês: 13º, vigência encerrada ou início no futuro', 'pl-fora') : ''}
+  </div>
+
+  ${mesRef !== mes ? `
+  <div class="alert" style="margin-bottom:14px;font-size:12.5px">
+    Você está olhando <b>${mesLabel(mesRef)}</b>, não o mês corrente.
+    A fila, os totais e a projeção de 12 meses lá em cima continuam sendo de
+    <b>${mesLabel(mes)}</b> — o seletor muda só o placar e a coluna de situação.
+  </div>` : ''}
+
   <div class="filters">
     <label>Dia<select onchange="recF.dia=this.value;render()">
       <option value="todos">Todos os dias</option>
@@ -2832,13 +2957,16 @@ function htmlRec(){
              O mês vai no CABEÇALHO, não em cada célula: dito uma vez ele
              responde "de que mês estamos falando"; repetido 48 vezes vira
              ruído e ainda empurra a coluna para o dobro da largura. -->
-        <th title="Se a ocorrência deste mês já virou lançamento">Em ${mesLabel(mes)}</th>
+        <th title="Se a ocorrência deste mês já virou lançamento">Em ${mesLabel(mesRef)}</th>
         <th>Conta do plano</th><th class="num">Dia</th>
         <th class="num">Valor</th><th>Vigência</th>
         ${isAdmin?'<th></th>':''}</tr></thead>
-      <tbody>${itens.map(r => { const prox = proximaAbertaRec(r, hoje, mapaReal); return `<tr>
+      <tbody>${itens.map(r => {
+        const prox = proximaAbertaRec(r, hoje, mapaReal);
+        const est  = estadoRecMes(r, mesRef, hoje, mapaReal).estado;
+        return `<tr class="${classeLinhaRec(est)}">
         <td><b>${esc(r.descricao||'—')}</b>${r.obs?`<div style="font-size:11px;color:var(--muted)">${esc(r.obs)}</div>`:''}</td>
-        <td>${htmlEstadoRec(r, mes, hoje, mapaReal)}</td>
+        <td>${htmlEstadoRec(r, mesRef, hoje, mapaReal)}</td>
         <td style="font-size:12px">${r.categoria?esc(r.categoria):'<span class="muted">— defina —</span>'}</td>
         <td class="num">${Math.round(+r.dia||1)}</td>
         <td class="num ${+r.valor>=0?'pos':'neg'}">${fmt(+r.valor||0)}${
