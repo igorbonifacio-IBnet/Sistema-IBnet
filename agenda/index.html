@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Agenda Igor — IBnet</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1115;--card:#161922;--border:#242936;
+  --accent:#dd5c33;
+  --green:#6bbf8a;--red:#cf8080;--yellow:#c6a667;--blue:#6b8cce;--gray:#78839a;
+  --text:#dfe3ea;--muted:#8b94a7;--radius:10px;
+}
+body.light{
+  --bg:#f4f6fa;--card:#ffffff;--border:#dfe3ea;--accent:#c4491f;
+  --green:#4f9e6d;--red:#b96a6a;--yellow:#97803f;--blue:#4f74c4;
+  --text:#2b3444;--muted:#78839a;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;font-size:14px}
+
+.ic{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;vertical-align:-.125em}
+
+.mini-header{background:#0c0f15;border-bottom:1px solid var(--border);padding:10px 22px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:10px}
+body.light .mini-header{background:#ffffff}
+.mini-header h1{font-size:15px;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.mh-sub{font-size:12px;color:var(--muted)}
+.mh-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+main{padding:18px 20px 40px;max-width:1400px;margin:0 auto}
+
+.btn{background:var(--accent);border:none;color:#fff;padding:9px 16px;border-radius:9px;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;
+  display:inline-flex;align-items:center;gap:6px}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:7px}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;
+  padding:3px 7px;font-size:12px;cursor:pointer;font-family:inherit;line-height:1;
+  transition:border-color .12s,color .12s,opacity .12s}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.icon-btn:disabled{opacity:.25;cursor:default}
+.icon-btn:disabled:hover{border-color:var(--border);color:var(--muted)}
+/* Ação destrutiva não compete com a comum: apagada em repouso, vermelha só sob o cursor. */
+.icon-btn.quiet{border-color:transparent;opacity:.5}
+.icon-btn.quiet:hover{border-color:var(--red);color:var(--red);opacity:1}
+
+select,input,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:8px 11px;border-radius:9px;font-size:13px;font-family:inherit;width:100%}
+body.light select,body.light input,body.light textarea{background:#fff}
+select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+
+.alert{border-radius:var(--radius);padding:11px 15px;font-size:12.5px;line-height:1.6;margin-bottom:14px;
+  border:1px solid var(--border);background:var(--card);display:flex;align-items:flex-start;gap:9px}
+.alert.warn{border-color:rgba(198,166,103,.4);background:rgba(198,166,103,.08)}
+.alert.info{border-color:rgba(107,140,206,.35);background:rgba(107,140,206,.07)}
+.alert b{font-weight:600}
+.alert .ic{flex:0 0 auto;font-size:15px;margin-top:1px}
+
+/* ── placar (conta a base inteira; os botões recortam só o quadro) ─── */
+.placar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
+.pl{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:9px 15px;cursor:pointer;font-family:inherit;color:var(--text);text-align:left;
+  display:flex;flex-direction:column;gap:2px;min-width:104px;transition:border-color .15s,opacity .15s}
+.pl:hover{border-color:var(--accent)}
+.pl .n{font-size:19px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.pl .t{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.pl.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pl.vazio{opacity:.45}
+.pl-atrasada .n{color:var(--red)}
+.pl-semana   .n{color:var(--yellow)}
+.pl-semgut   .n{color:var(--muted)}
+
+/* ── quadro ────────────────────────────────────────────────────────── */
+/* Sem `align-items:start`: as quatro colunas sobem juntas ate a altura da
+   mais cheia. Nao e so estetica — a coluna e o alvo de soltar, e com altura
+   natural "Feito" com um cartao virava uma tira de 130px no meio de um
+   quadro de 350px. Alvo que encolhe conforme esvazia e alvo que erra. */
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:stretch}
+@media(max-width:1080px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.board{grid-template-columns:minmax(0,1fr)}}
+.col{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  display:flex;flex-direction:column;transition:border-color .15s,background .15s}
+.col.drop{border-color:var(--accent);background:rgba(221,92,51,.06)}
+.col-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--border)}
+.col-head .cn{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.col-head .cc{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);
+  background:var(--bg);border-radius:99px;padding:2px 8px;font-variant-numeric:tabular-nums}
+body.light .col-head .cc{background:#f1f4f9}
+.col-dot{width:7px;height:7px;border-radius:99px;flex:0 0 auto}
+.col-entrada .col-dot{background:var(--gray)}
+.col-afazer  .col-dot{background:var(--blue)}
+.col-fazendo .col-dot{background:var(--yellow)}
+.col-feito   .col-dot{background:var(--green)}
+.col-body{padding:10px;display:flex;flex-direction:column;gap:9px;min-height:74px;flex:1 1 auto}
+.col-vazia{font-size:12px;color:var(--muted);text-align:center;padding:16px 8px;line-height:1.5}
+
+/* ── cartão ────────────────────────────────────────────────────────── */
+.tk{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 11px;
+  cursor:grab;transition:border-color .12s,transform .12s}
+body.light .tk{background:#fbfcfe}
+.tk:hover{border-color:var(--accent)}
+.tk.arrastando{opacity:.4;cursor:grabbing}
+.tk-top{display:flex;align-items:flex-start;gap:8px}
+.tk-tit{font-size:13px;font-weight:600;line-height:1.4;flex:1;word-break:break-word}
+.tk.feita .tk-tit{text-decoration:line-through;opacity:.6}
+.tk-nota{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:5px;
+  white-space:pre-wrap;word-break:break-word}
+.tk-pe{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+.tk-acoes{display:flex;gap:4px;margin-left:auto}
+
+/* GUT: os três componentes ficam à vista. 5x1x1 e 1x5x1 dão o mesmo produto
+   e são situações opostas — só o produto não diz qual delas é. */
+.gut{display:inline-flex;align-items:center;gap:1px;font-size:10px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.gut i{font-style:normal;background:var(--card);border:1px solid var(--border);
+  padding:1px 4px;color:var(--muted)}
+body.light .gut i{background:#eef1f6}
+.gut i:first-child{border-radius:5px 0 0 5px}
+.gut i:last-child{border-radius:0 5px 5px 0}
+.gut i b{color:var(--text);font-weight:700}
+.gut-p{font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px;margin-left:4px;
+  font-variant-numeric:tabular-nums}
+.gp-critico{background:rgba(207,128,128,.16);color:var(--red)}
+.gp-alto   {background:rgba(198,166,103,.16);color:var(--yellow)}
+.gp-medio  {background:rgba(107,140,206,.14);color:var(--blue)}
+.gp-baixo  {background:rgba(120,131,154,.14);color:var(--muted)}
+.gut-vazio{font-size:10px;font-weight:600;color:var(--muted);border:1px dashed var(--border);
+  border-radius:5px;padding:2px 7px;cursor:pointer;background:transparent;font-family:inherit}
+.gut-vazio:hover{border-color:var(--accent);color:var(--accent)}
+
+.prazo{font-size:10.5px;font-weight:600;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+.prazo.venceu{color:var(--red)}
+.prazo.perto{color:var(--yellow)}
+.sinal{color:var(--yellow);display:inline-flex;align-items:center;cursor:help}
+
+/* ── modal ─────────────────────────────────────────────────────────── */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;
+  align-items:center;justify-content:center;padding:18px}
+.modal-ov.show{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;
+  width:100%;max-width:650px;max-height:88vh;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.32)}
+.modal-box h3{font-size:16px;font-weight:600;margin-bottom:16px}
+.mb-field{margin-bottom:13px;display:flex;flex-direction:column;gap:5px}
+.mb-field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.mb-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mb-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.mb-hint{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:3px}
+/* Tres eixos lado a lado so cabem se o rotulo inteiro couber. "2 — pouco
+   urgente" pede 115px de texto; com padding e a seta do select, 161px de
+   campo. Abaixo disso o navegador corta a palavra no meio e sobra
+   "2 — pouco", que e outra nota. Entao: ou cabem os tres, ou empilham. */
+.gut-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:650px){.gut-grid{grid-template-columns:1fr}
+  .gut-box .gb-d{min-height:0}}
+.gut-box{border:1px solid var(--border);border-radius:9px;padding:10px}
+.gut-box .gb-t{font-size:11px;font-weight:700;letter-spacing:.4px;margin-bottom:2px}
+.gut-box .gb-d{font-size:10.5px;color:var(--muted);line-height:1.4;margin-bottom:7px;min-height:28px}
+.gut-total{display:flex;align-items:center;gap:9px;margin-top:11px;font-size:12px;color:var(--muted)}
+.gut-total b{font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}
+
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#1e2230;
+  border:1px solid var(--border);color:#dfe3ea;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;
+  box-shadow:0 8px 30px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:all .25s;z-index:999;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.muted{color:var(--muted)}
+.bloqueio{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  text-align:center;padding:48px 24px}
+.bloqueio .bt{font-size:15px;font-weight:600;margin-bottom:6px}
+.bloqueio .bd{font-size:13px;color:var(--muted);line-height:1.6}
+
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+  <!-- ibnet-design:clean-v2 -->
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ic-mais" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="ic-lapis" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="ic-lixo" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+  <symbol id="ic-alerta" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="ic-relogio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="ic-agenda" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="ic-sair" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></symbol>
+  <symbol id="ic-esq" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="ic-dir" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+
+<header class="mini-header">
+  <div>
+    <h1><svg class="ic" style="font-size:16px"><use href="#ic-agenda"/></svg> Agenda Igor</h1>
+    <div class="mh-sub" id="mh-sub">carregando…</div>
+  </div>
+  <div class="mh-right">
+    <!-- Dois "Sair" ficam visiveis ao mesmo tempo: este e o do portal, logo
+         acima. Sao credenciais diferentes — este encerra o login do Firebase,
+         o de cima encerra a plataforma. O title existe para nao obrigar a
+         descobrir a diferenca clicando. Mesma solucao do financeiro-v02. -->
+    <button class="btn btn-ghost btn-sm" id="btn-sair-ag" style="display:none" onclick="sairAgenda()"
+            title="Encerrar a sessão da agenda neste navegador (não sai da plataforma)">
+      <svg class="ic"><use href="#ic-sair"/></svg> Sair</button>
+    <button class="btn" id="btn-nova" onclick="abrirTarefa(null)">
+      <svg class="ic"><use href="#ic-mais"/></svg> Nova tarefa</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<!-- login do Firebase (mesma conta do financeiro) -->
+<div class="modal-ov" id="auth-modal">
+  <div class="modal-box" style="max-width:380px">
+    <h3>Acesso à agenda</h3>
+    <p class="muted" style="font-size:13px;line-height:1.55;margin-bottom:16px">
+      A agenda fica no mesmo cofre protegido do Financeiro IBnet.
+      Entre com a sua conta para visualizar.
+    </p>
+    <div class="mb-field"><label>E-mail</label>
+      <input type="email" id="au-email" autocomplete="username" placeholder="seu@email.com"/></div>
+    <div class="mb-field"><label>Senha</label>
+      <input type="password" id="au-pass" autocomplete="current-password"
+             placeholder="••••••••" onkeydown="if(event.key==='Enter')fazerLogin()"/></div>
+    <div id="au-erro" class="alert warn" style="display:none;margin:12px 0 0;font-size:12.5px"></div>
+    <div class="mb-actions" style="margin-top:18px">
+      <button class="btn" id="au-btn" onclick="fazerLogin()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- criar / editar tarefa -->
+<div class="modal-ov" id="tarefa-modal">
+  <div class="modal-box">
+    <h3 id="tm-title">Nova tarefa</h3>
+    <div class="mb-field"><label>Título</label>
+      <input type="text" id="tm-titulo" maxlength="140" placeholder="O que precisa ser feito"
+             onkeydown="if(event.key==='Enter')salvarTarefa()"/></div>
+    <div class="mb-field"><label>Nota <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
+      <textarea id="tm-nota" maxlength="1000" placeholder="Contexto, link, quem pediu…"></textarea></div>
+
+    <div class="mb-row">
+      <div class="mb-field"><label>Coluna</label>
+        <select id="tm-col">
+          <option value="entrada">Caixa de entrada</option>
+          <option value="afazer">A fazer</option>
+          <option value="fazendo">Fazendo</option>
+          <option value="feito">Feito</option>
+        </select></div>
+      <div class="mb-field"><label>Prazo <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <input type="date" id="tm-prazo" onchange="atualizarPreviaGUT()"/></div>
+    </div>
+
+    <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Matriz GUT</label>
+    <div class="gut-grid" style="margin-top:6px">
+      <div class="gut-box">
+        <div class="gb-t">G — Gravidade</div>
+        <div class="gb-d">O estrago se nada for feito.</div>
+        <select id="tm-g" onchange="atualizarPreviaGUT()"></select>
+      </div>
+      <div class="gut-box">
+        <div class="gb-t">U — Urgência</div>
+        <div class="gb-d">O tempo que ainda resta.</div>
+        <select id="tm-u" onchange="atualizarPreviaGUT()"></select>
+      </div>
+      <div class="gut-box">
+        <div class="gb-t">T — Tendência</div>
+        <div class="gb-d">Como piora se ficar parado.</div>
+        <select id="tm-t" onchange="atualizarPreviaGUT()"></select>
+      </div>
+    </div>
+    <div class="gut-total">Prioridade <b id="tm-produto">—</b> <span id="tm-produto-lbl"></span></div>
+    <div id="tm-aviso-prazo" class="alert warn" style="display:none;margin:11px 0 0"></div>
+    <div class="mb-hint">A ordem dentro de cada coluna é o próprio produto G×U×T — não há
+      arrastar para cima ou para baixo. Quem manda na fila é a nota, não a mão.</div>
+
+    <div id="tm-erro" class="alert warn" style="display:none;margin:12px 0 0"></div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharTarefa()">Cancelar</button>
+      <button class="btn" id="tm-btn" onclick="salvarTarefa()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- confirmar exclusão -->
+<div class="modal-ov" id="del-modal">
+  <div class="modal-box" style="max-width:380px">
+    <h3>Excluir tarefa</h3>
+    <p class="muted" style="font-size:13px;line-height:1.55" id="del-desc"></p>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharDel()">Cancelar</button>
+      <button class="btn" id="del-btn" style="background:var(--red)" onclick="confirmarDel()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   AGENDA IGOR — Kanban pessoal com matriz GUT.
+
+   Onde os dados moram: financeiro/agenda/tarefas. Fica sob `financeiro`
+   de propósito — as regras do Realtime Database cascateiam do pai para o
+   filho, então a agenda herda a trava por UID sem precisar de regra nova.
+   Nó novo na raiz nasceria SEM regra e o Firebase nega por padrão, até
+   para o dono.
+
+   O que ainda não está aqui: a vista do Google Agenda e a entrada por
+   WhatsApp. O campo `origem` já existe no registro para que a entrada por
+   WhatsApp não exija migração depois.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── guarda: este módulo só existe dentro do portal ───────────────── */
+if (window.self === window.top) { window.location.href = '../'; }
+
+/* ── firebase ─────────────────────────────────────────────────────── */
+const fbCfg = {
+  apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+  authDomain:"ibnet-platform.firebaseapp.com",
+  databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+  projectId:"ibnet-platform",
+  storageBucket:"ibnet-platform.firebasestorage.app",
+  messagingSenderId:"468380845527",
+  appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+};
+let _app; try{ _app = firebase.app('agenda'); }catch(e){ _app = firebase.initializeApp(fbCfg,'agenda'); }
+const db   = firebase.database(_app);
+const tref = db.ref('financeiro/agenda/tarefas');
+
+/* ── sessão (o portal envia por postMessage) ──────────────────────── */
+function getSession(){
+  try{ return JSON.parse(sessionStorage.getItem('ibnet_session')||'null'); }catch(e){ return null; }
+}
+const USUARIOS_AUTORIZADOS = ['igor'];
+function autorizado(s){
+  return !!s && s.role === 'admin'
+      && USUARIOS_AUTORIZADOS.includes(String(s.username||'').toLowerCase());
+}
+let session = getSession();
+
+/* ── estado ───────────────────────────────────────────────────────── */
+const COLS = [
+  { id:'entrada', nome:'Caixa de entrada', vazia:'Tudo que chega sem triagem cai aqui.' },
+  { id:'afazer',  nome:'A fazer',          vazia:'Nada priorizado ainda.' },
+  { id:'fazendo', nome:'Fazendo',          vazia:'Nada em andamento.' },
+  { id:'feito',   nome:'Feito',            vazia:'Nada concluído ainda.' },
+];
+const COL_IDS  = COLS.map(c => c.id);
+const COL_NOME = Object.fromEntries(COLS.map(c => [c.id, c.nome]));
+
+let tarefas   = [];      // [{id, titulo, nota, col, g, u, t, prazo, criado, feitoEm, origem}]
+let foco      = 'todas'; // recorte do quadro — NUNCA recorta o placar
+let editId    = null;
+let delId     = null;
+let carregando= true;
+let erroCarga = null;
+
+/* ── utilidades ───────────────────────────────────────────────────── */
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function hojeISO(){ return new Date().toISOString().slice(0,10); }
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),3200);
+}
+// Diferença em dias inteiros entre duas datas YYYY-MM-DD, sem fuso no meio.
+function diffDias(aISO, bISO){
+  if (!aISO || !bISO) return null;
+  const n = s => Date.UTC(+s.slice(0,4), +s.slice(5,7)-1, +s.slice(8,10));
+  return Math.round((n(aISO) - n(bISO)) / 86400000);
+}
+function fmtData(iso){
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return d + '/' + m;
+}
+
+/* ── matriz GUT ───────────────────────────────────────────────────── */
+const GUT_ESCALA = {
+  g:[ '', '1 — sem gravidade', '2 — pouco grave', '3 — grave', '4 — muito grave', '5 — gravíssimo' ],
+  u:[ '', '1 — pode esperar',  '2 — pouco urgente', '3 — urgente', '4 — muito urgente', '5 — é agora' ],
+  t:[ '', '1 — não muda',      '2 — piora devagar', '3 — piora',  '4 — piora rápido', '5 — piora já' ],
+};
+function temGUT(t){ return !!(t && t.g && t.u && t.t); }
+function produtoGUT(t){ return temGUT(t) ? t.g * t.u * t.t : null; }
+function faixaGUT(p){
+  if (p == null)  return { cls:'gp-baixo',   rotulo:'' };
+  if (p >= 60)    return { cls:'gp-critico', rotulo:'crítico' };
+  if (p >= 25)    return { cls:'gp-alto',    rotulo:'alto' };
+  if (p >= 9)     return { cls:'gp-medio',   rotulo:'médio' };
+  return            { cls:'gp-baixo',   rotulo:'baixo' };
+}
+/* A urgência que o PRAZO sugere. Não substitui o que foi declarado — só
+   serve para avisar. Dado declarado vence dado deduzido; a dedução aqui
+   envelhece sozinha (o mesmo prazo fica mais urgente a cada dia). */
+function urgenciaDoPrazo(prazo, hoje){
+  if (!prazo) return null;
+  const d = diffDias(prazo, hoje);
+  if (d == null)  return null;
+  if (d <= 2)     return 5;
+  if (d <= 7)     return 4;
+  if (d <= 15)    return 3;
+  if (d <= 30)    return 2;
+  return 1;
+}
+/* Avisa só na direção que causa dano: prazo apertado com urgência baixa.
+   Declarar urgência ACIMA do que o prazo pede é decisão dele, não erro —
+   aviso que grita à toa é aviso ignorado. Tarefa feita não avisa nada. */
+function avisoPrazo(t, hoje){
+  if (!t || t.col === 'feito' || !t.prazo || !t.u) return null;
+  const sug = urgenciaDoPrazo(t.prazo, hoje);
+  if (sug == null || sug <= t.u) return null;
+  const d = diffDias(t.prazo, hoje);
+  const quando = d < 0 ? 'venceu há ' + Math.abs(d) + ' dia(s)'
+               : d === 0 ? 'vence hoje'
+               : 'vence em ' + d + ' dia(s)';
+  return { sug, texto:'O prazo ' + quando + ', o que pede urgência ' + sug +
+                      ' — e está declarada ' + t.u + '.' };
+}
+
+/* ── seleção: o contador e o filtro saem da MESMA função ──────────── */
+/* Contar por um caminho e filtrar por outro cria duas verdades. */
+const RECORTES = {
+  todas:     () => true,
+  atrasadas: (t, hoje) => t.col !== 'feito' && !!t.prazo && diffDias(t.prazo, hoje) < 0,
+  semana:    (t, hoje) => { if (t.col === 'feito' || !t.prazo) return false;
+                            const d = diffDias(t.prazo, hoje); return d >= 0 && d <= 7; },
+  semgut:    (t) => t.col !== 'feito' && !temGUT(t),
+};
+function selecionar(lista, chave, hoje){
+  const f = RECORTES[chave] || RECORTES.todas;
+  return lista.filter(t => f(t, hoje));
+}
+function contar(lista, chave, hoje){ return selecionar(lista, chave, hoje).length; }
+
+/* Ordem dentro da coluna: GUT desc → prazo mais próximo → mais antiga.
+   Sem GUT cai para o fim, porque ainda não foi priorizada. */
+function ordenarCol(lista){
+  return lista.slice().sort((a,b) => {
+    const pa = produtoGUT(a), pb = produtoGUT(b);
+    if (pa == null && pb != null) return 1;
+    if (pb == null && pa != null) return -1;
+    if (pa != null && pb != null && pa !== pb) return pb - pa;
+    if (a.prazo && b.prazo && a.prazo !== b.prazo) return a.prazo < b.prazo ? -1 : 1;
+    if (a.prazo && !b.prazo) return -1;
+    if (b.prazo && !a.prazo) return 1;
+    return String(a.criado||'').localeCompare(String(b.criado||''));
+  });
+}
+
+/* ── autenticação ─────────────────────────────────────────────────── */
+const auth = firebase.auth(_app);
+try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e){}
+
+function abrirAuth(){
+  const m = document.getElementById('auth-modal');
+  if (!m.classList.contains('show')){
+    m.classList.add('show');
+    const e = document.getElementById('au-email');
+    if (!e.value && session && session.email) e.value = session.email;
+    setTimeout(()=> (e.value ? document.getElementById('au-pass') : e).focus(), 60);
+  }
+}
+function fecharAuth(){
+  document.getElementById('auth-modal').classList.remove('show');
+  document.getElementById('au-pass').value = '';
+  document.getElementById('au-erro').style.display = 'none';
+}
+function erroAuth(msg){
+  const el = document.getElementById('au-erro');
+  el.textContent = msg; el.style.display = '';
+}
+function msgErroAuth(e){
+  const c = (e && e.code) || '';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c))
+    return 'E-mail ou senha incorretos.';
+  if (/invalid-email/.test(c))          return 'E-mail inválido.';
+  if (/too-many-requests/.test(c))      return 'Muitas tentativas. Aguarde alguns minutos.';
+  if (/network-request-failed/.test(c)) return 'Sem conexão com a internet.';
+  if (/operation-not-allowed/.test(c))  return 'Login por e-mail/senha não está ativado no Firebase.';
+  if (/user-disabled/.test(c))          return 'Esta conta está desativada.';
+  return 'Não foi possível entrar. ' + ((e && e.message) || '');
+}
+function fazerLogin(){
+  const email = document.getElementById('au-email').value.trim();
+  const pass  = document.getElementById('au-pass').value;
+  const btn   = document.getElementById('au-btn');
+  if (!email || !pass){ erroAuth('Preencha e-mail e senha.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(()  => { document.getElementById('au-pass').value=''; })
+    .catch(e  => { erroAuth(msgErroAuth(e)); })
+    .then(()  => { btn.disabled=false; btn.textContent='Entrar'; });
+}
+function sairAgenda(){
+  auth.signOut().then(()=>{
+    tref.off(); _inscrito=false; tarefas=[]; carregando=true; erroCarga=null;
+    render(); abrirAuth(); toast('Você saiu da agenda.');
+  });
+}
+auth.onAuthStateChanged(u => {
+  const b = document.getElementById('btn-sair-ag');
+  if (b) b.style.display = u ? '' : 'none';
+  if (u){ fecharAuth(); iniciarDados(); }
+});
+
+/* ── carregamento ─────────────────────────────────────────────────── */
+/* `on('value', cb)` emudece em PERMISSION_DENIED quando não recebe o
+   tratador de erro — a tela ficaria em "carregando" para sempre na única
+   falha que de fato acontece. Por isso o segundo callback e o timeout:
+   erro não cobre "nunca respondeu". */
+let _inscrito = false;
+let _timeout  = null;
+
+function iniciarDados(){
+  if (_inscrito || !autorizado(session)) return;
+  _inscrito  = true;
+  carregando = true;
+  erroCarga  = null;
+  render();
+
+  clearTimeout(_timeout);
+  _timeout = setTimeout(() => {
+    if (carregando){
+      carregando = false;
+      erroCarga  = 'A agenda não respondeu em 12 segundos.';
+      render();
+    }
+  }, 12000);
+
+  tref.on('value', snap => {
+    clearTimeout(_timeout);
+    const v = snap.val() || {};
+    tarefas = Object.keys(v).map(k => Object.assign({}, v[k], { id:k }));
+    carregando = false;
+    erroCarga  = null;
+    render();
+  }, err => {
+    clearTimeout(_timeout);
+    carregando = false;
+    erroCarga  = (err && err.code === 'PERMISSION_DENIED')
+      ? 'Sem permissão para ler a agenda nesta conta.'
+      : 'Não foi possível carregar a agenda. ' + ((err && err.message) || '');
+    _inscrito = false;
+    render();
+  });
+}
+function recarregar(){ _inscrito = false; iniciarDados(); }
+
+/* ── render ───────────────────────────────────────────────────────── */
+function render(){
+  const el  = document.getElementById('main');
+  const sub = document.getElementById('mh-sub');
+  const nova= document.getElementById('btn-nova');
+
+  if (!autorizado(session)){
+    tarefas = [];
+    sub.textContent = 'acesso restrito';
+    nova.style.display = 'none';
+    el.innerHTML = '<div class="bloqueio"><div class="bt">Acesso restrito</div>' +
+      '<div class="bd">A Agenda Igor é pessoal e de uso exclusivo do Igor.<br>' +
+      'Entre com um usuário autorizado para visualizar.</div></div>';
+    return;
+  }
+  nova.style.display = '';
+
+  if (erroCarga){
+    sub.textContent = 'erro ao carregar';
+    el.innerHTML = '<div class="bloqueio" style="border-color:rgba(207,128,128,.45)">' +
+      '<div class="bt" style="color:var(--red)">Não deu para carregar</div>' +
+      '<div class="bd">' + esc(erroCarga) + '</div>' +
+      '<button class="btn" style="margin-top:16px" onclick="recarregar()">Tentar de novo</button></div>';
+    return;
+  }
+  if (carregando){
+    sub.textContent = 'carregando…';
+    el.innerHTML = '<div class="bloqueio"><div class="bd">Carregando a agenda…</div></div>';
+    return;
+  }
+
+  const hoje   = hojeISO();
+  const abertas= tarefas.filter(t => t.col !== 'feito').length;
+  sub.textContent = abertas + (abertas === 1 ? ' tarefa aberta' : ' tarefas abertas');
+
+  el.innerHTML = htmlAvisoGoogle() + htmlPlacar(hoje) + htmlBoard(hoje);
+}
+
+/* O que ainda falta fica na tela, não só no combinado. */
+function htmlAvisoGoogle(){
+  return '<div class="alert info">' +
+    '<svg class="ic"><use href="#ic-agenda"/></svg>' +
+    '<div><b>Agenda do Google: ainda não conectada.</b> Esta primeira parte guarda as ' +
+    'tarefas no cofre da IBnet. Para eu trazer os compromissos do Google e criar evento a ' +
+    'partir de uma tarefa, preciso de um <b>ID de cliente OAuth</b> do Google Cloud — é a ' +
+    'única coisa que depende de você.</div></div>';
+}
+
+function htmlPlacar(hoje){
+  /* Os números contam a base inteira. O recorte para no quadro — total não se filtra. */
+  const chip = (chave, rotulo, dica, cls) => {
+    const n = contar(tarefas, chave, hoje);
+    return '<button class="pl ' + cls + (foco===chave?' on':'') + (n?'':' vazio') +
+      '" onclick="trocarFoco(\'' + chave + '\')" title="' + esc(dica) +
+      (n ? ' — clique para ver só estas' : '') + '">' +
+      '<span class="n">' + n + '</span><span class="t">' + rotulo + '</span></button>';
+  };
+  return '<div class="placar">' +
+    chip('todas',     'No quadro',   'Tudo que existe na agenda', 'pl-todas') +
+    chip('atrasadas', 'Atrasadas',   'Prazo já passou e a tarefa não está em Feito', 'pl-atrasada') +
+    chip('semana',    'Em 7 dias',   'Prazo cai de hoje até daqui a 7 dias', 'pl-semana') +
+    chip('semgut',    'Sem GUT',     'Ainda sem nota de prioridade', 'pl-semgut') +
+    '</div>';
+}
+
+function trocarFoco(chave){
+  foco = (foco === chave) ? 'todas' : chave;
+  render();
+}
+
+function htmlBoard(hoje){
+  const visiveis = selecionar(tarefas, foco, hoje);
+  let h = '<div class="board">';
+  for (const c of COLS){
+    const itens = ordenarCol(visiveis.filter(t => t.col === c.id));
+    // O contador da coluna conta o que está À VISTA, e o título diz quando há recorte.
+    h += '<div class="col col-' + c.id + '" id="col-' + c.id + '"' +
+         ' ondragover="colOver(event,\'' + c.id + '\')"' +
+         ' ondragleave="colLeave(\'' + c.id + '\')"' +
+         ' ondrop="colDrop(event,\'' + c.id + '\')">' +
+      '<div class="col-head"><span class="col-dot"></span>' +
+      '<span class="cn">' + c.nome + '</span>' +
+      '<span class="cc">' + itens.length + '</span></div>' +
+      '<div class="col-body">';
+    if (!itens.length){
+      h += '<div class="col-vazia">' +
+           (foco === 'todas' ? esc(c.vazia) : 'Nada nesta coluna com o recorte atual.') +
+           '</div>';
+    } else {
+      h += itens.map(t => htmlCard(t, hoje)).join('');
+    }
+    h += '</div></div>';
+  }
+  return h + '</div>';
+}
+
+function htmlCard(t, hoje){
+  const p     = produtoGUT(t);
+  const fx    = faixaGUT(p);
+  const av    = avisoPrazo(t, hoje);
+  const idx   = COL_IDS.indexOf(t.col);
+  const dias  = t.prazo ? diffDias(t.prazo, hoje) : null;
+
+  let gut;
+  if (temGUT(t)){
+    gut = '<span class="gut" title="Gravidade ' + t.g + ', Urgência ' + t.u + ', Tendência ' + t.t + '">' +
+          '<i>G<b>' + t.g + '</b></i><i>U<b>' + t.u + '</b></i><i>T<b>' + t.t + '</b></i></span>' +
+          '<span class="gut-p ' + fx.cls + '" title="G×U×T = ' + p + ' (' + fx.rotulo + ')">' + p + '</span>';
+  } else {
+    gut = '<button class="gut-vazio" onclick="abrirTarefa(\'' + t.id + '\')" ' +
+          'title="Sem nota de prioridade — clique para dar G, U e T">sem GUT</button>';
+  }
+
+  let prazo = '';
+  if (t.prazo && t.col !== 'feito'){
+    const cls = dias < 0 ? ' venceu' : (dias <= 7 ? ' perto' : '');
+    const dica= dias < 0 ? 'Venceu há ' + Math.abs(dias) + ' dia(s)'
+              : dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + ' dia(s)';
+    prazo = '<span class="prazo' + cls + '" title="' + esc(dica) + '">' +
+            '<svg class="ic"><use href="#ic-relogio"/></svg>' + fmtData(t.prazo) + '</span>';
+  }
+
+  const sinal = av
+    ? '<span class="sinal" title="' + esc(av.texto) + '"><svg class="ic"><use href="#ic-alerta"/></svg></span>'
+    : '';
+
+  return '<div class="tk' + (t.col === 'feito' ? ' feita' : '') + '" draggable="true" ' +
+      'id="tk-' + esc(t.id) + '" ondragstart="cardDragStart(event,\'' + t.id + '\')" ' +
+      'ondragend="cardDragEnd(\'' + t.id + '\')">' +
+    '<div class="tk-top"><div class="tk-tit">' + esc(t.titulo) + '</div>' + sinal + '</div>' +
+    (t.nota ? '<div class="tk-nota">' + esc(t.nota) + '</div>' : '') +
+    '<div class="tk-pe">' + gut + prazo +
+      '<span class="tk-acoes">' +
+        '<button class="icon-btn" onclick="moverTarefa(\'' + t.id + '\',-1)" ' +
+          (idx <= 0 ? 'disabled ' : '') + 'title="Mover para ' + esc(COL_NOME[COL_IDS[idx-1]] || '') + '">' +
+          '<svg class="ic"><use href="#ic-esq"/></svg></button>' +
+        '<button class="icon-btn" onclick="moverTarefa(\'' + t.id + '\',1)" ' +
+          (idx >= COL_IDS.length-1 ? 'disabled ' : '') + 'title="Mover para ' + esc(COL_NOME[COL_IDS[idx+1]] || '') + '">' +
+          '<svg class="ic"><use href="#ic-dir"/></svg></button>' +
+        '<button class="icon-btn" onclick="abrirTarefa(\'' + t.id + '\')" title="Editar">' +
+          '<svg class="ic"><use href="#ic-lapis"/></svg></button>' +
+        '<button class="icon-btn quiet" onclick="abrirDel(\'' + t.id + '\')" title="Excluir">' +
+          '<svg class="ic"><use href="#ic-lixo"/></svg></button>' +
+      '</span>' +
+    '</div></div>';
+}
+
+/* ── arrastar ─────────────────────────────────────────────────────── */
+/* Arrastar é atalho, não o único caminho: as setas ‹ › fazem o mesmo.
+   Quadro só com arrastar não funciona no celular nem no teclado. */
+let _arrastando = null;
+function cardDragStart(ev, id){
+  _arrastando = id;
+  try { ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed='move'; } catch(e){}
+  const el = document.getElementById('tk-' + id);
+  if (el) el.classList.add('arrastando');
+}
+function cardDragEnd(id){
+  _arrastando = null;
+  const el = document.getElementById('tk-' + id);
+  if (el) el.classList.remove('arrastando');
+  COL_IDS.forEach(colLeave);
+}
+function colOver(ev, col){
+  ev.preventDefault();
+  try { ev.dataTransfer.dropEffect = 'move'; } catch(e){}
+  const el = document.getElementById('col-' + col);
+  if (el) el.classList.add('drop');
+}
+function colLeave(col){
+  const el = document.getElementById('col-' + col);
+  if (el) el.classList.remove('drop');
+}
+function colDrop(ev, col){
+  ev.preventDefault();
+  colLeave(col);
+  let id = _arrastando;
+  try { id = ev.dataTransfer.getData('text/plain') || id; } catch(e){}
+  _arrastando = null;
+  if (id) mudarColuna(id, col);
+}
+
+/* ── mover de coluna ──────────────────────────────────────────────── */
+function moverTarefa(id, passo){
+  const t = tarefas.find(x => x.id === id);
+  if (!t) return;
+  const i = COL_IDS.indexOf(t.col) + passo;
+  if (i < 0 || i >= COL_IDS.length) return;
+  mudarColuna(id, COL_IDS[i]);
+}
+function mudarColuna(id, col){
+  const t = tarefas.find(x => x.id === id);
+  if (!t || t.col === col) return;
+
+  /* Sair da caixa de entrada sem nota GUT é o furo que a matriz existe para
+     tapar. Não trava o gesto — abre a ficha já com a coluna nova escolhida,
+     para ele dar G, U e T. Travar calado seria pior que não avisar. */
+  if (t.col === 'entrada' && col !== 'entrada' && col !== 'feito' && !temGUT(t)){
+    abrirTarefa(id, col);
+    toast('Dê G, U e T antes de priorizar esta tarefa.');
+    return;
+  }
+
+  const patch = { col: col };
+  patch.feitoEm = (col === 'feito') ? new Date().toISOString() : null;
+  tref.child(id).update(patch)
+    .then(() => toast('Movida para ' + COL_NOME[col] + '.'))
+    .catch(e => toast('Não deu para mover: ' + (e && e.message || '')));
+}
+
+/* ── criar / editar ───────────────────────────────────────────────── */
+function preencherEscalas(){
+  [['tm-g','g'],['tm-u','u'],['tm-t','t']].forEach(([elId, eixo]) => {
+    const sel = document.getElementById(elId);
+    let h = '<option value="">— sem nota —</option>';
+    for (let i=1; i<=5; i++) h += '<option value="' + i + '">' + GUT_ESCALA[eixo][i] + '</option>';
+    sel.innerHTML = h;
+  });
+}
+function abrirTarefa(id, colSugerida){
+  editId = id || null;
+  const t = id ? tarefas.find(x => x.id === id) : null;
+  document.getElementById('tm-title').textContent = t ? 'Editar tarefa' : 'Nova tarefa';
+  document.getElementById('tm-titulo').value = t ? (t.titulo||'') : '';
+  document.getElementById('tm-nota').value   = t ? (t.nota||'')   : '';
+  document.getElementById('tm-col').value    = colSugerida || (t ? t.col : 'entrada');
+  document.getElementById('tm-prazo').value  = t ? (t.prazo||'')  : '';
+  document.getElementById('tm-g').value      = t && t.g ? String(t.g) : '';
+  document.getElementById('tm-u').value      = t && t.u ? String(t.u) : '';
+  document.getElementById('tm-t').value      = t && t.t ? String(t.t) : '';
+  document.getElementById('tm-erro').style.display = 'none';
+  atualizarPreviaGUT();
+  document.getElementById('tarefa-modal').classList.add('show');
+  setTimeout(() => document.getElementById(colSugerida ? 'tm-g' : 'tm-titulo').focus(), 60);
+}
+function fecharTarefa(){
+  document.getElementById('tarefa-modal').classList.remove('show');
+  editId = null;
+}
+function atualizarPreviaGUT(){
+  const g = +document.getElementById('tm-g').value || 0;
+  const u = +document.getElementById('tm-u').value || 0;
+  const t = +document.getElementById('tm-t').value || 0;
+  const completo = g && u && t;
+  const p = completo ? g*u*t : null;
+  document.getElementById('tm-produto').textContent = completo ? p : '—';
+  document.getElementById('tm-produto-lbl').textContent =
+    completo ? '(' + faixaGUT(p).rotulo + ' — de 1 a 125)' : '(precisa dos três)';
+
+  const prazo = document.getElementById('tm-prazo').value;
+  const av = avisoPrazo({ col:document.getElementById('tm-col').value, prazo:prazo, u:u }, hojeISO());
+  const box = document.getElementById('tm-aviso-prazo');
+  if (av){ box.innerHTML = '<svg class="ic"><use href="#ic-alerta"/></svg><div>' + esc(av.texto) +
+             ' O prazo não muda a sua nota sozinho — se estiver certo assim, siga.</div>';
+           box.style.display = 'flex'; }
+  else   { box.style.display = 'none'; }
+}
+function salvarTarefa(){
+  const titulo = document.getElementById('tm-titulo').value.trim();
+  const erro   = document.getElementById('tm-erro');
+  if (!titulo){
+    erro.textContent = 'A tarefa precisa de um título.';
+    erro.style.display = ''; document.getElementById('tm-titulo').focus(); return;
+  }
+  const g = +document.getElementById('tm-g').value || null;
+  const u = +document.getElementById('tm-u').value || null;
+  const t = +document.getElementById('tm-t').value || null;
+  const preenchidos = [g,u,t].filter(Boolean).length;
+  if (preenchidos > 0 && preenchidos < 3){
+    erro.textContent = 'A matriz GUT só vale com os três: gravidade, urgência e tendência.';
+    erro.style.display = ''; return;
+  }
+  erro.style.display = 'none';
+
+  const col = document.getElementById('tm-col').value;
+  const dados = {
+    titulo : titulo,
+    nota   : document.getElementById('tm-nota').value.trim() || null,
+    col    : col,
+    prazo  : document.getElementById('tm-prazo').value || null,
+    g:g, u:u, t:t,
+  };
+
+  const btn = document.getElementById('tm-btn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+
+  let p;
+  if (editId){
+    const antes = tarefas.find(x => x.id === editId);
+    dados.feitoEm = col === 'feito'
+      ? ((antes && antes.feitoEm) || new Date().toISOString())
+      : null;
+    p = tref.child(editId).update(dados);
+  } else {
+    dados.criado  = new Date().toISOString();
+    dados.feitoEm = col === 'feito' ? dados.criado : null;
+    dados.origem  = 'painel';      // 'whatsapp' virá depois, sem migração
+    p = tref.push(dados);
+  }
+  p.then(() => { toast(editId ? 'Tarefa atualizada.' : 'Tarefa criada.'); fecharTarefa(); })
+   .catch(e => { erro.textContent = 'Não deu para salvar: ' + (e && e.message || ''); erro.style.display=''; })
+   .then(() => { btn.disabled = false; btn.textContent = 'Salvar'; });
+}
+
+/* ── excluir ──────────────────────────────────────────────────────── */
+function abrirDel(id){
+  const t = tarefas.find(x => x.id === id);
+  if (!t) return;
+  delId = id;
+  document.getElementById('del-desc').innerHTML =
+    'A tarefa <b>' + esc(t.titulo) + '</b> some da agenda. Não dá para desfazer.';
+  document.getElementById('del-modal').classList.add('show');
+}
+function fecharDel(){
+  document.getElementById('del-modal').classList.remove('show');
+  delId = null;
+}
+function confirmarDel(){
+  if (!delId) return;
+  const btn = document.getElementById('del-btn');
+  btn.disabled = true; btn.textContent = 'Excluindo…';
+  tref.child(delId).remove()
+    .then(() => { toast('Tarefa excluída.'); fecharDel(); })
+    .catch(e => toast('Não deu para excluir: ' + (e && e.message || '')))
+    .then(() => { btn.disabled = false; btn.textContent = 'Excluir'; });
+}
+
+/* fechar modal clicando fora */
+['tarefa-modal','del-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e){
+    if (e.target === this) this.classList.remove('show');
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){
+    document.getElementById('tarefa-modal').classList.remove('show');
+    document.getElementById('del-modal').classList.remove('show');
+  }
+});
+
+/* ── mensagens do portal ──────────────────────────────────────────── */
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === 'theme') document.body.classList.toggle('light', e.data.value === 'light');
+  if (e.data.type === 'session' && e.data.value){
+    const s = e.data.value;
+    if (!session || session.username !== s.username || session.role !== s.role){
+      session = s;
+      iniciarDados();
+      render();
+    }
+  }
+});
+(function(){
+  const t = localStorage.getItem('ibnet_theme') || 'dark';
+  document.body.classList.toggle('light', t === 'light');
+})();
+
+/* ── boot ─────────────────────────────────────────────────────────── */
+preencherEscalas();
+if (autorizado(session)) { iniciarDados(); } else { carregando = false; }
+render();
+
+/* Ponte para a suíte de testes: expõe as funções puras sem abrir o módulo. */
+window.__agenda = {
+  produtoGUT, faixaGUT, urgenciaDoPrazo, avisoPrazo, diffDias,
+  selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
+};
+</script>
+</body>
+</html>

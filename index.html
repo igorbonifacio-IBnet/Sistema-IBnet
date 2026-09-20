@@ -756,6 +756,14 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
       <span class="sb-lock" id="home-lock" style="display:none"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
     </button>
 
+    <div class="sb-section">Pessoal</div>
+
+    <button class="sb-item" data-label="Agenda Igor" data-tab="agenda" id="sb-agenda">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span class="sb-label">Agenda Igor</span>
+      <span class="sb-lock" id="agenda-lock"><svg class="ic"><use href="#ic-cadeado"/></svg></span>
+    </button>
+
     <div class="sb-section">Dashboards</div>
 
     <button class="sb-item" data-label="Comercial" data-tab="comercial">
@@ -903,6 +911,10 @@ body.light .home-stock-item{border-bottom-color:rgba(0,0,0,.05)}
          Quem troca `data-src` por `src` é `carregarModulo()`, chamado pelo
          `switchTab()` DEPOIS do `canAccess()` — o módulo passa a existir no
          momento em que alguém com direito de ver abre a aba, e não antes. -->
+    <div class="tab-panel" id="tab-agenda">
+      <iframe data-src="agenda/index.html" id="iframe-agenda" title="Agenda Igor"></iframe>
+    </div>
+
     <div class="tab-panel" id="tab-comercial">
       <iframe data-src="comercial/index.html" id="iframe-comercial" title="Dashboard Comercial"></iframe>
     </div>
@@ -997,7 +1009,7 @@ async function hashSenha(senha) {
 }
 
 const ROLE_ACCESS = {
-  admin:       ['home', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'],
+  admin:       ['home', 'agenda', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'],
   // Papel sem nenhum usuário hoje. Existia para dar acesso ao Financeiro_V01,
   // que foi aposentado — sobrou um papel chamado "Financeiro" que não abre nada
   // de financeiro. Para voltar a fazer sentido precisaria de `fv02` aqui E do
@@ -1016,6 +1028,7 @@ const ROLE_LABELS = {
 // switchTab() lê `meta.title` e estoura TypeError, abortando o resto da função.
 const TAB_META = {
   home:       { title: 'Início — Resumo do Dia',    badge: 'HOME' },
+  agenda:     { title: 'Agenda Igor',               badge: 'AGENDA' },
   comercial:  { title: 'Dashboard Comercial',       badge: 'COMERCIAL' },
   fv02:       { title: 'Financeiro IBnet',          badge: 'FINANCEIRO' },
   suporte:    { title: 'Painel de Suporte',         badge: 'SUPORTE' },
@@ -1053,7 +1066,8 @@ function clearSession() { sessionStorage.removeItem('ibnet_session'); }
 // Mesmo que outro usuário venha a ser 'admin' no futuro, só quem estiver
 // listado aqui enxerga a aba.
 const TAB_USERS = {
-  fv02:  ['igor'],
+  fv02:   ['igor'],
+  agenda: ['igor'],
 };
 
 function canAccess(role, tab, username) {
@@ -1107,7 +1121,7 @@ function bootPlatform(session) {
   document.getElementById('topbar-user').textContent = 'Olá, ' + session.nome;
 
   // Visibilidade de cada aba baseada no papel do usuário
-  ['home', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
+  ['home', 'agenda', 'comercial', 'fv02', 'suporte', 'cac', 'logs', 'ponto'].forEach(tab => {
     const btn      = document.querySelector(`.sb-item[data-tab="${tab}"]`);
     const lockEl   = btn?.querySelector('.sb-lock');
     const hasAccess = canAccess(session.role, tab, session.username);
@@ -1202,8 +1216,9 @@ function switchTab(tab) {
   if (currentTab && currentTab !== tab) logAction('Portal', 'Navegação', `Acessou aba: ${meta.title}`);
   currentTab = tab;
   if (tab === 'home') renderHome();
-  if (tab === 'ponto') postSessionTo('iframe-ponto');
-  if (tab === 'fv02')  postSessionTo('iframe-fv02');
+  if (tab === 'ponto')  postSessionTo('iframe-ponto');
+  if (tab === 'fv02')   postSessionTo('iframe-fv02');
+  if (tab === 'agenda') postSessionTo('iframe-agenda');
 }
 
 document.querySelectorAll('.sb-item[data-tab]').forEach(btn => {
@@ -1243,7 +1258,7 @@ function applyTheme(t) {
     img.src = `${img.dataset.imgTema}-${t}.png`;
   });
   localStorage.setItem('ibnet_theme', t);
-  ['iframe-comercial','iframe-fv02','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
+  ['iframe-agenda','iframe-comercial','iframe-fv02','iframe-suporte','iframe-logs','iframe-ponto'].forEach(id => {
     try { document.getElementById(id)?.contentWindow?.postMessage({type:'theme',value:t},'*'); } catch(e){}
   });
 }
@@ -1265,7 +1280,7 @@ function postSessionToPonto() { postSessionTo('iframe-ponto'); }
 // o portal, já com o tema aplicado. Carregado sob demanda, ele abriria no tema
 // errado: bug que não é novo, só deixou de estar escondido.
 [['comercial', false], ['suporte', false], ['logs', false],
- ['cac', false], ['ponto', true], ['fv02', true]
+ ['cac', false], ['ponto', true], ['fv02', true], ['agenda', true]
 ].forEach(([tab, precisaSessao]) => {
   const frame = document.getElementById('iframe-' + tab);
   if (!frame) return;
