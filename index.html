@@ -1420,7 +1420,17 @@ const EMAILJS_PUBLIC_KEY  = 'SEU_PUBLIC_KEY';   // ← preencher após criar con
 const EMAILJS_SERVICE_ID  = 'SEU_SERVICE_ID';   // ← ID do serviço (Gmail etc.)
 const EMAILJS_TEMPLATE_ID = 'SEU_TEMPLATE_ID';  // ← ID do template criado
 
-emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+// Mesma guarda que o envio ja usa la em cima (linha 1362). Esta chamada estava
+// nua, e biblioteca externa sem guarda e bomba: o `emailjs` vem de CDN, e se a
+// jsDelivr cair, for bloqueada por rede corporativa ou por bloqueador de anuncio,
+// o ReferenceError mata este <script> inteiro daqui para baixo — junto com o
+// `_db2`, as notificacoes, a busca global e o auto-login, que e exatamente o
+// estrago que o SDK ausente do Firebase causou por 150 dias (c3a0fe6).
+// A condicao dupla e de proposito: sem chave configurada, inicializar nao serve
+// para nada. Quando as tres constantes acima forem preenchidas, volta a rodar.
+if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY !== 'SEU_PUBLIC_KEY') {
+  emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+}
 
 // ── MODAL RECUPERAR ACESSO ────────────────────────────────────────────────
 function openResetModal() {
