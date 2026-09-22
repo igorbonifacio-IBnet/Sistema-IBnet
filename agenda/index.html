@@ -406,6 +406,12 @@ let editId    = null;
 let delId     = null;
 let carregando= true;
 let erroCarga = null;
+/* `semSessao` é estado PRÓPRIO, não variante de `erroCarga`, porque são
+   perguntas diferentes: "esta conta não pode" pede trocar de conta, "você
+   não entrou" pede entrar. O banco devolve PERMISSION_DENIED para as duas,
+   e foi por juntá-las num texto só que a tela virou beco sem saída. */
+let semSessao = false;
+let erroConta = false;   // a recusa foi de PERMISSÃO (conta errada)?
 
 /* ── utilidades ───────────────────────────────────────────────────── */
 function esc(s){
@@ -805,16 +811,49 @@ function fazerLogin(){
     .then(()  => { btn.disabled=false; btn.textContent='Entrar'; });
 }
 function sairAgenda(){
+  /* Quem troca a tela é o `onAuthStateChanged`, que dispara em seguida com
+     usuário nulo. Repetir aqui é de graça e cobre o caso de o `signOut`
+     resolver sem o observador ter rodado ainda — o que apareceria como um
+     piscar de "carregando" numa tela que não vai carregar nada. */
   auth.signOut().then(()=>{
-    tref.off(); _inscrito=false; tarefas=[]; carregando=true; erroCarga=null;
-    render(); abrirAuth(); toast('Você saiu da agenda.');
+    semSessaoAgora(); toast('Você saiu da agenda.');
   });
 }
+/* Esta é a SEGUNDA credencial do módulo, e é a única que o banco enxerga:
+   o login do portal ("Olá, Igor") não entra nas regras, que pedem o UID.
+   Sem sessão aqui a leitura volta PERMISSION_DENIED — recusa certa pelo
+   motivo errado, porque o que falta não é permissão, é entrar. */
+const AUTH_PRAZO = 8000;
+let _authFalou = false;
+let _authPrazo = null;
+
+function semSessaoAgora(){
+  tref.off();                    // listener velho continua negando sozinho
+  _inscrito  = false;
+  tarefas    = [];
+  carregando = false;
+  erroCarga  = null;
+  erroConta  = false;
+  semSessao  = true;
+  render();
+  abrirAuth();
+}
+
 auth.onAuthStateChanged(u => {
+  _authFalou = true;
+  clearTimeout(_authPrazo);
   const b = document.getElementById('btn-sair-ag');
   if (b) b.style.display = u ? '' : 'none';
-  if (u){ fecharAuth(); iniciarDados(); }
+  if (u){ semSessao = false; fecharAuth(); iniciarDados(); return; }
+  semSessaoAgora();
 });
+
+/* `onAuthStateChanged` avisa quando SABE; "ainda não sei" não tem callback.
+   Sem este prazo, SDK que não se pronuncia deixa a tela em "carregando…"
+   para sempre — o mesmo buraco do `on('value')` mudo, um andar acima. */
+_authPrazo = setTimeout(function(){
+  if (!_authFalou) semSessaoAgora();
+}, AUTH_PRAZO);
 
 /* ── carregamento ─────────────────────────────────────────────────── */
 /* `on('value', cb)` emudece em PERMISSION_DENIED quando não recebe o
@@ -826,9 +865,15 @@ let _timeout  = null;
 
 function iniciarDados(){
   if (_inscrito || !autorizado(session)) return;
+  /* Assinar sem sessão do Firebase só produz a recusa que virou beco. O
+     "Tentar de novo" cai aqui: sem esta saída ele repetia para sempre a
+     mesma leitura sem credencial. */
+  if (!auth.currentUser){ semSessaoAgora(); return; }
   _inscrito  = true;
   carregando = true;
   erroCarga  = null;
+  erroConta  = false;
+  semSessao  = false;
   render();
 
   clearTimeout(_timeout);
@@ -850,8 +895,13 @@ function iniciarDados(){
   }, err => {
     clearTimeout(_timeout);
     carregando = false;
-    erroCarga  = (err && err.code === 'PERMISSION_DENIED')
-      ? 'Sem permissão para ler a agenda nesta conta.'
+    /* Chegando aqui já existe sessão (o guarda acima garante), então
+       PERMISSION_DENIED só pode ser conta ERRADA — e dizer QUAL conta é o
+       que transforma a recusa em ação: sair e entrar com a outra. */
+    erroConta  = !!(err && err.code === 'PERMISSION_DENIED');
+    const quem = (auth.currentUser && auth.currentUser.email) || 'conectada';
+    erroCarga  = erroConta
+      ? 'A conta ' + quem + ' não tem acesso a esta agenda.'
       : 'Não foi possível carregar a agenda. ' + ((err && err.message) || '');
     _inscrito = false;
     render();
@@ -881,13 +931,35 @@ function render(){
      com os compromissos, nem o contrário. Estado por fonte, não por tela. */
   const faixa = htmlAgenda();
 
+  /* Antes do erro de propósito: não ter entrado NÃO é falha de carga, e a
+     tela precisa oferecer a porta em vez de acusar quem está do lado de
+     fora dela. Botão que não existe não reprova nada — ausência não se lê. */
+  if (semSessao){
+    sub.textContent = 'entrar na agenda';
+    nova.style.display = 'none';
+    el.innerHTML = faixa +
+      '<div class="bloqueio"><div class="bt">Entre na agenda</div>' +
+      '<div class="bd">A agenda tem login próprio, o mesmo do financeiro.<br>' +
+      'O acesso à plataforma não vale para ela.</div>' +
+      '<button class="btn" style="margin-top:16px" onclick="abrirAuth()">Entrar</button></div>';
+    return;
+  }
+
   if (erroCarga){
     sub.textContent = 'erro ao carregar';
+    /* Conta errada não se resolve repetindo a leitura: a saída é trocar de
+       conta. "Tentar de novo" continua ali para a falha de rede, que é a
+       outra causa que cai neste mesmo lugar. */
     el.innerHTML = faixa +
       '<div class="bloqueio" style="border-color:rgba(207,128,128,.45)">' +
       '<div class="bt" style="color:var(--red)">Não deu para carregar</div>' +
       '<div class="bd">' + esc(erroCarga) + '</div>' +
-      '<button class="btn" style="margin-top:16px" onclick="recarregar()">Tentar de novo</button></div>';
+      '<div style="margin-top:16px;display:flex;gap:8px;justify-content:center">' +
+      (erroConta
+        ? '<button class="btn" onclick="sairAgenda()">Entrar com outra conta</button>'
+        : '') +
+      '<button class="btn' + (erroConta ? ' btn-ghost' : '') +
+      '" onclick="recarregar()">Tentar de novo</button></div></div>';
     return;
   }
   if (carregando){
@@ -1314,7 +1386,11 @@ window.addEventListener('message', e => {
 
 /* ── boot ─────────────────────────────────────────────────────────── */
 preencherEscalas();
-if (autorizado(session)) { iniciarDados(); } else { carregando = false; }
+/* Não chama `iniciarDados()` aqui de propósito: assinar antes de o Firebase
+   dizer se há sessão produz PERMISSION_DENIED por CORRIDA, e a recusa por
+   corrida tem a mesma cara da recusa por conta errada. Quem destrava a
+   leitura é o `onAuthStateChanged` — ou o prazo dele, se ele calar. */
+carregando = autorizado(session);
 gIniciar();
 gAguardarGis();
 render();
@@ -1326,6 +1402,8 @@ window.__agenda = {
   produtoGUT, faixaGUT, urgenciaDoPrazo, avisoPrazo, diffDias,
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
+  semSessaoAtual: function(){ return semSessao; },
+  erroContaAtual: function(){ return erroConta; },
   gEstadoAtual : function(){ return gEstado;  },
   gDiaAtual    : function(){ return gDia;     },
   gEventosAtuais: function(){ return gEventos; },
