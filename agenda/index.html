@@ -7,6 +7,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<!-- Biblioteca de identidade do Google, so para pegar o token do Calendar.
+     `async defer` significa que ela NAO esta pronta quando o boot roda la
+     embaixo — por isso o onload, e por isso o onerror. O terceiro caso, o
+     que ninguem escreve, e a tag que nem dispara um nem outro (removida,
+     rede que engole): quem cobre esse e o prazo em gAguardarGis(). -->
+<script src="https://accounts.google.com/gsi/client" async defer
+        onload="if(typeof gisOk==='function')gisOk()"
+        onerror="if(typeof gisFalhou==='function')gisFalhou()"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -63,6 +71,31 @@ textarea{resize:vertical;min-height:64px;line-height:1.5}
 .alert.info{border-color:rgba(107,140,206,.35);background:rgba(107,140,206,.07)}
 .alert b{font-weight:600}
 .alert .ic{flex:0 0 auto;font-size:15px;margin-top:1px}
+
+/* ── faixa de compromissos do Google ───────────────────────────────── */
+/* Fonte diferente do quadro, então caixa diferente: o Firebase pode estar
+   fora e o Google no ar, e vice-versa. Estado por FONTE, não por tela. */
+.ag{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px}
+.ag-head{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ag-head>.ic{font-size:14px;color:var(--muted);flex:0 0 auto}
+.ag-tit{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+.ag-dia{font-size:12.5px;font-weight:600}
+.ag-nav{margin-left:auto;display:flex;align-items:center;gap:5px}
+.ag-body{padding:8px 13px 10px}
+.ag-ev{display:flex;gap:12px;align-items:baseline;padding:6px 0;font-size:12.5px;line-height:1.5}
+.ag-ev+.ag-ev{border-top:1px dashed var(--border)}
+/* Largura fixa na coluna da hora: sem ela os títulos entram e saem de
+   alinhamento conforme o evento tenha "14:30" ou "dia inteiro". */
+.ag-h{flex:0 0 96px;font-size:11px;font-weight:700;color:var(--muted);
+  font-variant-numeric:tabular-nums;letter-spacing:.2px}
+.ag-ev.inteiro .ag-h{color:var(--blue)}
+.ag-t{flex:1;word-break:break-word}
+.ag-loc{font-size:11px;color:var(--muted);display:block;margin-top:2px}
+.ag-msg{font-size:12.5px;color:var(--muted);line-height:1.6;display:flex;align-items:flex-start;gap:9px;padding:3px 0}
+.ag-msg.ruim{color:var(--yellow)}
+.ag-msg .ic{flex:0 0 auto;font-size:14px;margin-top:2px}
+.ag-acao{margin-top:10px}
+@media(max-width:560px){.ag-h{flex-basis:74px}}
 
 /* ── placar (conta a base inteira; os botões recortam só o quadro) ─── */
 .placar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
@@ -151,6 +184,10 @@ body.light .gut i{background:#eef1f6}
 .mb-field{margin-bottom:13px;display:flex;flex-direction:column;gap:5px}
 .mb-field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .mb-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* A hora e um campo estreito ao lado de dois largos. Empilha junto com o
+   GUT, no mesmo limiar, para o modal nao mudar de forma em dois pontos. */
+.mb-row-3{grid-template-columns:1fr 1fr .72fr}
+@media(max-width:650px){.mb-row-3{grid-template-columns:1fr}}
 .mb-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
 .mb-hint{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:3px}
 /* Tres eixos lado a lado so cabem se o rotulo inteiro couber. "2 — pouco
@@ -247,7 +284,7 @@ body.light .gut i{background:#eef1f6}
     <div class="mb-field"><label>Nota <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
       <textarea id="tm-nota" maxlength="1000" placeholder="Contexto, link, quem pediu…"></textarea></div>
 
-    <div class="mb-row">
+    <div class="mb-row mb-row-3">
       <div class="mb-field"><label>Coluna</label>
         <select id="tm-col">
           <option value="entrada">Caixa de entrada</option>
@@ -257,6 +294,12 @@ body.light .gut i{background:#eef1f6}
         </select></div>
       <div class="mb-field"><label>Prazo <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
         <input type="date" id="tm-prazo" onchange="atualizarPreviaGUT()"/></div>
+      <!-- Hora nasce desligada de proposito: ela qualifica o prazo, nao
+           existe sozinha. "As 14:00" de que dia? Campo que aceita valor sem
+           sentido gera registro que ninguem sabe ler seis meses depois. -->
+      <div class="mb-field"><label>Hora <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
+        <input type="time" id="tm-hora" disabled onchange="atualizarPreviaGUT()"/>
+        <div class="mb-hint" id="tm-hora-dica" style="margin-top:0"></div></div>
     </div>
 
     <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Matriz GUT</label>
@@ -456,8 +499,265 @@ function ordenarCol(lista){
     if (a.prazo && b.prazo && a.prazo !== b.prazo) return a.prazo < b.prazo ? -1 : 1;
     if (a.prazo && !b.prazo) return -1;
     if (b.prazo && !a.prazo) return 1;
+    /* Mesmo dia: quem tem hora marcada vem antes de quem não tem, e entre
+       as duas com hora, a mais cedo. Só desempata — nunca passa na frente
+       do GUT, que continua mandando na fila. */
+    if (a.prazo && b.prazo && a.prazo === b.prazo && (a.hora || b.hora)){
+      if (a.hora && !b.hora) return -1;
+      if (b.hora && !a.hora) return 1;
+      if (a.hora !== b.hora) return a.hora < b.hora ? -1 : 1;
+    }
     return String(a.criado||'').localeCompare(String(b.criado||''));
   });
+}
+
+/* ═══ agenda do Google ═══════════════════════════════════════════════
+   Fonte SEPARADA do quadro. O Firebase pode estar fora e o Google no ar,
+   e vice-versa — cada um reporta o próprio estado, e nenhum dos dois
+   derruba o outro.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ID de cliente OAuth do projeto `ibnet-platform` (o mesmo do Firebase —
+   o 468380845527 na frente é o número do projeto, igual ao
+   messagingSenderId ali em cima). É público por natureza e por isso pode
+   morar num repositório público: quem protege a agenda não é ele, é a
+   origem autorizada no Google Cloud mais a lista de usuários de teste.
+   Chave secreta de cliente NÃO existe neste fluxo e não pode existir. */
+const GOOGLE_CLIENT_ID = '468380845527-j8t6if1pdahi1ri2m05jkvegv065jkpd.apps.googleusercontent.com';
+const GOOGLE_ESCOPO    = 'https://www.googleapis.com/auth/calendar.readonly';
+const GOOGLE_API       = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+/* Prazo para a biblioteca do Google dar sinal de vida. Existe porque
+   `onerror` não cobre "nunca respondeu" — tag ausente não dispara nada. */
+const GIS_PRAZO = 8000;
+
+/* O token vive só aqui, em memória. NUNCA em localStorage: esta página é
+   servida de um repositório público, e token de agenda gravado em disco
+   transforma qualquer falha de script em vazamento da agenda inteira. O
+   preço é uma renovação silenciosa a cada recarga da aba — barato. */
+let _gToken = null;
+let _gExp   = 0;
+let _gCli   = null;
+let _gisSinal = false;   // onload OU onerror já dispararam?
+
+/* iniciando | semlib | desconectado | carregando | ok | vazio | erro */
+let gEstado  = 'iniciando';
+let gErro    = null;
+let gEventos = [];
+let gDia     = hojeISO();
+
+function gisPronto(){
+  return typeof google !== 'undefined' && !!google.accounts && !!google.accounts.oauth2;
+}
+function gisOk(){     _gisSinal = true; gIniciar(); }
+function gisFalhou(){ _gisSinal = true; gEstado = 'semlib'; render(); }
+
+function gCliente(){
+  if (_gCli) return _gCli;
+  if (!gisPronto()) return null;
+  _gCli = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope    : GOOGLE_ESCOPO,
+    callback : function(){},        // trocado a cada pedido, logo abaixo
+    error_callback: function(){},
+  });
+  return _gCli;
+}
+
+/* `interativo=false` é a renovação silenciosa (`prompt:'none'`): sem
+   pop-up, e falha limpa se o Google não puder renovar sozinho.
+   `interativo=true` abre o pop-up — e por isso SÓ pode sair de dentro de
+   um clique, senão o navegador bloqueia por não ter vindo de gesto. */
+function gPedirToken(interativo){
+  return new Promise(function(ok, falha){
+    const cli = gCliente();
+    if (!cli) return falha({ tipo:'semlib' });
+    cli.callback = function(resp){
+      if (resp && resp.access_token){
+        _gToken = resp.access_token;
+        _gExp   = Date.now() + ((+resp.expires_in || 3600) * 1000);
+        ok(_gToken);
+      } else {
+        falha({ tipo:'semtoken', detalhe:(resp && resp.error) || null });
+      }
+    };
+    cli.error_callback = function(err){
+      falha({ tipo:(err && err.type) || 'desconhecido', detalhe:err });
+    };
+    try { cli.requestAccessToken({ prompt: interativo ? '' : 'none' }); }
+    catch(e){ falha({ tipo:'excecao', detalhe:e }); }
+  });
+}
+/* 30s de folga: token que vence no meio da viagem da requisição volta 401
+   e custa uma ida a mais. */
+function gTokenValido(){ return !!_gToken && Date.now() < (_gExp - 30000); }
+function gGarantirToken(){
+  return gTokenValido() ? Promise.resolve(_gToken) : gPedirToken(false);
+}
+
+/* Limites do dia em instante real. Montar por `Date` local e converter
+   para ISO deixa o navegador resolver fuso e horário de verão — string
+   colada à mão erra nos dois. */
+function gJanela(diaISO){
+  const y=+diaISO.slice(0,4), m=+diaISO.slice(5,7), d=+diaISO.slice(8,10);
+  return { min:new Date(y,m-1,d,0,0,0).toISOString(),
+           max:new Date(y,m-1,d+1,0,0,0).toISOString() };
+}
+
+/* Compromisso que EU recusei não aparece: ele ocupa a agenda de quem
+   organizou, não a minha. `self` marca o dono do calendário. */
+function gRecusado(ev){
+  const a = (ev && ev.attendees) || [];
+  for (let i=0;i<a.length;i++) if (a[i] && a[i].self && a[i].responseStatus === 'declined') return true;
+  return false;
+}
+/* Dia inteiro traz `start.date`; com hora, `start.dateTime`. */
+function gDiaInteiro(ev){ return !!(ev && ev.start && ev.start.date); }
+/* O `end.date` do Google é EXCLUSIVO — evento de um dia só termina no dia
+   seguinte. É essa comparação que faz um evento de três dias aparecer nos
+   três, e não só no primeiro. Sem `end.date`, cai para igualdade, senão o
+   evento sumiria em vez de aparecer uma vez. */
+function gCobreODia(ev, diaISO){
+  if (!gDiaInteiro(ev)) return true;
+  const ini = ev.start.date;
+  const fim = (ev.end && ev.end.date) || null;
+  return fim ? (ini <= diaISO && diaISO < fim) : (ini === diaISO);
+}
+function gHHMM(iso){
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null
+       : ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+}
+
+/* Dia inteiro primeiro, depois os com hora em ordem. Separar não é
+   estética: sem isso o evento de dia inteiro encabeça a lista como se
+   fosse 00:00 — e "o dia todo" não é "de madrugada". */
+function gOrganizar(itens, diaISO){
+  const bons = (itens||[]).filter(function(ev){
+    return ev && !gRecusado(ev) && gCobreODia(ev, diaISO);
+  });
+  const inteiro = bons.filter(gDiaInteiro);
+  const comHora = bons.filter(function(ev){ return !gDiaInteiro(ev); })
+    .sort(function(a,b){
+      return String((a.start&&a.start.dateTime)||'')
+        .localeCompare(String((b.start&&b.start.dateTime)||''));
+    });
+  return inteiro.concat(comHora).map(function(ev){
+    const inte = gDiaInteiro(ev);
+    return {
+      id     : ev.id || null,
+      titulo : ev.summary || '(sem título)',
+      local  : ev.location || null,
+      inteiro: inte,
+      hora   : inte ? null : gHHMM(ev.start && ev.start.dateTime),
+      fim    : inte ? null : gHHMM(ev.end   && ev.end.dateTime),
+    };
+  });
+}
+
+function gBuscar(dia, podeRenovar){
+  const j = gJanela(dia);
+  const url = GOOGLE_API +
+    '?timeMin='  + encodeURIComponent(j.min) +
+    '&timeMax='  + encodeURIComponent(j.max) +
+    '&singleEvents=true&orderBy=startTime&showDeleted=false&maxResults=50';
+  return fetch(url, { headers:{ Authorization:'Bearer ' + _gToken } }).then(function(r){
+    /* 401 no meio do uso é token vencido, não falha de rede: renova em
+       silêncio e repete. UMA vez só — renovar em laço vira pop-up infinito
+       quando a permissão foi de fato revogada. */
+    if (r.status === 401 && podeRenovar){
+      _gToken = null; _gExp = 0;
+      return gPedirToken(false).then(function(){ return gBuscar(dia, false); });
+    }
+    if (!r.ok) throw { tipo:'http', status:r.status };
+    return r.json().then(function(j){ return (j && j.items) || []; });
+  });
+}
+
+function gMsgErro(e){
+  const tipo = e && e.tipo;
+  if (tipo === 'http'){
+    if (e.status === 403) return 'O Google recusou o acesso (403). Verifique se a Google Calendar API está ativada no projeto ibnet-platform.';
+    if (e.status === 401) return 'A conexão com o Google expirou e não deu para renovar sozinha.';
+    return 'O Google respondeu com erro ' + e.status + '.';
+  }
+  if (tipo === 'popup_failed_to_open') return 'O navegador bloqueou a janela do Google. Libere o pop-up para este site e tente de novo.';
+  if (tipo === 'popup_closed')         return 'A janela do Google foi fechada antes de autorizar.';
+  if (tipo === 'excecao' || tipo === 'desconhecido' || !tipo)
+    return 'Não foi possível falar com o Google. ' + ((e && e.detalhe && e.detalhe.message) || (e && e.message) || '');
+  return 'Não foi possível falar com o Google (' + tipo + ').';
+}
+
+function gCarregar(){
+  if (!autorizado(session)) return;
+  if (!gisPronto()){ gEstado = 'semlib'; render(); return; }
+  gEstado = 'carregando'; gErro = null; render();
+
+  const dia = gDia;   // o dia pode mudar no meio do caminho; resposta velha não pinta
+  gGarantirToken()
+    .then(function(){ return gBuscar(dia, true); })
+    .then(function(itens){
+      if (dia !== gDia) return;
+      gEventos = gOrganizar(itens, dia);
+      gEstado  = gEventos.length ? 'ok' : 'vazio';
+      gErro    = null;
+      render();
+    })
+    .catch(function(e){
+      if (dia !== gDia) return;
+      gEventos = [];
+      const t = e && e.tipo;
+      if (t === 'semlib')                        gEstado = 'semlib';
+      else if (t === 'semtoken' || t === 'desconhecido' || t === 'user_logged_out')
+        gEstado = 'desconectado';
+      else { gEstado = 'erro'; gErro = gMsgErro(e); }
+      render();
+    });
+}
+
+/* Único caminho interativo — nasce de clique, então pode abrir pop-up. */
+function gConectar(){
+  gEstado = 'carregando'; gErro = null; render();
+  gPedirToken(true)
+    .then(function(){ gCarregar(); })
+    .catch(function(e){
+      if (e && e.tipo === 'semlib'){ gEstado = 'semlib'; }
+      else { gEstado = 'erro'; gErro = gMsgErro(e); }
+      render();
+    });
+}
+
+/* A guarda abaixo repete a de `gCarregar()` de propósito — não é sobra.
+   Tirar qualquer uma das duas sozinha não muda nada (a outra segura), e por
+   isso nenhum teste acusa a remoção; tirar as duas faz a aba de outra pessoa
+   pedir um token do Google em nome do Igor. Num ponto em que o erro é vazar
+   credencial, o par redundante fica. */
+function gIniciar(){
+  if (!autorizado(session)) return;
+  if (gisPronto()) gCarregar();
+  else { gEstado = 'iniciando'; render(); }
+}
+/* O terceiro caso: nem onload nem onerror. Tag removida por bloqueador,
+   rede corporativa que engole a requisição sem responder. Sem este prazo
+   a faixa ficaria em "conectando…" para sempre — que é exatamente a
+   falha muda que o carregamento do Firebase aqui do lado já evita. */
+function gAguardarGis(){
+  setTimeout(function(){
+    if (!_gisSinal && !gisPronto()){ gEstado = 'semlib'; render(); }
+  }, GIS_PRAZO);
+}
+
+function gAndar(passo){
+  const y=+gDia.slice(0,4), m=+gDia.slice(5,7), d=+gDia.slice(8,10);
+  const n = new Date(y, m-1, d+passo);
+  gDia = n.getFullYear() + '-' + ('0'+(n.getMonth()+1)).slice(-2) + '-' + ('0'+n.getDate()).slice(-2);
+  gEventos = [];
+  gCarregar();
+}
+function gHoje(){
+  if (gDia === hojeISO()) return;
+  gDia = hojeISO(); gEventos = [];
+  gCarregar();
 }
 
 /* ── autenticação ─────────────────────────────────────────────────── */
@@ -576,9 +876,15 @@ function render(){
   }
   nova.style.display = '';
 
+  /* A faixa do Google fica FORA dos desvios abaixo de propósito. São duas
+     fontes independentes: o cofre da IBnet caindo não é motivo para sumir
+     com os compromissos, nem o contrário. Estado por fonte, não por tela. */
+  const faixa = htmlAgenda();
+
   if (erroCarga){
     sub.textContent = 'erro ao carregar';
-    el.innerHTML = '<div class="bloqueio" style="border-color:rgba(207,128,128,.45)">' +
+    el.innerHTML = faixa +
+      '<div class="bloqueio" style="border-color:rgba(207,128,128,.45)">' +
       '<div class="bt" style="color:var(--red)">Não deu para carregar</div>' +
       '<div class="bd">' + esc(erroCarga) + '</div>' +
       '<button class="btn" style="margin-top:16px" onclick="recarregar()">Tentar de novo</button></div>';
@@ -586,7 +892,7 @@ function render(){
   }
   if (carregando){
     sub.textContent = 'carregando…';
-    el.innerHTML = '<div class="bloqueio"><div class="bd">Carregando a agenda…</div></div>';
+    el.innerHTML = faixa + '<div class="bloqueio"><div class="bd">Carregando a agenda…</div></div>';
     return;
   }
 
@@ -594,17 +900,82 @@ function render(){
   const abertas= tarefas.filter(t => t.col !== 'feito').length;
   sub.textContent = abertas + (abertas === 1 ? ' tarefa aberta' : ' tarefas abertas');
 
-  el.innerHTML = htmlAvisoGoogle() + htmlPlacar(hoje) + htmlBoard(hoje);
+  el.innerHTML = faixa + htmlPlacar(hoje) + htmlBoard(hoje);
 }
 
-/* O que ainda falta fica na tela, não só no combinado. */
-function htmlAvisoGoogle(){
-  return '<div class="alert info">' +
-    '<svg class="ic"><use href="#ic-agenda"/></svg>' +
-    '<div><b>Agenda do Google: ainda não conectada.</b> Esta primeira parte guarda as ' +
-    'tarefas no cofre da IBnet. Para eu trazer os compromissos do Google e criar evento a ' +
-    'partir de uma tarefa, preciso de um <b>ID de cliente OAuth</b> do Google Cloud — é a ' +
-    'única coisa que depende de você.</div></div>';
+/* "seg, 22/09 · hoje". O apelido do dia existe porque a data sozinha não
+   responde a pergunta que se faz olhando a faixa, que é "isso é hoje?". */
+function fmtDiaLongo(iso){
+  const y=+iso.slice(0,4), m=+iso.slice(5,7), d=+iso.slice(8,10);
+  const dt  = new Date(y, m-1, d);
+  const sem = ['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()];
+  const dd  = diffDias(iso, hojeISO());
+  const rel = dd === 0 ? 'hoje' : dd === 1 ? 'amanhã' : dd === -1 ? 'ontem' : null;
+  return sem + ', ' + fmtData(iso) + (rel ? ' · ' + rel : '');
+}
+
+/* Uma linha de recado, com ação quando existe ação. `html` entra cru —
+   quem chama é que escapa o que veio de fora. */
+function gLinha(html, ruim, acao){
+  return '<div class="ag-msg' + (ruim ? ' ruim' : '') + '">' +
+    (ruim ? '<svg class="ic"><use href="#ic-alerta"/></svg>' : '') +
+    '<div>' + html + (acao ? '<div class="ag-acao">' + acao + '</div>' : '') + '</div></div>';
+}
+
+function htmlAgenda(){
+  const navega = (gEstado === 'ok' || gEstado === 'vazio' || gEstado === 'carregando' || gEstado === 'erro');
+  let corpo;
+
+  switch (gEstado){
+    case 'semlib':
+      corpo = gLinha('<b>Compromissos indisponíveis.</b> A biblioteca do Google não carregou — ' +
+        'costuma ser bloqueador de anúncio ou rede que filtra <b>accounts.google.com</b>. ' +
+        'O quadro abaixo não depende dela e continua inteiro.', true, null);
+      break;
+    case 'desconectado':
+      corpo = gLinha('A agenda do Google ainda não está conectada nesta aba.', false,
+        '<button class="btn btn-sm" onclick="gConectar()">' +
+        '<svg class="ic"><use href="#ic-agenda"/></svg> Conectar agenda do Google</button>');
+      break;
+    case 'erro':
+      corpo = gLinha(esc(gErro || 'Erro desconhecido.'), true,
+        '<button class="btn btn-sm btn-ghost" onclick="gConectar()">Tentar de novo</button>');
+      break;
+    case 'vazio':
+      /* Vazio e quebrado não podem ter a mesma cara: um é notícia boa. */
+      corpo = gLinha('Nenhum compromisso neste dia.', false, null);
+      break;
+    case 'ok':
+      corpo = gEventos.map(function(ev){
+        const h = ev.inteiro ? 'dia inteiro'
+                : (ev.hora || '--:--') + (ev.fim && ev.fim !== ev.hora ? '–' + ev.fim : '');
+        return '<div class="ag-ev' + (ev.inteiro ? ' inteiro' : '') + '">' +
+          '<span class="ag-h">' + esc(h) + '</span>' +
+          '<span class="ag-t">' + esc(ev.titulo) +
+          (ev.local ? '<span class="ag-loc">' + esc(ev.local) + '</span>' : '') +
+          '</span></div>';
+      }).join('');
+      break;
+    default:   // 'iniciando' e qualquer coisa que eu não previ
+      corpo = gLinha('Conectando ao Google…', false, null);
+  }
+
+  return '<div class="ag" id="ag-faixa" data-estado="' + gEstado + '">' +
+    '<div class="ag-head">' +
+      '<svg class="ic"><use href="#ic-agenda"/></svg>' +
+      '<span class="ag-tit">Compromissos</span>' +
+      (navega ? '<span class="ag-dia">' + esc(fmtDiaLongo(gDia)) + '</span>' : '') +
+      (navega ?
+        '<span class="ag-nav">' +
+          (gDia === hojeISO() ? '' :
+            '<button class="btn btn-ghost btn-sm" onclick="gHoje()" title="Voltar para hoje">hoje</button>') +
+          '<button class="icon-btn" onclick="gAndar(-1)" title="Dia anterior">' +
+            '<svg class="ic"><use href="#ic-esq"/></svg></button>' +
+          '<button class="icon-btn" onclick="gAndar(1)" title="Próximo dia">' +
+            '<svg class="ic"><use href="#ic-dir"/></svg></button>' +
+        '</span>' : '') +
+    '</div>' +
+    '<div class="ag-body" id="ag-corpo">' + corpo + '</div></div>';
 }
 
 function htmlPlacar(hoje){
@@ -675,10 +1046,16 @@ function htmlCard(t, hoje){
   let prazo = '';
   if (t.prazo && t.col !== 'feito'){
     const cls = dias < 0 ? ' venceu' : (dias <= 7 ? ' perto' : '');
-    const dica= dias < 0 ? 'Venceu há ' + Math.abs(dias) + ' dia(s)'
-              : dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + ' dia(s)';
+    /* A hora entra na dica e no chip, mas NÃO entra na conta de dias nem
+       no aviso de urgência. Esses dois falam em dias inteiros desde a
+       fatia 1, e mudar a régua agora mexeria em números que ele já lê. A
+       hora está aqui para virar horário de compromisso no Google. */
+    const dica= (dias < 0 ? 'Venceu há ' + Math.abs(dias) + ' dia(s)'
+              : dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + ' dia(s)')
+              + (t.hora ? ' às ' + t.hora : '');
     prazo = '<span class="prazo' + cls + '" title="' + esc(dica) + '">' +
-            '<svg class="ic"><use href="#ic-relogio"/></svg>' + fmtData(t.prazo) + '</span>';
+            '<svg class="ic"><use href="#ic-relogio"/></svg>' + fmtData(t.prazo) +
+            (t.hora ? ' ' + esc(t.hora) : '') + '</span>';
   }
 
   const sinal = av
@@ -786,6 +1163,7 @@ function abrirTarefa(id, colSugerida){
   document.getElementById('tm-nota').value   = t ? (t.nota||'')   : '';
   document.getElementById('tm-col').value    = colSugerida || (t ? t.col : 'entrada');
   document.getElementById('tm-prazo').value  = t ? (t.prazo||'')  : '';
+  document.getElementById('tm-hora').value   = t ? (t.hora||'')   : '';
   document.getElementById('tm-g').value      = t && t.g ? String(t.g) : '';
   document.getElementById('tm-u').value      = t && t.u ? String(t.u) : '';
   document.getElementById('tm-t').value      = t && t.t ? String(t.t) : '';
@@ -809,6 +1187,18 @@ function atualizarPreviaGUT(){
     completo ? '(' + faixaGUT(p).rotulo + ' — de 1 a 125)' : '(precisa dos três)';
 
   const prazo = document.getElementById('tm-prazo').value;
+
+  /* A hora é qualificador do prazo, não campo independente: "às 14:00" de
+     que dia? Enquanto não houver data, o campo fica desligado e vazio —
+     apagar o prazo apaga a hora junto, senão sobra um valor órfão que o
+     registro guarda e ninguém sabe ler depois. */
+  const hEl = document.getElementById('tm-hora');
+  hEl.disabled = !prazo;
+  if (!prazo) hEl.value = '';
+  document.getElementById('tm-hora-dica').textContent = prazo
+    ? 'Vira o horário do compromisso no Google.'
+    : 'Precisa de um prazo antes.';
+
   const av = avisoPrazo({ col:document.getElementById('tm-col').value, prazo:prazo, u:u }, hojeISO());
   const box = document.getElementById('tm-aviso-prazo');
   if (av){ box.innerHTML = '<svg class="ic"><use href="#ic-alerta"/></svg><div>' + esc(av.texto) +
@@ -833,12 +1223,16 @@ function salvarTarefa(){
   }
   erro.style.display = 'none';
 
-  const col = document.getElementById('tm-col').value;
+  const col   = document.getElementById('tm-col').value;
+  const prazo = document.getElementById('tm-prazo').value || null;
   const dados = {
     titulo : titulo,
     nota   : document.getElementById('tm-nota').value.trim() || null,
     col    : col,
-    prazo  : document.getElementById('tm-prazo').value || null,
+    prazo  : prazo,
+    /* Sem prazo, sem hora — a regra se repete aqui e não só na tela,
+       porque a tela pode ser contornada e o registro, não. */
+    hora   : prazo ? (document.getElementById('tm-hora').value || null) : null,
     g:g, u:u, t:t,
   };
 
@@ -908,6 +1302,7 @@ window.addEventListener('message', e => {
     if (!session || session.username !== s.username || session.role !== s.role){
       session = s;
       iniciarDados();
+      gIniciar();     // a sessão pode chegar depois da biblioteca do Google
       render();
     }
   }
@@ -920,12 +1315,21 @@ window.addEventListener('message', e => {
 /* ── boot ─────────────────────────────────────────────────────────── */
 preencherEscalas();
 if (autorizado(session)) { iniciarDados(); } else { carregando = false; }
+gIniciar();
+gAguardarGis();
 render();
 
-/* Ponte para a suíte de testes: expõe as funções puras sem abrir o módulo. */
+/* Ponte para a suíte de testes: expõe as funções puras sem abrir o módulo.
+   O estado do Google sai por função, não por valor — `gEstado` é `let` e
+   uma cópia congelada no boot mentiria a cada rodada seguinte. */
 window.__agenda = {
   produtoGUT, faixaGUT, urgenciaDoPrazo, avisoPrazo, diffDias,
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
+  gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
+  gEstadoAtual : function(){ return gEstado;  },
+  gDiaAtual    : function(){ return gDia;     },
+  gEventosAtuais: function(){ return gEventos; },
+  gErroAtual   : function(){ return gErro;    },
 };
 </script>
 </body>
