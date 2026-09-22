@@ -97,6 +97,49 @@ textarea{resize:vertical;min-height:64px;line-height:1.5}
 .ag-acao{margin-top:10px}
 @media(max-width:560px){.ag-h{flex-basis:74px}}
 
+/* ── vista: dia × mês ──────────────────────────────────────────────── */
+/* Par de botões grudados, o aceso com a cor do tema. Dois botões soltos
+   pareceriam duas ações independentes; grudados leem como UMA escolha
+   entre duas — que é o que são. */
+.ag-vista{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-right:4px}
+.ag-vb{background:transparent;border:none;color:var(--muted);font-family:inherit;cursor:pointer;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:5px 10px;transition:color .15s,background .15s}
+.ag-vb+.ag-vb{border-left:1px solid var(--border)}
+.ag-vb:hover{color:var(--text)}
+.ag-vb.on{background:var(--accent);color:#fff}
+
+/* Sete colunas fixas: a semana tem sete dias, e coluna elástica embaralharia
+   a que dia pertence cada quadrado quando um dia tem mais texto que o outro. */
+.mes-grade{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.mes-sem{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);text-align:center;padding:2px 0 4px}
+.mes-cel{border:1px solid var(--border);border-radius:7px;padding:5px 6px 6px;min-height:74px;
+  cursor:pointer;transition:border-color .15s,background .15s;overflow:hidden}
+.mes-cel:hover{border-color:var(--accent)}
+/* Quadrado antes do dia 1: existe só para empurrar a grade até a coluna certa,
+   então não pode parecer dia — sem borda, sem clique. */
+.mes-cel.fora{border-color:transparent;cursor:default;min-height:0}
+.mes-cel.fora:hover{border-color:transparent}
+.mes-cel.hoje{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.mes-n{font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:3px}
+.mes-cel.hoje .mes-n{color:var(--accent)}
+.mes-ev{font-size:10.5px;line-height:1.35;display:flex;gap:4px;align-items:baseline;
+  margin-top:2px;padding:2px 4px;border-radius:4px;background:rgba(107,140,206,.10)}
+.mes-ev.inteiro{background:rgba(221,92,51,.13)}
+.mes-h{flex:0 0 auto;font-weight:700;color:var(--blue);font-variant-numeric:tabular-nums}
+.mes-ev.inteiro .mes-h{color:var(--accent)}
+/* Título numa linha só, cortado com reticências: evento de nome longo não pode
+   esticar a célula e desalinhar a semana inteira. */
+.mes-t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mes-mais{font-size:9.5px;font-weight:700;color:var(--muted);margin-top:3px;letter-spacing:.3px}
+/* Telas estreitas: a grade some de legível antes de sete colunas caberem, então
+   encolhe tudo em vez de quebrar a semana em duas linhas. */
+@media(max-width:640px){
+  .mes-cel{min-height:56px;padding:4px;border-radius:5px}
+  .mes-ev{font-size:9px;padding:1px 3px}
+  .mes-n{font-size:10px}
+}
+
 /* ── placar (conta a base inteira; os botões recortam só o quadro) ─── */
 .placar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
 .pl{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
@@ -550,6 +593,13 @@ let gEstado  = 'iniciando';
 let gErro    = null;
 let gEventos = [];
 let gDia     = hojeISO();
+/* `dia` | `mes`. A vista muda a JANELA consultada, não um filtro por cima do
+   que já veio: um mês pedido como 30 dias seriam 30 idas ao Google para
+   desenhar uma tela só. Uma janela, uma busca. */
+let gVista   = 'dia';
+/* No mês, o resultado não é uma lista — é um mapa dia → compromissos, porque
+   a grade pergunta "o que tem no 12?" e lista não responde isso sem varrer. */
+let gMes     = {};
 
 function gisPronto(){
   return typeof google !== 'undefined' && !!google.accounts && !!google.accounts.oauth2;
@@ -603,10 +653,29 @@ function gGarantirToken(){
 /* Limites do dia em instante real. Montar por `Date` local e converter
    para ISO deixa o navegador resolver fuso e horário de verão — string
    colada à mão erra nos dois. */
-function gJanela(diaISO){
-  const y=+diaISO.slice(0,4), m=+diaISO.slice(5,7), d=+diaISO.slice(8,10);
-  return { min:new Date(y,m-1,d,0,0,0).toISOString(),
-           max:new Date(y,m-1,d+1,0,0,0).toISOString() };
+function gJanela(diaISO, vista){
+  const y=+diaISO.slice(0,4), m=+diaISO.slice(5,7);
+  /* Dia 0 do mês seguinte é o último dia deste — deixar o `Date` contar
+     evita a tabela de 28/29/30/31 e acerta fevereiro bissexto de graça. */
+  if (vista === 'mes'){
+    return { min:new Date(y,m-1,1,0,0,0).toISOString(),
+             max:new Date(y,m  ,1,0,0,0).toISOString() };
+  }
+  /* O dia sai de `gLimitesDoDia` porque é o MESMO dia que a grade usa para
+     decidir em que quadrado o compromisso cai. */
+  const lim = gLimitesDoDia(diaISO);
+  return { min:new Date(lim.a).toISOString(), max:new Date(lim.b).toISOString() };
+}
+
+/* Os dias do mês de `diaISO`, em ISO, na ordem. A grade precisa deles mesmo
+   quando não há compromisso nenhum: mês vazio ainda é um mês, e desenhar só
+   os dias que têm evento daria uma grade com buracos. */
+function gDiasDoMes(diaISO){
+  const y=+diaISO.slice(0,4), m=+diaISO.slice(5,7);
+  const fim = new Date(y, m, 0).getDate();
+  const out = [];
+  for (let d=1; d<=fim; d++) out.push(y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2));
+  return out;
 }
 
 /* Compromisso que EU recusei não aparece: ele ocupa a agenda de quem
@@ -618,15 +687,47 @@ function gRecusado(ev){
 }
 /* Dia inteiro traz `start.date`; com hora, `start.dateTime`. */
 function gDiaInteiro(ev){ return !!(ev && ev.start && ev.start.date); }
+/* Os dois instantes que delimitam um dia local. Uma definição só, usada pela
+   janela que vai ao Google E pelo filtro que distribui os compromissos na
+   grade: com duas definições, um evento de 23:50 podia estar dentro da
+   consulta e fora do quadrado, e a tela ficaria mentindo sem ninguém saber
+   em qual dos dois lados. */
+function gLimitesDoDia(diaISO){
+  const y=+diaISO.slice(0,4), m=+diaISO.slice(5,7), d=+diaISO.slice(8,10);
+  return { a: new Date(y,m-1,d,0,0,0).getTime(),
+           b: new Date(y,m-1,d+1,0,0,0).getTime() };
+}
+
 /* O `end.date` do Google é EXCLUSIVO — evento de um dia só termina no dia
    seguinte. É essa comparação que faz um evento de três dias aparecer nos
    três, e não só no primeiro. Sem `end.date`, cai para igualdade, senão o
-   evento sumiria em vez de aparecer uma vez. */
+   evento sumiria em vez de aparecer uma vez.
+
+   O caso com hora devolvia `true` seco, e estava certo enquanto a janela
+   consultada era de UM dia: o recorte já tinha sido feito pelo Google, e esta
+   função só precisava resolver dia inteiro. A grade do mês pede a mesma coisa
+   com uma janela de 30 dias, e aí a linha passa a afirmar que todo
+   compromisso é de todo dia — o mês inteiro repetido em cada quadrado.
+   A regra honesta é sobreposição: o evento cobre o dia se ENCOSTA nele. */
 function gCobreODia(ev, diaISO){
-  if (!gDiaInteiro(ev)) return true;
-  const ini = ev.start.date;
-  const fim = (ev.end && ev.end.date) || null;
-  return fim ? (ini <= diaISO && diaISO < fim) : (ini === diaISO);
+  if (gDiaInteiro(ev)){
+    const ini = ev.start.date;
+    const fim = (ev.end && ev.end.date) || null;
+    return fim ? (ini <= diaISO && diaISO < fim) : (ini === diaISO);
+  }
+  const bruto = ev && ev.start && ev.start.dateTime;
+  /* Sem hora legível não é motivo para sumir da tela: some quem foi recusado,
+     não quem veio com campo estranho. */
+  if (!bruto) return true;
+  const t0 = new Date(bruto).getTime();
+  if (isNaN(t0)) return true;
+  const cru = (ev.end && ev.end.dateTime) || bruto;
+  let t1 = new Date(cru).getTime();
+  if (isNaN(t1)) t1 = t0;
+  const lim = gLimitesDoDia(diaISO);
+  /* `t0 >= lim.a` cobre o evento de duração zero em cima da meia-noite, que
+     por `t1 > lim.a` sozinho cairia fora do próprio dia. */
+  return t0 < lim.b && (t1 > lim.a || t0 >= lim.a);
 }
 function gHHMM(iso){
   if (!iso) return null;
@@ -661,23 +762,54 @@ function gOrganizar(itens, diaISO){
   });
 }
 
-function gBuscar(dia, podeRenovar){
-  const j = gJanela(dia);
-  const url = GOOGLE_API +
-    '?timeMin='  + encodeURIComponent(j.min) +
-    '&timeMax='  + encodeURIComponent(j.max) +
-    '&singleEvents=true&orderBy=startTime&showDeleted=false&maxResults=50';
+/* O mesmo `gOrganizar`, aplicado dia a dia. Reusar é o ponto: se a grade do
+   mês tivesse a própria regra de recusa e de dia inteiro, o dia 12 poderia
+   contar uma história na faixa e outra na grade — e a tela ficaria mentindo
+   em um dos dois lugares sem ninguém saber em qual. */
+function gPorDia(itens, diaISO){
+  const mapa = {};
+  gDiasDoMes(diaISO).forEach(function(d){ mapa[d] = gOrganizar(itens, d); });
+  return mapa;
+}
+
+/* Uma página do Google não é o resultado: ele corta em `maxResults` e entrega
+   `nextPageToken` sem avisar que faltou coisa. No dia isso nunca apareceu
+   porque um dia raramente passa de 50 compromissos; no mês passa, e o efeito
+   seria a segunda metade do mês simplesmente não existir na grade. Silêncio
+   com cara de mês tranquilo é o pior defeito possível numa agenda. */
+const GOOGLE_PAG_MAX = 10;
+function gPaginar(base, podeRenovar, token, acc, volta){
+  const url = base + (token ? '&pageToken=' + encodeURIComponent(token) : '');
   return fetch(url, { headers:{ Authorization:'Bearer ' + _gToken } }).then(function(r){
     /* 401 no meio do uso é token vencido, não falha de rede: renova em
        silêncio e repete. UMA vez só — renovar em laço vira pop-up infinito
        quando a permissão foi de fato revogada. */
     if (r.status === 401 && podeRenovar){
       _gToken = null; _gExp = 0;
-      return gPedirToken(false).then(function(){ return gBuscar(dia, false); });
+      return gPedirToken(false).then(function(){
+        return gPaginar(base, false, token, acc, volta);
+      });
     }
     if (!r.ok) throw { tipo:'http', status:r.status };
-    return r.json().then(function(j){ return (j && j.items) || []; });
+    return r.json().then(function(j){
+      const tudo = acc.concat((j && j.items) || []);
+      const prox = j && j.nextPageToken;
+      /* Teto de páginas: token que volta para sempre é laço infinito contra o
+         Google, e um laço desses queima a cota da conta do Igor em segundos.
+         Mesma lição do 401 que podia renovar em laço. */
+      if (prox && volta < GOOGLE_PAG_MAX) return gPaginar(base, false, prox, tudo, volta+1);
+      return tudo;
+    });
   });
+}
+
+function gBuscar(dia, podeRenovar, vista){
+  const j = gJanela(dia, vista);
+  const base = GOOGLE_API +
+    '?timeMin='  + encodeURIComponent(j.min) +
+    '&timeMax='  + encodeURIComponent(j.max) +
+    '&singleEvents=true&orderBy=startTime&showDeleted=false&maxResults=250';
+  return gPaginar(base, podeRenovar, null, [], 0);
 }
 
 function gMsgErro(e){
@@ -699,19 +831,33 @@ function gCarregar(){
   if (!gisPronto()){ gEstado = 'semlib'; render(); return; }
   gEstado = 'carregando'; gErro = null; render();
 
-  const dia = gDia;   // o dia pode mudar no meio do caminho; resposta velha não pinta
+  /* O dia pode mudar no meio do caminho; resposta velha não pinta. A VISTA
+     também: trocar de mês para dia enquanto a busca do mês volta pintaria a
+     grade por cima da faixa. Guardar as duas, não só o dia. */
+  const dia = gDia, vista = gVista;
   gGarantirToken()
-    .then(function(){ return gBuscar(dia, true); })
+    .then(function(){ return gBuscar(dia, true, vista); })
     .then(function(itens){
-      if (dia !== gDia) return;
-      gEventos = gOrganizar(itens, dia);
-      gEstado  = gEventos.length ? 'ok' : 'vazio';
+      if (dia !== gDia || vista !== gVista) return;
+      if (vista === 'mes'){
+        gMes     = gPorDia(itens, dia);
+        gEventos = [];
+        /* "Tem alguma coisa no mês?" é a soma dos dias — e é ela que decide
+           entre `ok` e `vazio`, do mesmo jeito que no dia. Mês sem nada é
+           notícia boa, não falha. */
+        gEstado  = gDiasDoMes(dia).some(function(d){ return gMes[d].length; }) ? 'ok' : 'vazio';
+      } else {
+        gMes     = {};
+        gEventos = gOrganizar(itens, dia);
+        gEstado  = gEventos.length ? 'ok' : 'vazio';
+      }
       gErro    = null;
       render();
     })
     .catch(function(e){
-      if (dia !== gDia) return;
+      if (dia !== gDia || vista !== gVista) return;
       gEventos = [];
+      gMes     = {};
       const t = e && e.tipo;
       if (t === 'semlib')                        gEstado = 'semlib';
       else if (t === 'semtoken' || t === 'desconhecido' || t === 'user_logged_out')
@@ -753,16 +899,48 @@ function gAguardarGis(){
   }, GIS_PRAZO);
 }
 
+function gISO(dt){
+  return dt.getFullYear() + '-' + ('0'+(dt.getMonth()+1)).slice(-2) + '-' + ('0'+dt.getDate()).slice(-2);
+}
+/* A seta anda na unidade que está na tela: no mês ela pula o mês inteiro. Seta
+   que anda um dia dentro da grade do mês trocaria o rótulo em 29 cliques de 30
+   sem mudar nada do que se vê — botão que parece quebrado por estar certo. */
 function gAndar(passo){
   const y=+gDia.slice(0,4), m=+gDia.slice(5,7), d=+gDia.slice(8,10);
-  const n = new Date(y, m-1, d+passo);
-  gDia = n.getFullYear() + '-' + ('0'+(n.getMonth()+1)).slice(-2) + '-' + ('0'+n.getDate()).slice(-2);
-  gEventos = [];
+  let n;
+  if (gVista === 'mes'){
+    /* Dia 1 antes de somar: 31/01 + 1 mês vira 03/03, porque 31/02 não
+       existe e o `Date` transborda. Andar pelo dia 1 é imune a isso. */
+    n = new Date(y, m-1+passo, 1);
+  } else {
+    n = new Date(y, m-1, d+passo);
+  }
+  gDia = gISO(n);
+  gEventos = []; gMes = {};
   gCarregar();
 }
 function gHoje(){
-  if (gDia === hojeISO()) return;
-  gDia = hojeISO(); gEventos = [];
+  const hoje = hojeISO();
+  /* No mês, "hoje" é o MÊS de hoje — já estar em outro dia do mesmo mês não
+     é motivo para uma ida ao Google que devolveria a mesma grade. */
+  const mesmo = gVista === 'mes' ? gDia.slice(0,7) === hoje.slice(0,7) : gDia === hoje;
+  if (mesmo) return;
+  gDia = hoje; gEventos = []; gMes = {};
+  gCarregar();
+}
+/* Trocar de vista é trocar a janela consultada, então recarrega. Sem isso a
+   grade do mês nasceria com os compromissos de um dia só. */
+function gTrocarVista(v){
+  if (v !== 'dia' && v !== 'mes') return;
+  if (v === gVista) return;
+  gVista   = v;
+  gEventos = []; gMes = {};
+  gCarregar();
+}
+/* Clicar num dia da grade abre aquele dia — a grade responde "onde", e a
+   faixa do dia responde "o quê". */
+function gAbrirDia(iso){
+  gDia = iso; gVista = 'dia'; gEventos = []; gMes = {};
   gCarregar();
 }
 
@@ -986,6 +1164,46 @@ function fmtDiaLongo(iso){
   return sem + ', ' + fmtData(iso) + (rel ? ' · ' + rel : '');
 }
 
+const MESES_LONGOS = ['janeiro','fevereiro','março','abril','maio','junho',
+                      'julho','agosto','setembro','outubro','novembro','dezembro'];
+function fmtMesLongo(iso){
+  return MESES_LONGOS[+iso.slice(5,7) - 1] + ' de ' + iso.slice(0,4);
+}
+
+/* A grade do mês. Três decisões que valem o comentário:
+   - Começa no domingo e preenche os quadrados vazios ANTES do dia 1, senão a
+     coluna de um dia não corresponde ao dia da semana e a grade mente.
+   - Mostra no máximo dois compromissos por dia e resume o resto em "+N". Dia
+     cheio que empurra a grade para fora da tela não informa, atrapalha.
+   - Dia sem nada fica vazio de propósito, sem "nenhum compromisso": trinta
+     repetições dessa frase é ruído, e o vazio já é a informação. */
+const MES_POR_DIA = 2;
+function htmlGradeMes(){
+  const dias = gDiasDoMes(gDia), hoje = hojeISO();
+  const prim = new Date(+dias[0].slice(0,4), +dias[0].slice(5,7)-1, 1).getDay();
+  const cab = ['dom','seg','ter','qua','qui','sex','sáb'].map(function(s){
+    return '<div class="mes-sem">' + s + '</div>';
+  }).join('');
+  let cels = '';
+  for (let i=0;i<prim;i++) cels += '<div class="mes-cel fora"></div>';
+  dias.forEach(function(d){
+    const evs = (gMes && gMes[d]) || [];
+    const lista = evs.slice(0, MES_POR_DIA).map(function(ev){
+      const h = ev.inteiro ? '' : '<span class="mes-h">' + esc(ev.hora || '') + '</span>';
+      return '<div class="mes-ev' + (ev.inteiro ? ' inteiro' : '') + '" title="' +
+        esc((ev.inteiro ? 'dia inteiro' : (ev.hora || '')) + ' ' + ev.titulo) + '">' +
+        h + '<span class="mes-t">' + esc(ev.titulo) + '</span></div>';
+    }).join('');
+    const sobra = evs.length - MES_POR_DIA;
+    cels += '<div class="mes-cel' + (d === hoje ? ' hoje' : '') + '"' +
+      ' onclick="gAbrirDia(\'' + d + '\')" title="Abrir ' + esc(fmtData(d)) + '">' +
+      '<div class="mes-n">' + (+d.slice(8,10)) + '</div>' + lista +
+      (sobra > 0 ? '<div class="mes-mais">+' + sobra + '</div>' : '') +
+      '</div>';
+  });
+  return '<div class="mes-grade">' + cab + cels + '</div>';
+}
+
 /* Uma linha de recado, com ação quando existe ação. `html` entra cru —
    quem chama é que escapa o que veio de fora. */
 function gLinha(html, ruim, acao){
@@ -994,8 +1212,27 @@ function gLinha(html, ruim, acao){
     '<div>' + html + (acao ? '<div class="ag-acao">' + acao + '</div>' : '') + '</div></div>';
 }
 
+/* O botão de vista. Fica fora do `navega` de propósito: quando a faixa está
+   desconectada ou sem biblioteca não há janela nenhuma para trocar, e oferecer
+   a troca ali seria botão que não muda nada na tela. */
+function gBotoesVista(){
+  const b = (v, rot, dica) =>
+    '<button class="ag-vb' + (gVista === v ? ' on' : '') + '"' +
+    ' onclick="gTrocarVista(\'' + v + '\')" title="' + esc(dica) + '"' +
+    (gVista === v ? ' aria-current="true"' : '') + '>' + rot + '</button>';
+  return '<span class="ag-vista">' +
+    b('dia', 'dia', 'Ver um dia de cada vez') +
+    b('mes', 'mês', 'Ver o mês inteiro em grade') +
+    '</span>';
+}
+
 function htmlAgenda(){
   const navega = (gEstado === 'ok' || gEstado === 'vazio' || gEstado === 'carregando' || gEstado === 'erro');
+  const mes    = gVista === 'mes';
+  /* Já estar no período da tela é o que esconde o "hoje" — e no mês o período
+     é o MÊS. Comparar o dia aqui deixaria o botão aceso o mês inteiro,
+     prometendo um pulo que não acontece. */
+  const naData = mes ? gDia.slice(0,7) === hojeISO().slice(0,7) : gDia === hojeISO();
   let corpo;
 
   switch (gEstado){
@@ -1014,10 +1251,16 @@ function htmlAgenda(){
         '<button class="btn btn-sm btn-ghost" onclick="gConectar()">Tentar de novo</button>');
       break;
     case 'vazio':
-      /* Vazio e quebrado não podem ter a mesma cara: um é notícia boa. */
-      corpo = gLinha('Nenhum compromisso neste dia.', false, null);
+      /* Vazio e quebrado não podem ter a mesma cara: um é notícia boa.
+         No mês a grade aparece mesmo vazia — trinta quadrados em branco são a
+         resposta, e sumir com ela deixaria a tela idêntica à de quem ainda não
+         carregou. A frase fica junto para dizer que o mês FOI lido. */
+      corpo = mes
+        ? htmlGradeMes() + gLinha('Nenhum compromisso em ' + esc(fmtMesLongo(gDia)) + '.', false, null)
+        : gLinha('Nenhum compromisso neste dia.', false, null);
       break;
     case 'ok':
+      if (mes){ corpo = htmlGradeMes(); break; }
       corpo = gEventos.map(function(ev){
         const h = ev.inteiro ? 'dia inteiro'
                 : (ev.hora || '--:--') + (ev.fim && ev.fim !== ev.hora ? '–' + ev.fim : '');
@@ -1032,18 +1275,25 @@ function htmlAgenda(){
       corpo = gLinha('Conectando ao Google…', false, null);
   }
 
-  return '<div class="ag" id="ag-faixa" data-estado="' + gEstado + '">' +
+  return '<div class="ag" id="ag-faixa" data-estado="' + gEstado + '" data-vista="' + gVista + '">' +
     '<div class="ag-head">' +
       '<svg class="ic"><use href="#ic-agenda"/></svg>' +
       '<span class="ag-tit">Compromissos</span>' +
-      (navega ? '<span class="ag-dia">' + esc(fmtDiaLongo(gDia)) + '</span>' : '') +
+      /* O rótulo tem de falar a unidade da tela: "segunda, 22/09/2026" em cima
+         de uma grade de mês é legenda de outra coisa. */
+      (navega ? '<span class="ag-dia">' +
+        esc(mes ? fmtMesLongo(gDia) : fmtDiaLongo(gDia)) + '</span>' : '') +
       (navega ?
         '<span class="ag-nav">' +
-          (gDia === hojeISO() ? '' :
-            '<button class="btn btn-ghost btn-sm" onclick="gHoje()" title="Voltar para hoje">hoje</button>') +
-          '<button class="icon-btn" onclick="gAndar(-1)" title="Dia anterior">' +
+          gBotoesVista() +
+          (naData ? '' :
+            '<button class="btn btn-ghost btn-sm" onclick="gHoje()" title="' +
+              (mes ? 'Voltar para o mês atual' : 'Voltar para hoje') + '">hoje</button>') +
+          '<button class="icon-btn" onclick="gAndar(-1)" title="' +
+            (mes ? 'Mês anterior' : 'Dia anterior') + '">' +
             '<svg class="ic"><use href="#ic-esq"/></svg></button>' +
-          '<button class="icon-btn" onclick="gAndar(1)" title="Próximo dia">' +
+          '<button class="icon-btn" onclick="gAndar(1)" title="' +
+            (mes ? 'Próximo mês' : 'Próximo dia') + '">' +
             '<svg class="ic"><use href="#ic-dir"/></svg></button>' +
         '</span>' : '') +
     '</div>' +
@@ -1402,12 +1652,15 @@ window.__agenda = {
   produtoGUT, faixaGUT, urgenciaDoPrazo, avisoPrazo, diffDias,
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
+  gDiasDoMes, gPorDia, fmtMesLongo, gTrocarVista, gAbrirDia, gAndar, gHoje,
   semSessaoAtual: function(){ return semSessao; },
   erroContaAtual: function(){ return erroConta; },
   gEstadoAtual : function(){ return gEstado;  },
   gDiaAtual    : function(){ return gDia;     },
   gEventosAtuais: function(){ return gEventos; },
   gErroAtual   : function(){ return gErro;    },
+  gVistaAtual  : function(){ return gVista;   },
+  gMesAtual    : function(){ return gMes;     },
 };
 </script>
 </body>
