@@ -600,6 +600,14 @@ function ordenarCol(lista){
 const GOOGLE_CLIENT_ID = '468380845527-j8t6if1pdahi1ri2m05jkvegv065jkpd.apps.googleusercontent.com';
 const GOOGLE_ESCOPO    = 'https://www.googleapis.com/auth/calendar.readonly';
 const GOOGLE_API       = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+/* A agenda separada que vai receber os prazos das tarefas. O nome é o
+   contrato: não existe escopo do Google por agenda — `calendar.events.owned`
+   dá acesso a TODAS as agendas dele —, então quem decide o destino é este
+   código, e a única âncora que ele tem é o nome que o Igor digitou lá.
+   Por isso o nome é sem acento e sem travessão: caractere que se digita de
+   dois jeitos vira um "por que não funciona?" sem pista. */
+const GOOGLE_AGENDA_TAREFAS = 'IBnet Tarefas';
+const GOOGLE_CAL_LISTA      = 'https://www.googleapis.com/calendar/v3/users/me/calendarList';
 /* Prazo para a biblioteca do Google dar sinal de vida. Existe porque
    `onerror` não cobre "nunca respondeu" — tag ausente não dispara nada. */
 const GIS_PRAZO = 8000;
@@ -616,6 +624,17 @@ let _gisSinal = false;   // onload OU onerror já dispararam?
 /* iniciando | semlib | desconectado | carregando | ok | vazio | erro */
 let gEstado  = 'iniciando';
 let gErro    = null;
+/* O estado da AGENDA DE DESTINO é próprio, e não um pedaço de `gEstado`.
+   São duas perguntas diferentes — "consigo ler meus compromissos?" e "existe
+   um lugar certo para gravar meus prazos?" — e elas falham por motivos
+   diferentes. Fundidas, um erro de leitura apagaria o recado que ensina o
+   Igor a criar a agenda, que é justamente o recado que resolve o problema.
+   Mesma regra de estado por fonte que já separa o Firebase do Google aqui.
+   nao-procurei | procurando | achou | sem-agenda | duplicada | principal |
+   sem-dono | erro */
+let gCalEstado = 'nao-procurei';
+let gCalId     = null;
+let gCalErro   = null;
 let gEventos = [];
 let gDia     = hojeISO();
 /* `dia` | `mes`. A vista muda a JANELA consultada, não um filtro por cima do
@@ -843,6 +862,50 @@ function gFatias(nEv, nTk, teto){
   return { ev:ev, tk:Math.min(nTk, teto - ev) };
 }
 
+/* O nome da agenda é escrito por duas pessoas: o Igor digita no Google, o
+   código procura aqui. Caixa, acento e espaço dobrado são as três diferenças
+   que ninguém enxerga relendo — e qualquer uma delas faria o sistema jurar
+   que a agenda não existe enquanto ela está aberta na tela dele. */
+function gNomeNorm(s){
+  return String(s == null ? '' : s)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/* Qual agenda do Google recebe os prazos — função pura de propósito, porque a
+   decisão de gravar ou recusar é a parte que precisa ser verificável sem rede.
+
+   Recusar é o comportamento normal aqui, não a exceção. O Google não tem
+   escopo por agenda: o token vai poder escrever em todas as agendas dele,
+   inclusive na principal. Então esta função é a única trava real, e ela erra
+   para o lado de não escrever. As quatro recusas são quatro maneiras
+   diferentes de a tarefa ir para o lugar errado EM SILÊNCIO — que é a falha
+   pior de todas, porque o sistema diz "mandei" e a agenda dele não tem nada.
+
+   - `principal`: o Google deixa renomear a agenda principal. Gravar nela
+     misturaria tarefa com compromisso de verdade, o oposto do combinado.
+   - `duplicada`: o Google deixa ter duas agendas com o mesmo nome. Escolher
+     uma das duas gravaria numa e ele olharia a outra — e nada na tela
+     explicaria por quê.
+   - `sem-dono`: agenda de outra pessoa que ele só assina. `events.owned` não
+     escreve nela, então isso voltaria 403 na hora de gravar; recusar antes
+     troca um erro do Google por um recado que diz o que fazer.
+   - agenda achada sem `id` é resposta quebrada, não agenda inexistente:
+     mandar ele criar o que já existe seria o recado errado. */
+function gEscolherAgenda(itens, nome){
+  const alvo = gNomeNorm(nome);
+  const achadas = (itens||[]).filter(function(c){
+    return c && !c.deleted && gNomeNorm(c.summary) === alvo;
+  });
+  if (!achadas.length)    return { estado:'sem-agenda', id:null };
+  if (achadas.length > 1) return { estado:'duplicada',  id:null };
+  const c = achadas[0];
+  if (c.primary)                return { estado:'principal', id:null };
+  if (c.accessRole !== 'owner') return { estado:'sem-dono',  id:null };
+  if (!c.id)                    return { estado:'erro',      id:null };
+  return { estado:'achou', id:c.id };
+}
+
 /* Uma página do Google não é o resultado: ele corta em `maxResults` e entrega
    `nextPageToken` sem avisar que faltou coisa. No dia isso nunca apareceu
    porque um dia raramente passa de 50 compromissos; no mês passa, e o efeito
@@ -880,6 +943,19 @@ function gBuscar(dia, podeRenovar, vista){
     '?timeMin='  + encodeURIComponent(j.min) +
     '&timeMax='  + encodeURIComponent(j.max) +
     '&singleEvents=true&orderBy=startTime&showDeleted=false&maxResults=250';
+  return gPaginar(base, podeRenovar, null, [], 0);
+}
+
+/* A lista de agendas dele. Reusa `gPaginar` — o 401 que renova uma vez só e o
+   teto de páginas valem aqui pelo mesmo motivo que valem nos eventos, e
+   escrever uma segunda paginação seria manter duas regras de laço infinito.
+
+   `minAccessRole=owner` NÃO entra, e a tentação é grande: filtrar no servidor
+   transformaria "existe, mas não é sua" em "não existe", e aí a tela mandaria
+   ele criar uma agenda que está aberta na frente dele. Filtro que some com o
+   caso troca um recado certo por um recado que não resolve nada. */
+function gBuscarAgendas(podeRenovar){
+  const base = GOOGLE_CAL_LISTA + '?maxResults=250&showDeleted=false';
   return gPaginar(base, podeRenovar, null, [], 0);
 }
 
@@ -924,6 +1000,10 @@ function gCarregar(){
       }
       gErro    = null;
       render();
+      /* Depois de pintar, nunca antes: a agenda de destino é assunto da
+         gravação, e fazer a tela esperar por ela atrasaria os compromissos
+         por causa de um pedido que não muda nada do que se vê hoje. */
+      gConferirAgenda(false);
     })
     .catch(function(e){
       if (dia !== gDia || vista !== gVista) return;
@@ -934,6 +1014,34 @@ function gCarregar(){
       else if (t === 'semtoken' || t === 'desconhecido' || t === 'user_logged_out')
         gEstado = 'desconectado';
       else { gEstado = 'erro'; gErro = gMsgErro(e); }
+      render();
+    });
+}
+
+/* Onde os prazos vão gravar. Procurada UMA vez por sessão: a lista de agendas
+   não muda enquanto ele anda de dia, e um pedido por clique de seta gastaria
+   cota para ouvir sempre a mesma resposta.
+
+   `forcar` é o "verificar de novo" da tela, e é o motivo de este botão
+   existir: sem ele, criar a agenda no Google exigiria recarregar a aba — e
+   recarregar é exatamente o que ninguém pensa em fazer quando a tela acabou
+   de dizer que está tudo certo do outro lado.
+
+   Falhar aqui não mexe em `gEstado`: a lista de agendas cair não pode apagar
+   os compromissos que já estão na tela. */
+function gConferirAgenda(forcar){
+  if (!autorizado(session)) return;
+  if (!forcar && gCalEstado !== 'nao-procurei') return;
+  gCalEstado = 'procurando'; gCalErro = null; render();
+  gGarantirToken()
+    .then(function(){ return gBuscarAgendas(true); })
+    .then(function(itens){
+      const r = gEscolherAgenda(itens, GOOGLE_AGENDA_TAREFAS);
+      gCalEstado = r.estado; gCalId = r.id; gCalErro = null;
+      render();
+    })
+    .catch(function(e){
+      gCalEstado = 'erro'; gCalId = null; gCalErro = gMsgErro(e);
       render();
     });
 }
@@ -1320,6 +1428,51 @@ function gLinha(html, ruim, acao){
 /* O botão de vista. Fica fora do `navega` de propósito: quando a faixa está
    desconectada ou sem biblioteca não há janela nenhuma para trocar, e oferecer
    a troca ali seria botão que não muda nada na tela. */
+/* A tira de configuração da agenda de destino. Ela só existe enquanto houver
+   o que resolver ou o que confirmar — tela que repete "está tudo certo" a cada
+   visita ensina a não ler.
+
+   O texto de `achou` diz que a agenda foi ENCONTRADA e que o envio vem na
+   etapa seguinte. Dizer "os prazos vão para o Google" aqui seria promessa de
+   uma coisa que este bloco não faz: nada é gravado ainda. Promessa adiantada
+   na tela é o defeito que vira "achei que já funcionava" duas semanas depois.
+
+   `data-cal` é o estado legível por máquina. A bancada confere por ele, não
+   pela frase — frase muda de redação sem mudar de significado, e teste preso
+   à redação reprova por motivo errado. */
+function gSetupAgenda(){
+  if (gCalEstado === 'nao-procurei') return '';
+  const nome = '<b>' + esc(GOOGLE_AGENDA_TAREFAS) + '</b>';
+  const dnv  = '<button class="btn btn-sm btn-ghost" onclick="gConferirAgenda(true)">' +
+               'Verificar de novo</button>';
+  let txt, ruim = true, acao = dnv;
+
+  switch (gCalEstado){
+    case 'procurando':
+      txt = 'Procurando a agenda ' + nome + ' no Google…'; ruim = false; acao = null; break;
+    case 'achou':
+      txt = 'Agenda ' + nome + ' encontrada no Google. ' +
+            'O envio dos prazos entra na próxima etapa.'; ruim = false; acao = null; break;
+    case 'sem-agenda':
+      txt = 'Para os prazos irem ao Google, crie uma agenda chamada ' + nome +
+            ' no Google Agenda. Enquanto ela não existir, nada é enviado.'; break;
+    case 'duplicada':
+      txt = 'Há mais de uma agenda chamada ' + nome + ' no seu Google. ' +
+            'Deixe só uma: com duas, o prazo iria para uma e você olharia a outra.'; break;
+    case 'principal':
+      txt = nome + ' é o nome da sua agenda principal. Os prazos não vão para ' +
+            'ela — crie uma agenda separada com esse nome, para poder desligar ' +
+            'a visualização sem mexer nos seus compromissos.'; break;
+    case 'sem-dono':
+      txt = 'A agenda ' + nome + ' que apareceu é de outra pessoa, você só a ' +
+            'assina. Crie uma agenda sua com esse nome.'; break;
+    default:   // 'erro'
+      txt = esc(gCalErro || 'Não foi possível ler a lista de agendas do Google.');
+  }
+  return '<div id="ag-setup" data-cal="' + gCalEstado + '">' +
+         gLinha(txt, ruim, acao) + '</div>';
+}
+
 function gBotoesVista(){
   const b = (v, rot, dica) =>
     '<button class="ag-vb' + (gVista === v ? ' on' : '') + '"' +
@@ -1415,7 +1568,13 @@ function htmlAgenda(){
             '<svg class="ic"><use href="#ic-dir"/></svg></button>' +
         '</span>' : '') +
     '</div>' +
-    '<div class="ag-body" id="ag-corpo">' + corpo + '</div></div>';
+    /* A tira fica FORA do corpo de propósito: o corpo é a resposta do dia
+       ("o que eu tenho hoje?") e a tira é recado de configuração. Dentro, ela
+       viraria mais uma linha entre os compromissos e seria lida como se fosse
+       um deles — e um recado com forma de compromisso é exatamente o que
+       ensina o olho a errar. */
+    '<div class="ag-body" id="ag-corpo">' + corpo + '</div>' +
+    gSetupAgenda() + '</div>';
 }
 
 function htmlPlacar(hoje){
@@ -1771,8 +1930,10 @@ window.__agenda = {
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
   gDiasDoMes, gPorDia, fmtMesLongo, gTrocarVista, gAbrirDia, gAndar, gHoje,
-  gTarefasDoDia, gFatias,
+  gTarefasDoDia, gFatias, gNomeNorm, gEscolherAgenda, GOOGLE_AGENDA_TAREFAS,
   semSessaoAtual: function(){ return semSessao; },
+  gCalEstadoAtual: function(){ return gCalEstado; },
+  gCalIdAtual   : function(){ return gCalId;     },
   erroContaAtual: function(){ return erroConta; },
   gEstadoAtual : function(){ return gEstado;  },
   gDiaAtual    : function(){ return gDia;     },
