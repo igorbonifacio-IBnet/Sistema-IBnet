@@ -91,6 +91,18 @@ textarea{resize:vertical;min-height:64px;line-height:1.5}
 .ag-ev.inteiro .ag-h{color:var(--blue)}
 .ag-t{flex:1;word-break:break-word}
 .ag-loc{font-size:11px;color:var(--muted);display:block;margin-top:2px}
+/* A tarefa na faixa do dia usa a mesma grade de duas colunas do compromisso,
+   mas classe própria: a coluna da esquerda é onde se lê "quando", e para uma
+   tarefa a resposta é a palavra "tarefa" — quem diz o que a linha é fica no
+   mesmo lugar em que se lê a hora, não num rótulo solto no fim. */
+.ag-tk{display:flex;gap:12px;align-items:baseline;padding:6px 0;font-size:12.5px;line-height:1.5}
+.ag-ev+.ag-tk,.ag-tk+.ag-tk{border-top:1px dashed var(--border)}
+/* Sem `text-transform`: a coluna da hora do compromisso também não tem, e
+   maiúscula de CSS deixa a tela dizendo "TAREFA" enquanto o documento diz
+   "tarefa" — duas verdades sobre o mesmo texto, e a asserção confere a errada. */
+.ag-tk .ag-h{color:var(--green);letter-spacing:.4px}
+.ag-tk.venceu .ag-h{color:var(--red)}
+.ag-tk.venceu .ag-loc{color:var(--red)}
 .ag-msg{font-size:12.5px;color:var(--muted);line-height:1.6;display:flex;align-items:flex-start;gap:9px;padding:3px 0}
 .ag-msg.ruim{color:var(--yellow)}
 .ag-msg .ic{flex:0 0 auto;font-size:14px;margin-top:2px}
@@ -132,11 +144,24 @@ textarea{resize:vertical;min-height:64px;line-height:1.5}
    esticar a célula e desalinhar a semana inteira. */
 .mes-t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mes-mais{font-size:9.5px;font-weight:700;color:var(--muted);margin-top:3px;letter-spacing:.3px}
+/* Tarefa na grade. O que separa das duas caras de compromisso é a FORMA, não a
+   cor: compromisso vem preenchido (é bloco de tempo, tem começo e fim), tarefa
+   vem em contorno, só a barra da esquerda (é um vencimento, não um intervalo).
+   Com uma terceira cor de fundo a célula teria três retângulos iguais em três
+   tons — e quem lê rápido não distingue tom, distingue cheio de vazio. */
+.mes-tk{font-size:10.5px;line-height:1.35;display:flex;gap:4px;align-items:baseline;
+  margin-top:2px;padding:1px 4px 1px 5px;border-left:2px solid var(--green)}
+.mes-tk .mes-h{color:var(--green)}
+/* Prazo vencido é a única coisa que a posição na grade NÃO conta sozinha: o
+   quadrado diz que dia é, não diz que a tarefa continua aberta depois dele. */
+.mes-tk.venceu{border-left-color:var(--red)}
+.mes-tk.venceu .mes-h,.mes-tk.venceu .mes-t{color:var(--red)}
 /* Telas estreitas: a grade some de legível antes de sete colunas caberem, então
    encolhe tudo em vez de quebrar a semana em duas linhas. */
 @media(max-width:640px){
   .mes-cel{min-height:56px;padding:4px;border-radius:5px}
   .mes-ev{font-size:9px;padding:1px 3px}
+  .mes-tk{font-size:9px;padding:1px 3px 1px 4px}
   .mes-n{font-size:10px}
 }
 
@@ -443,7 +468,7 @@ const COLS = [
 const COL_IDS  = COLS.map(c => c.id);
 const COL_NOME = Object.fromEntries(COLS.map(c => [c.id, c.nome]));
 
-let tarefas   = [];      // [{id, titulo, nota, col, g, u, t, prazo, criado, feitoEm, origem}]
+let tarefas   = [];      // [{id, titulo, nota, col, g, u, t, prazo, hora, criado, feitoEm, origem}]
 let foco      = 'todas'; // recorte do quadro — NUNCA recorta o placar
 let editId    = null;
 let delId     = null;
@@ -770,6 +795,52 @@ function gPorDia(itens, diaISO){
   const mapa = {};
   gDiasDoMes(diaISO).forEach(function(d){ mapa[d] = gOrganizar(itens, d); });
   return mapa;
+}
+
+/* As tarefas que vencem NESTE dia, no formato que a tela já sabe desenhar.
+   Prazo é a única data que uma tarefa tem, então é por ele que ela entra no
+   quadrado — e é por isso que tarefa sem prazo não aparece em lugar nenhum da
+   agenda: ela não tem dia, tem coluna.
+
+   `feito` fica de fora, e isso não é escolha nova: nenhum recorte do placar
+   conta tarefa feita, e o próprio cartão esconde o chip de prazo quando ela é
+   concluída. Prazo de tarefa feita deixou de ser compromisso e virou
+   histórico; pintar na grade o que o cartão ao lado esconde deixaria a tela
+   com duas opiniões sobre a mesma tarefa.
+
+   A ordem é `ordenarCol`, a MESMA do quadro. A célula quase sempre só cabe
+   uma, e a que aparece tem de ser a que o quadro também põe em primeiro
+   lugar — com duas ordens, o dia 12 teria uma tarefa "mais importante" na
+   grade e outra na coluna, e nenhuma das duas seria verificável. */
+function gTarefasDoDia(lista, diaISO, hoje){
+  const doDia = (lista||[]).filter(function(t){
+    return t && t.col !== 'feito' && t.prazo === diaISO;
+  });
+  const atrasada = diffDias(diaISO, hoje) < 0;
+  return ordenarCol(doDia).map(function(t){
+    return {
+      id      : t.id || null,
+      titulo  : t.titulo || '(sem título)',
+      hora    : t.hora || null,
+      col     : t.col,
+      atrasada: atrasada,
+    };
+  });
+}
+
+/* Quantas linhas cada lado leva quando os dois disputam a mesma célula.
+   Juntar tudo numa lista e cortar no teto deixaria o lado mais cheio engolir o
+   outro: um dia com quatro compromissos apagaria a tarefa que vence nele —
+   exatamente o que a tarefa na grade existe para mostrar. Quem tem item leva
+   pelo menos uma linha; a folga que sobrar vai para o compromisso, que tem
+   hora marcada e não se remarca sozinho. O que não coube não some calado:
+   entra na conta do "+N", que soma os dois lados. */
+function gFatias(nEv, nTk, teto){
+  if (nEv + nTk <= teto) return { ev:nEv, tk:nTk };
+  if (!nTk) return { ev:teto, tk:0 };
+  if (!nEv) return { ev:0, tk:teto };
+  const ev = Math.min(nEv, teto - 1);
+  return { ev:ev, tk:Math.min(nTk, teto - ev) };
 }
 
 /* Uma página do Google não é o resultado: ele corta em `maxResults` e entrega
@@ -1170,13 +1241,20 @@ function fmtMesLongo(iso){
   return MESES_LONGOS[+iso.slice(5,7) - 1] + ' de ' + iso.slice(0,4);
 }
 
-/* A grade do mês. Três decisões que valem o comentário:
+/* A grade do mês. Quatro decisões que valem o comentário:
    - Começa no domingo e preenche os quadrados vazios ANTES do dia 1, senão a
      coluna de um dia não corresponde ao dia da semana e a grade mente.
-   - Mostra no máximo dois compromissos por dia e resume o resto em "+N". Dia
-     cheio que empurra a grade para fora da tela não informa, atrapalha.
+   - Mostra no máximo duas linhas por dia e resume o resto em "+N". Dia cheio
+     que empurra a grade para fora da tela não informa, atrapalha.
    - Dia sem nada fica vazio de propósito, sem "nenhum compromisso": trinta
-     repetições dessa frase é ruído, e o vazio já é a informação. */
+     repetições dessa frase é ruído, e o vazio já é a informação.
+   - O quadrado mistura as duas fontes: compromisso do Google e tarefa que
+     vence no dia. São coisas diferentes ([[Tarefa fica no IBnet, compromisso
+     fica no Google]]) e continuam diferentes na tela — o que o mês responde é
+     "o que tem no dia 12", e a resposta honesta inclui as duas.
+   A tarefa entra SEM passar pelo recorte do placar: o filtro do quadro para no
+   quadro. Grade que obedecesse ao chip "Atrasadas" ficaria com dias em branco
+   sem nada na tela explicando o sumiço. */
 const MES_POR_DIA = 2;
 function htmlGradeMes(){
   const dias = gDiasDoMes(gDia), hoje = hojeISO();
@@ -1188,13 +1266,24 @@ function htmlGradeMes(){
   for (let i=0;i<prim;i++) cels += '<div class="mes-cel fora"></div>';
   dias.forEach(function(d){
     const evs = (gMes && gMes[d]) || [];
-    const lista = evs.slice(0, MES_POR_DIA).map(function(ev){
+    const tks = gTarefasDoDia(tarefas, d, hoje);
+    const q   = gFatias(evs.length, tks.length, MES_POR_DIA);
+    const lista = evs.slice(0, q.ev).map(function(ev){
       const h = ev.inteiro ? '' : '<span class="mes-h">' + esc(ev.hora || '') + '</span>';
       return '<div class="mes-ev' + (ev.inteiro ? ' inteiro' : '') + '" title="' +
         esc((ev.inteiro ? 'dia inteiro' : (ev.hora || '')) + ' ' + ev.titulo) + '">' +
         h + '<span class="mes-t">' + esc(ev.titulo) + '</span></div>';
+    }).join('') +
+    tks.slice(0, q.tk).map(function(t){
+      const h = t.hora ? '<span class="mes-h">' + esc(t.hora) + '</span>' : '';
+      /* A dica diz "tarefa" com todas as letras. A barra da esquerda separa as
+         duas fontes a olho, mas quem parou em cima do item quer a palavra. */
+      return '<div class="mes-tk' + (t.atrasada ? ' venceu' : '') + '" title="' +
+        esc('tarefa' + (t.hora ? ' ' + t.hora : '') + ': ' + t.titulo +
+            (t.atrasada ? ' — prazo vencido' : '')) + '">' +
+        h + '<span class="mes-t">' + esc(t.titulo) + '</span></div>';
     }).join('');
-    const sobra = evs.length - MES_POR_DIA;
+    const sobra = (evs.length - q.ev) + (tks.length - q.tk);
     cels += '<div class="mes-cel' + (d === hoje ? ' hoje' : '') + '"' +
       ' onclick="gAbrirDia(\'' + d + '\')" title="Abrir ' + esc(fmtData(d)) + '">' +
       '<div class="mes-n">' + (+d.slice(8,10)) + '</div>' + lista +
@@ -1202,6 +1291,22 @@ function htmlGradeMes(){
       '</div>';
   });
   return '<div class="mes-grade">' + cab + cels + '</div>';
+}
+
+/* As mesmas tarefas, na faixa do dia. Existe porque clicar num quadrado abre
+   aquele dia: sem esta metade, a tarefa apareceria na grade e SUMIRIA no
+   clique — a grade prometeria uma coisa e o dia entregaria outra. É a mesma
+   regra em dois lugares, não duas regras.
+   A coluna da esquerda, onde o compromisso mostra a hora, aqui mostra a
+   palavra "tarefa": é onde o olho já vai procurar o que a linha é. */
+function htmlTarefasDia(tks){
+  return tks.map(function(t){
+    return '<div class="ag-tk' + (t.atrasada ? ' venceu' : '') + '">' +
+      '<span class="ag-h">' + esc('tarefa' + (t.hora ? ' · ' + t.hora : '')) + '</span>' +
+      '<span class="ag-t">' + esc(t.titulo) +
+      (t.atrasada ? '<span class="ag-loc">prazo vencido</span>' : '') +
+      '</span></div>';
+  }).join('');
 }
 
 /* Uma linha de recado, com ação quando existe ação. `html` entra cru —
@@ -1233,6 +1338,10 @@ function htmlAgenda(){
      é o MÊS. Comparar o dia aqui deixaria o botão aceso o mês inteiro,
      prometendo um pulo que não acontece. */
   const naData = mes ? gDia.slice(0,7) === hojeISO().slice(0,7) : gDia === hojeISO();
+  /* As tarefas do dia aberto. Saem de `tarefas`, não do Google — por isso são
+     calculadas aqui e não em `gCarregar`: editar o prazo de uma tarefa no
+     quadro repinta a tela na hora, sem nova ida ao Calendar. */
+  const tksDia = mes ? [] : gTarefasDoDia(tarefas, gDia, hojeISO());
   let corpo;
 
   switch (gEstado){
@@ -1257,10 +1366,16 @@ function htmlAgenda(){
          carregou. A frase fica junto para dizer que o mês FOI lido. */
       corpo = mes
         ? htmlGradeMes() + gLinha('Nenhum compromisso em ' + esc(fmtMesLongo(gDia)) + '.', false, null)
-        : gLinha('Nenhum compromisso neste dia.', false, null);
+        /* A frase continua verdadeira com tarefa na tela: ela fala de
+           COMPROMISSO, e tarefa não é compromisso. Vem depois das tarefas
+           porque é o recado sobre a outra metade, não o assunto do dia. */
+        : htmlTarefasDia(tksDia) + gLinha('Nenhum compromisso neste dia.', false, null);
       break;
     case 'ok':
       if (mes){ corpo = htmlGradeMes(); break; }
+      /* Compromisso primeiro, tarefa depois: o compromisso tem hora e ancora o
+         dia; a tarefa vence "no dia" e se encaixa no que sobrou. Intercalar as
+         duas por hora misturaria régua de relógio com régua de vencimento. */
       corpo = gEventos.map(function(ev){
         const h = ev.inteiro ? 'dia inteiro'
                 : (ev.hora || '--:--') + (ev.fim && ev.fim !== ev.hora ? '–' + ev.fim : '');
@@ -1269,7 +1384,7 @@ function htmlAgenda(){
           '<span class="ag-t">' + esc(ev.titulo) +
           (ev.local ? '<span class="ag-loc">' + esc(ev.local) + '</span>' : '') +
           '</span></div>';
-      }).join('');
+      }).join('') + htmlTarefasDia(tksDia);
       break;
     default:   // 'iniciando' e qualquer coisa que eu não previ
       corpo = gLinha('Conectando ao Google…', false, null);
@@ -1278,7 +1393,10 @@ function htmlAgenda(){
   return '<div class="ag" id="ag-faixa" data-estado="' + gEstado + '" data-vista="' + gVista + '">' +
     '<div class="ag-head">' +
       '<svg class="ic"><use href="#ic-agenda"/></svg>' +
-      '<span class="ag-tit">Compromissos</span>' +
+      /* O título mudou de "Compromissos" quando a tarefa entrou aqui: faixa
+         que mistura duas fontes e se anuncia por uma delas mente no cabeçalho
+         — e cabeçalho é a primeira coisa que se lê e a última que se confere. */
+      '<span class="ag-tit">Compromissos e prazos</span>' +
       /* O rótulo tem de falar a unidade da tela: "segunda, 22/09/2026" em cima
          de uma grade de mês é legenda de outra coisa. */
       (navega ? '<span class="ag-dia">' +
@@ -1653,6 +1771,7 @@ window.__agenda = {
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
   gDiasDoMes, gPorDia, fmtMesLongo, gTrocarVista, gAbrirDia, gAndar, gHoje,
+  gTarefasDoDia, gFatias,
   semSessaoAtual: function(){ return semSessao; },
   erroContaAtual: function(){ return erroConta; },
   gEstadoAtual : function(){ return gEstado;  },
