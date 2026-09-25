@@ -608,6 +608,24 @@ const GOOGLE_API       = 'https://www.googleapis.com/calendar/v3/calendars/prima
    dois jeitos vira um "por que não funciona?" sem pista. */
 const GOOGLE_AGENDA_TAREFAS = 'IBnet Tarefas';
 const GOOGLE_CAL_LISTA      = 'https://www.googleapis.com/calendar/v3/users/me/calendarList';
+const GOOGLE_CAL_BASE       = 'https://www.googleapis.com/calendar/v3/calendars/';
+/* O escopo que GRAVA, e que é pedido num token PRÓPRIO — não junto do de
+   leitura. Não é zelo: a faixa que lê os compromissos já está publicada e
+   funcionando com `calendar.readonly`. Somar o escopo de escrita ao mesmo
+   pedido faria a renovação silenciosa de hoje passar a depender de um
+   consentimento que o Igor ainda não deu; se o Google recusar o pedido
+   inteiro em vez de devolver só o pedaço já concedido, a faixa quebra no dia
+   da publicação e o sintoma não aponta para cá. Não aposto a leitura que
+   funciona num comportamento do Google que eu não medi. */
+const GOOGLE_ESCOPO_ESCRITA = 'https://www.googleapis.com/auth/calendar.events.owned';
+/* Duração do bloco de tempo no Google, em minutos (escolha dele). O prazo
+   marca um instante; o Calendar só sabe representar intervalo. */
+const GCAL_DUR_MIN = 30;
+/* O evento avisa que é espelho, não original. Sem esta frase, editar o
+   compromisso direto no Google parece funcionar e não funciona: a próxima
+   varredura reescreve por cima e ele nunca saberia por quê. GUT e coluna
+   continuam FORA — a decisão antiga não mudou, foi recortada. */
+const GCAL_DESCR = 'Prazo da sua Agenda IBnet. Editar por aqui não muda a tarefa.';
 /* Prazo para a biblioteca do Google dar sinal de vida. Existe porque
    `onerror` não cobre "nunca respondeu" — tag ausente não dispara nada. */
 const GIS_PRAZO = 8000;
@@ -619,6 +637,11 @@ const GIS_PRAZO = 8000;
 let _gToken = null;
 let _gExp   = 0;
 let _gCli   = null;
+/* O par de escrita, separado de ponta a ponta pelo motivo escrito lá em cima
+   no escopo: leitura e gravação não podem cair juntas. */
+let _gwToken = null;
+let _gwExp   = 0;
+let _gwCli   = null;
 let _gisSinal = false;   // onload OU onerror já dispararam?
 
 /* iniciando | semlib | desconectado | carregando | ok | vazio | erro */
@@ -635,6 +658,25 @@ let gErro    = null;
 let gCalEstado = 'nao-procurei';
 let gCalId     = null;
 let gCalErro   = null;
+/* A permissão de GRAVAR é uma terceira pergunta, e por isso um terceiro
+   estado: "achei a agenda" não responde "posso escrever nela?".
+   nao-sei | pedindo | tem | falta */
+let gEscrEstado = 'nao-sei';
+let gEscrErro   = null;
+/* Tarefa que falhou ao sincronizar, por id → motivo. Existe para a varredura
+   NÃO repetir sozinha o que acabou de falhar: sem esta marca, um 403 de
+   permissão viraria uma gravação por passe, para sempre, contra a cota dele.
+   Quem limpa a marca é o Igor, clicando — erro que se repete sozinho é laço;
+   erro que espera um clique é decisão. */
+let gSincFalhas   = {};
+/* Tarefa já tratada DESDE o último aviso do Firebase. A varredura decide
+   olhando `tarefas`, que só muda quando o ouvinte entrega — e a gravação que
+   ela acabou de fazer ainda não voltou por lá. Sem esta marca ela relê o
+   estado ANTIGO, conclui "essa ainda não tem evento" e cria de novo: medido
+   na bancada, 500 compromissos idênticos na agenda antes de o teto do dublê
+   cortar. É o vínculo em trânsito, não sucesso guardado — o ouvinte limpa. */
+let gSincFeitos   = {};
+let _gSincRodando = false;
 let gEventos = [];
 let gDia     = hojeISO();
 /* `dia` | `mes`. A vista muda a JANELA consultada, não um filtro por cima do
@@ -651,31 +693,37 @@ function gisPronto(){
 function gisOk(){     _gisSinal = true; gIniciar(); }
 function gisFalhou(){ _gisSinal = true; gEstado = 'semlib'; render(); }
 
-function gCliente(){
-  if (_gCli) return _gCli;
+/* Dois clientes, um por escopo. Parametrizado e não duplicado de propósito:
+   a regra do pop-up, a do callback trocado a cada pedido e a do erro são as
+   mesmas para os dois, e duas cópias delas viveriam divergindo em silêncio.
+   O que difere entre leitura e escrita é o ESCOPO e QUEM pede — não o
+   mecanismo. */
+function gCliente(escrita){
+  if (escrita ? _gwCli : _gCli) return escrita ? _gwCli : _gCli;
   if (!gisPronto()) return null;
-  _gCli = google.accounts.oauth2.initTokenClient({
+  const c = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope    : GOOGLE_ESCOPO,
+    scope    : escrita ? GOOGLE_ESCOPO_ESCRITA : GOOGLE_ESCOPO,
     callback : function(){},        // trocado a cada pedido, logo abaixo
     error_callback: function(){},
   });
-  return _gCli;
+  if (escrita) _gwCli = c; else _gCli = c;
+  return c;
 }
 
 /* `interativo=false` é a renovação silenciosa (`prompt:'none'`): sem
    pop-up, e falha limpa se o Google não puder renovar sozinho.
    `interativo=true` abre o pop-up — e por isso SÓ pode sair de dentro de
    um clique, senão o navegador bloqueia por não ter vindo de gesto. */
-function gPedirToken(interativo){
+function gPedirToken(interativo, escrita){
   return new Promise(function(ok, falha){
-    const cli = gCliente();
+    const cli = gCliente(escrita);
     if (!cli) return falha({ tipo:'semlib' });
     cli.callback = function(resp){
       if (resp && resp.access_token){
-        _gToken = resp.access_token;
-        _gExp   = Date.now() + ((+resp.expires_in || 3600) * 1000);
-        ok(_gToken);
+        const venc = Date.now() + ((+resp.expires_in || 3600) * 1000);
+        if (escrita){ _gwToken = resp.access_token; _gwExp = venc; ok(_gwToken); }
+        else        { _gToken  = resp.access_token; _gExp  = venc; ok(_gToken);  }
       } else {
         falha({ tipo:'semtoken', detalhe:(resp && resp.error) || null });
       }
@@ -692,6 +740,10 @@ function gPedirToken(interativo){
 function gTokenValido(){ return !!_gToken && Date.now() < (_gExp - 30000); }
 function gGarantirToken(){
   return gTokenValido() ? Promise.resolve(_gToken) : gPedirToken(false);
+}
+function gwTokenValido(){ return !!_gwToken && Date.now() < (_gwExp - 30000); }
+function gwGarantirToken(){
+  return gwTokenValido() ? Promise.resolve(_gwToken) : gPedirToken(false, true);
 }
 
 /* Limites do dia em instante real. Montar por `Date` local e converter
@@ -906,6 +958,118 @@ function gEscolherAgenda(itens, nome){
   return { estado:'achou', id:c.id };
 }
 
+/* ── fatia 3b: o prazo vira evento ────────────────────────────────────
+   Tudo aqui em cima é função PURA, e é de propósito: o que decide criar,
+   mexer ou apagar um compromisso na agenda dele tem de ser verificável sem
+   rede, sem relógio parado e sem depender de o Google estar de pé. */
+
+/* A URL do evento. Devolve `null` sem agenda de destino — e é isso que
+   impede a queda para `primary` quando a busca falhou. Escrever na agenda
+   principal por falta de outra seria exatamente o erro silencioso que
+   `gEscolherAgenda` existe para evitar: o compromisso apareceria, no lugar
+   errado, e a tela não teria nada a dizer. Sem agenda, sem URL, sem envio. */
+function gEventoURL(calId, eventoId){
+  if (!calId) return null;
+  return GOOGLE_CAL_BASE + encodeURIComponent(calId) + '/events' +
+         (eventoId ? '/' + encodeURIComponent(eventoId) : '');
+}
+
+/* O instante do prazo, em milissegundos. Montado por `Date` local pela mesma
+   razão de `gLimitesDoDia`: string com fuso colado à mão erra no horário de
+   verão, e erra calada — o compromisso nasce uma hora fora e ninguém liga
+   uma coisa à outra em outubro. */
+function gInstante(prazo, hora){
+  if (!prazo || !hora) return null;
+  const p = String(prazo).split('-'), h = String(hora).split(':');
+  if (p.length < 3 || h.length < 2) return null;
+  const y = +p[0], m = +p[1], d = +p[2], hh = +h[0], mi = +h[1];
+  if (!y || !m || !d || isNaN(hh) || isNaN(mi)) return null;
+  const t = new Date(y, m-1, d, hh, mi, 0).getTime();
+  return isNaN(t) ? null : t;
+}
+
+/* Quem merece compromisso: prazo, hora e ainda aberta. Tarefa sem hora é
+   vencimento, não bloco de tempo, e viraria evento de dia inteiro empilhado
+   no topo do Google — o contrário do que ele pediu. */
+function gDeveTerEvento(t){
+  return !!(t && t.prazo && t.hora && t.col !== 'feito');
+}
+
+/* O corpo do evento. G, U, T e coluna NÃO entram: a decisão antiga continua
+   valendo, o Calendar não tem campo para eles e inventar um formato dentro
+   da descrição é o que o primeiro app que reescrever o campo apaga. */
+function gCorpoEvento(t){
+  const ini = gInstante(t && t.prazo, t && t.hora);
+  if (ini === null) return null;
+  const fim = ini + GCAL_DUR_MIN * 60000;
+  return {
+    summary    : String((t && t.titulo) || '').trim() || 'Tarefa sem título',
+    description: GCAL_DESCR,
+    start      : { dateTime: new Date(ini).toISOString() },
+    end        : { dateTime: new Date(fim).toISOString() },
+  };
+}
+
+/* O selo do que foi enviado, para saber se o evento ficou velho sem ter de
+   perguntar ao Google. Sai do PRÓPRIO corpo enviado, e não de uma lista de
+   campos escrita à mão: assim é impossível acrescentar algo ao evento e
+   esquecer de incluí-lo na comparação — o campo novo entra no selo sozinho.
+   Lista à mão é a que esquece, e o sintoma é "editei o título e o Google não
+   mudou". */
+function gSelo(t){
+  const c = gCorpoEvento(t);
+  return c ? c.summary + '\n' + c.start.dateTime + '\n' + c.end.dateTime : '';
+}
+
+/* O que fazer com UMA tarefa. Cinco saídas, e a que surpreende é `esquecer`.
+
+   Regra dele: concluir antes da hora apaga o evento se ainda é futuro, e o
+   mantém se já passou — "o passado é histórico, não lixo". Generalizada, ela
+   diz: evento que já aconteceu sai da nossa mão. A gente solta o vínculo e
+   nunca mais mexe. Isso vale para concluir, para mudar de ideia e para
+   apagar; sem generalizar, mudar o prazo de uma tarefa reescreveria um
+   compromisso que já está no passado dele, e reescrever passado é pior que
+   deixar sobrar.
+
+   `passou` se mede pelo FIM GRAVADO DO EVENTO, não pelo prazo de agora da
+   tarefa: o evento está onde foi posto, e não onde a tarefa passou a apontar.
+   Medir pelo prazo novo deixaria um evento futuro largado no Google quando o
+   prazo recuasse para ontem.
+
+   O passado nunca ganha evento NOVO (`criar` recusa), mas evento que já
+   existe acompanha a tarefa enquanto for futuro. A assimetria é deliberada:
+   ligar isto com prazos velhos no quadro despejaria uma pilha de
+   compromissos vencidos na agenda dele no primeiro minuto. */
+function gPlano(t, agoraMs){
+  if (!t) return { acao:'nada' };
+  const deve = gDeveTerEvento(t);
+
+  if (!t.gcalId){
+    if (!deve) return { acao:'nada' };
+    const ini = gInstante(t.prazo, t.hora);
+    if (ini === null) return { acao:'nada', motivo:'sem-instante' };
+    if (ini + GCAL_DUR_MIN * 60000 <= agoraMs) return { acao:'nada', motivo:'passado' };
+    return { acao:'criar' };
+  }
+
+  const fimEv = Date.parse(t.gcalFim || '');
+  /* Vínculo sem fim legível continua sendo gerenciado: o desconhecido cai
+     para "ainda cuido disso", não para "esqueço". Esquecer por dúvida
+     largaria evento vivo na agenda dele. */
+  if (!isNaN(fimEv) && fimEv <= agoraMs) return { acao:'esquecer' };
+  if (!deve) return { acao:'apagar' };
+  return gSelo(t) === t.gcalSel ? { acao:'nada' } : { acao:'atualizar' };
+}
+
+function gPendentes(lista, agoraMs){
+  const out = [];
+  (lista||[]).forEach(function(t){
+    const p = gPlano(t, agoraMs);
+    if (p.acao !== 'nada' && t && t.id) out.push({ id:t.id, acao:p.acao });
+  });
+  return out;
+}
+
 /* Uma página do Google não é o resultado: ele corta em `maxResults` e entrega
    `nextPageToken` sem avisar que faltou coisa. No dia isso nunca apareceu
    porque um dia raramente passa de 50 compromissos; no mês passa, e o efeito
@@ -1039,11 +1203,183 @@ function gConferirAgenda(forcar){
       const r = gEscolherAgenda(itens, GOOGLE_AGENDA_TAREFAS);
       gCalEstado = r.estado; gCalId = r.id; gCalErro = null;
       render();
+      /* Achou o destino: agora a pergunta seguinte, que é outra — "posso
+         escrever nela?". Só depois de ter destino, porque pedir permissão
+         para gravar num lugar que não existe é pedir por nada. */
+      if (r.estado === 'achou') gConferirEnvio();
     })
     .catch(function(e){
       gCalEstado = 'erro'; gCalId = null; gCalErro = gMsgErro(e);
       render();
     });
+}
+
+/* ── fatia 3b: a permissão de gravar ──────────────────────────────────
+   Tentada em SILÊNCIO primeiro. Se ele já autorizou numa sessão anterior,
+   isso resolve sem incomodar; se não, cai em `falta` e a faixa mostra o
+   botão. O pop-up nunca sai daqui: pop-up sem clique o navegador bloqueia,
+   e o sintoma seria "não acontece nada" sem nenhuma pista na tela. */
+function gConferirEnvio(){
+  if (gEscrEstado === 'pedindo') return;
+  if (gEscrEstado === 'tem'){ gSincronizar(); return; }
+  gEscrEstado = 'pedindo'; gEscrErro = null; render();
+  gPedirToken(false, true)
+    .then(function(){ gEscrEstado = 'tem'; gEscrErro = null; render(); gSincronizar(); })
+    .catch(function(e){ gEscrEstado = 'falta'; gEscrErro = gMsgErro(e); render(); });
+}
+/* O caminho do clique, e o único que pode abrir pop-up. */
+function gAutorizarEnvio(){
+  gEscrEstado = 'pedindo'; gEscrErro = null; render();
+  gPedirToken(true, true)
+    .then(function(){ gEscrEstado = 'tem'; gEscrErro = null; render(); gSincronizar(); })
+    .catch(function(e){ gEscrEstado = 'falta'; gEscrErro = gMsgErro(e); render(); });
+}
+
+/* ── fatia 3b: gravar no Google ───────────────────────────────────────
+   Repete do `gPaginar` a regra do 401 (renova UMA vez e refaz), porque o
+   motivo é o mesmo e duas regras de renovação viveriam divergindo. O que
+   ele não tem é paginação: gravação devolve um objeto, não uma lista. */
+function gFetchCal(url, metodo, corpo, podeRenovar){
+  const opt = { method: metodo, headers: { Authorization:'Bearer ' + _gwToken } };
+  if (corpo){
+    opt.headers['Content-Type'] = 'application/json';
+    opt.body = JSON.stringify(corpo);
+  }
+  return fetch(url, opt).then(function(r){
+    if (r.status === 401 && podeRenovar){
+      _gwToken = null; _gwExp = 0;
+      return gPedirToken(false, true).then(function(){
+        return gFetchCal(url, metodo, corpo, false);
+      });
+    }
+    /* 404/410 em cima de um evento é o evento que já não existe — ele apagou
+       na mão, no Google. Não é falha: é o mundo já onde a gente queria
+       chegar, ou um vínculo podre que o plano conserta sozinho no passe
+       seguinte. Tratar como erro deixaria a tarefa marcada como falha para
+       sempre por causa de um conserto que já aconteceu. */
+    if ((r.status === 404 || r.status === 410) && metodo !== 'POST') return { sumiu:true };
+    if (!r.ok) throw { tipo:'http', status:r.status };
+    if (r.status === 204) return {};      // DELETE do Google não tem corpo
+    return r.json().catch(function(){ return {}; });
+  });
+}
+
+function gSoltarVinculo(id){
+  return tref.child(id).update({ gcalId:null, gcalSel:null, gcalFim:null });
+}
+
+function gCriarEvento(t){
+  const corpo = gCorpoEvento(t);
+  const url   = gEventoURL(gCalId, null);
+  if (!corpo) return Promise.reject({ tipo:'corpo' });
+  if (!url)   return Promise.reject({ tipo:'sem-destino' });
+  return gFetchCal(url, 'POST', corpo, true).then(function(ev){
+    /* Sem `id` de volta não dá para guardar vínculo, e sem vínculo o passe
+       seguinte criaria o MESMO evento de novo — duplicata a cada passe.
+       Falhar alto aqui é o que transforma um laço silencioso num recado. */
+    if (!ev || !ev.id) throw { tipo:'sem-id' };
+    return tref.child(t.id).update({
+      gcalId : ev.id,
+      gcalSel: gSelo(t),
+      gcalFim: corpo.end.dateTime,
+    });
+  });
+}
+
+function gAtualizarEvento(t){
+  const corpo = gCorpoEvento(t);
+  const url   = gEventoURL(gCalId, t.gcalId);
+  if (!corpo) return Promise.reject({ tipo:'corpo' });
+  if (!url)   return Promise.reject({ tipo:'sem-destino' });
+  return gFetchCal(url, 'PATCH', corpo, true).then(function(ev){
+    /* Sumiu do Google: solta o vínculo em vez de insistir. O passe seguinte
+       vê tarefa com prazo e sem evento, e cria — conserto pelo caminho
+       normal, sem um segundo lugar no código que saiba criar evento. */
+    if (ev && ev.sumiu) return gSoltarVinculo(t.id);
+    return tref.child(t.id).update({ gcalSel: gSelo(t), gcalFim: corpo.end.dateTime });
+  });
+}
+
+/* Só a ida ao Google, sem mexer no Firebase. Separado porque a exclusão da
+   tarefa usa esta metade: lá o registro inteiro vai sumir, e gravar vínculo
+   num registro que está prestes a deixar de existir é escrita para ninguém. */
+function gApagarNoGoogle(t){
+  const url = gEventoURL(gCalId, t && t.gcalId);
+  if (!url) return Promise.reject({ tipo:'sem-destino' });
+  return gwGarantirToken().then(function(){
+    return gFetchCal(url, 'DELETE', null, true);
+  });
+}
+function gApagarEvento(t){
+  return gApagarNoGoogle(t).then(function(){ return gSoltarVinculo(t.id); });
+}
+
+/* A varredura. Um passo por vez, e o próximo só depois que este terminou:
+   N gravações em paralelo contra a mesma agenda gastariam cota, e os
+   vínculos voltando fora de ordem para o Firebase deixariam duas tarefas
+   apontando para o mesmo evento.
+
+   Ela roda a partir do OUVINTE do Firebase, e não de dentro do salvar/mover/
+   excluir. O motivo é que o ouvinte enxerga mudança venha de onde vier —
+   outra aba hoje, o WhatsApp da fatia 4 depois. Pendurada nos três botões,
+   ela estaria com a regra copiada em três lugares e cega para o quarto. */
+function gSincronizar(){
+  if (_gSincRodando || !autorizado(session)) return;
+  if (gCalEstado !== 'achou' || !gCalId) return;
+
+  const fila = gPendentes(tarefas, Date.now()).filter(function(p){
+    return !gSincFalhas[p.id] && !gSincFeitos[p.id];
+  });
+  if (!fila.length) return;
+
+  const p = fila[0];
+  const t = tarefas.find(function(x){ return x.id === p.id; });
+  if (!t) return;
+
+  /* `esquecer` não fala com o Google — é só soltar o vínculo de um evento
+     que já passou. Exigir permissão de escrita para isso prenderia a limpeza
+     atrás de um consentimento que ela não usa. */
+  if (p.acao !== 'esquecer' && gEscrEstado !== 'tem') return;
+
+  _gSincRodando = true;
+  gSincFeitos[t.id] = 1;
+  /* O try existe por causa do `_gSincRodando`: exceção SÍNCRONA aqui sairia
+     por cima do `finally` que nunca escrevi e deixaria a trava ligada para
+     sempre — a varredura morreria calada e nenhum prazo voltaria a sair, sem
+     uma linha na tela dizendo por quê. */
+  let passo;
+  try {
+    if      (p.acao === 'esquecer')  passo = gSoltarVinculo(t.id);
+    else if (p.acao === 'criar')     passo = gCriarEvento(t);
+    else if (p.acao === 'atualizar') passo = gAtualizarEvento(t);
+    else                             passo = gApagarEvento(t);
+  } catch(e){ passo = Promise.reject(e); }
+
+  passo
+    .then(function(){ delete gSincFalhas[t.id]; })
+    .catch(function(e){
+      gSincFalhas[t.id] = gMsgErro(e);
+      /* Falhou, então nada ficou em trânsito: quem segura esta tarefa agora
+         é a marca de FALHA, que o clique dele limpa. Deixar as duas marcas
+         faria o "Tentar de novo" parecer morto — limpa uma e a outra continua
+         barrando, que é recusa sem saída. */
+      delete gSincFeitos[t.id];
+    })
+    .then(function(){
+      _gSincRodando = false;
+      render();
+      gSincronizar();
+    });
+}
+
+/* Limpar as marcas é o que destrava a varredura — e é clique dele, nunca
+   automático. Tentar de novo sozinho depois de um 403 seria uma gravação
+   por passe, para sempre, contra a cota da conta dele. */
+function gTentarEnvioDeNovo(){
+  gSincFalhas = {};
+  render();
+  if (gEscrEstado === 'falta') gAutorizarEnvio();
+  else gSincronizar();
 }
 
 /* Único caminho interativo — nasce de clique, então pode abrir pop-up. */
@@ -1249,6 +1585,13 @@ function iniciarDados(){
     carregando = false;
     erroCarga  = null;
     render();
+    /* O envio sai daqui, e não de dentro do salvar/mover/excluir: o ouvinte
+       enxerga mudança venha de onde vier — outra aba hoje, o WhatsApp da
+       fatia 4 depois — então a regra existe UMA vez, não três.
+       Dado fresco na mão, o que estava em trânsito deixou de estar: é este
+       aviso que responde se a gravação anterior pegou. */
+    gSincFeitos = {};
+    gSincronizar();
   }, err => {
     clearTimeout(_timeout);
     carregando = false;
@@ -1445,14 +1788,39 @@ function gSetupAgenda(){
   const nome = '<b>' + esc(GOOGLE_AGENDA_TAREFAS) + '</b>';
   const dnv  = '<button class="btn btn-sm btn-ghost" onclick="gConferirAgenda(true)">' +
                'Verificar de novo</button>';
+  const ids  = Object.keys(gSincFalhas);
   let txt, ruim = true, acao = dnv;
 
   switch (gCalEstado){
     case 'procurando':
       txt = 'Procurando a agenda ' + nome + ' no Google…'; ruim = false; acao = null; break;
     case 'achou':
-      txt = 'Agenda ' + nome + ' encontrada no Google. ' +
-            'O envio dos prazos entra na próxima etapa.'; ruim = false; acao = null; break;
+      /* Achar a agenda é meio caminho: ainda falta PODER escrever nela. Por
+         isso 'achou' não é um estado só — aqui quem manda na frase é o envio,
+         que tem pergunta e botão próprios. */
+      ruim = false; acao = null;
+      if (ids.length){
+        ruim = true;
+        txt  = '<b>' + ids.length + (ids.length === 1 ? ' prazo' : ' prazos') +
+               '</b> não chegou ao Google. ' + esc(gSincFalhas[ids[0]] || '');
+        acao = '<button class="btn btn-sm" onclick="gTentarEnvioDeNovo()">' +
+               'Tentar de novo</button>';
+      } else if (gEscrEstado === 'falta'){
+        ruim = true;
+        txt  = 'Agenda ' + nome + ' encontrada, mas falta a sua permissão para ' +
+               'criar compromissos nela. ' + esc(gEscrErro || '');
+        acao = '<button class="btn btn-sm" onclick="gAutorizarEnvio()">' +
+               'Autorizar envio</button>';
+      } else if (gEscrEstado === 'pedindo'){
+        txt = 'Agenda ' + nome + ' encontrada. Pedindo permissão para criar ' +
+              'compromissos nela…';
+      } else if (gEscrEstado === 'tem'){
+        txt = 'Agenda ' + nome + ' encontrada. Prazo com <b>hora marcada</b> e ' +
+              'ainda no futuro vira compromisso nela; prioridade e coluna ficam aqui.';
+      } else {
+        txt = 'Agenda ' + nome + ' encontrada no Google.';
+      }
+      break;
     case 'sem-agenda':
       txt = 'Para os prazos irem ao Google, crie uma agenda chamada ' + nome +
             ' no Google Agenda. Enquanto ela não existir, nada é enviado.'; break;
@@ -1469,7 +1837,9 @@ function gSetupAgenda(){
     default:   // 'erro'
       txt = esc(gCalErro || 'Não foi possível ler a lista de agendas do Google.');
   }
-  return '<div id="ag-setup" data-cal="' + gCalEstado + '">' +
+  return '<div id="ag-setup" data-cal="' + gCalEstado + '"' +
+         ' data-envio="' + gEscrEstado + '"' +
+         ' data-falhas="' + ids.length + '">' +
          gLinha(txt, ruim, acao) + '</div>';
 }
 
@@ -1871,11 +2241,23 @@ function fecharDel(){
 }
 function confirmarDel(){
   if (!delId) return;
+  const id  = delId;
   const btn = document.getElementById('del-btn');
+  const t   = tarefas.find(x => x.id === id);
   btn.disabled = true; btn.textContent = 'Excluindo…';
-  tref.child(delId).remove()
+  /* O evento sai ANTES da tarefa. Na ordem inversa o gcalId morre junto com
+     ela e o compromisso fica órfão na agenda dele, sem ninguém que saiba
+     apagá-lo depois — por isso a falha aqui CANCELA a exclusão em vez de
+     seguir em frente. Evento apagado na mão vira 'sumiu' e não trava nada. */
+  const antes = (t && t.gcalId)
+    ? gApagarNoGoogle(t).catch(e => { throw { tipo:'evento', msg:gMsgErro(e) }; })
+    : Promise.resolve();
+  antes
+    .then(() => tref.child(id).remove())
     .then(() => { toast('Tarefa excluída.'); fecharDel(); })
-    .catch(e => toast('Não deu para excluir: ' + (e && e.message || '')))
+    .catch(e => toast(e && e.tipo === 'evento'
+      ? 'A tarefa continua aqui porque o compromisso no Google não foi apagado. ' + e.msg
+      : 'Não deu para excluir: ' + ((e && e.message) || '')))
     .then(() => { btn.disabled = false; btn.textContent = 'Excluir'; });
 }
 
@@ -1931,7 +2313,11 @@ window.__agenda = {
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
   gDiasDoMes, gPorDia, fmtMesLongo, gTrocarVista, gAbrirDia, gAndar, gHoje,
   gTarefasDoDia, gFatias, gNomeNorm, gEscolherAgenda, GOOGLE_AGENDA_TAREFAS,
+  gEventoURL, gInstante, gCorpoEvento, gSelo, gDeveTerEvento, gPlano,
+  gPendentes, GCAL_DUR_MIN,
   semSessaoAtual: function(){ return semSessao; },
+  gEscrEstadoAtual : function(){ return gEscrEstado; },
+  gSincFalhasAtual : function(){ return gSincFalhas; },
   gCalEstadoAtual: function(){ return gCalEstado; },
   gCalIdAtual   : function(){ return gCalId;     },
   erroContaAtual: function(){ return erroConta; },
