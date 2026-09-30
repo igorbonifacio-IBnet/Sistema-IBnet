@@ -242,6 +242,26 @@ body.light .gut i{background:#eef1f6}
 .prazo.perto{color:var(--yellow)}
 .sinal{color:var(--yellow);display:inline-flex;align-items:center;cursor:help}
 
+/* Prazo que nao acertou com o Google. Chip PROPRIO, e nao um modificador do
+   chip de prazo, por um motivo concreto: quando a falha e ao APAGAR, a tarefa
+   esta em "feito" ou perdeu o prazo — e nos dois casos o cartao nao desenha
+   chip de prazo nenhum. Marca pendurada nele seria invisivel exatamente no
+   caso mais grave, o do compromisso que continua vivo na agenda dele.
+
+   Vermelho igual ao `.prazo.venceu` de proposito: as duas coisas sao "isto
+   precisa de voce". O que distingue e a linha tracejada, que diz
+   "pendente de acerto" sem inventar uma sexta cor no quadro. */
+.tk-falha{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;
+  color:var(--red);border:1px dashed var(--red);border-radius:5px;padding:2px 6px;cursor:help}
+.tk-refaz{font-size:10px;font-weight:600;color:var(--red);background:transparent;
+  border:1px solid var(--red);border-radius:5px;padding:2px 7px;cursor:pointer;
+  font-family:inherit}
+.tk-refaz:hover{background:rgba(207,128,128,.14)}
+/* Borda do cartao inteiro: e ela que faz a tarefa com problema ser ACHAVEL
+   num quadro de quarenta cartoes. Sem isso, a marca no pe do cartao exige
+   varredura visual — e a tira ja diz o numero, o cartao tem de dizer QUAL. */
+.tk.com-falha{border-color:var(--red)}
+
 /* ── modal ─────────────────────────────────────────────────────────── */
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;
   align-items:center;justify-content:center;padding:18px}
@@ -1137,6 +1157,50 @@ function gMsgErro(e){
   return 'Não foi possível falar com o Google (' + tipo + ').';
 }
 
+/* A varredura tem QUATRO ações, e elas falham de quatro jeitos que não se
+   descrevem com a mesma frase. Até a fatia 3b a tela dizia "não chegou ao
+   Google" para todas, e isso estava errado em duas — nas duas piores:
+
+     criar     falhou -> o compromisso não existe.        "não chegou" ✔
+     atualizar falhou -> o compromisso existe com a hora ANTIGA. Dizer
+                         "não chegou" esconde que há um compromisso ERRADO
+                         vivo na agenda dele, marcado na hora que não vale.
+     apagar    falhou -> o compromisso CONTINUA na agenda e não devia.
+                         "não chegou" é o contrário do que aconteceu: ele
+                         chegou e é justamente o que não vai embora.
+     esquecer  falhou -> nada disso; essa ação nem fala com o Google, só
+                         solta o vínculo de um evento que já passou.
+
+   Frase errada aqui custa mais que frase feia: ele confia na agenda para
+   aparecer em reunião. "Não chegou" convida a ignorar; "está com a hora
+   antiga" manda olhar. Curta, porque vai dentro de um cartão. */
+function gFalhaTexto(acao){
+  if (acao === 'atualizar') return 'compromisso com a hora antiga no Google';
+  if (acao === 'apagar')    return 'compromisso ainda na agenda do Google';
+  if (acao === 'esquecer')  return 'vínculo com o Google não foi solto';
+  return 'não foi para a agenda do Google';
+}
+
+/* O que a TIRA diz quando há falhas de tipos diferentes. Ela é o resumo: o
+   número responde "tem algo errado?", e o cartão responde "qual". Misturar
+   dois tipos num só substantivo ("3 prazos") apagaria a diferença que a
+   função acima acabou de fazer, então quando os tipos divergem a tira para de
+   descrever e manda olhar os cartões — que é onde a resposta está. */
+function gFalhaResumo(falhas){
+  const ids = Object.keys(falhas);
+  if (!ids.length) return '';
+  const acoes = {};
+  ids.forEach(function(i){ acoes[(falhas[i] && falhas[i].acao) || 'criar'] = 1; });
+  const tipos = Object.keys(acoes);
+  const quant = '<b>' + ids.length + (ids.length === 1 ? ' tarefa' : ' tarefas') + '</b>';
+  if (tipos.length === 1){
+    return quant + ' com problema: ' + gFalhaTexto(tipos[0]) + '. ' +
+           esc((falhas[ids[0]] && falhas[ids[0]].msg) || '');
+  }
+  return quant + ' com problemas de tipos diferentes no Google — ' +
+         'o aviso está em cada cartão.';
+}
+
 function gCarregar(){
   if (!autorizado(session)) return;
   if (!gisPronto()){ gEstado = 'semlib'; render(); return; }
@@ -1358,7 +1422,10 @@ function gSincronizar(){
   passo
     .then(function(){ delete gSincFalhas[t.id]; })
     .catch(function(e){
-      gSincFalhas[t.id] = gMsgErro(e);
+      /* Guarda a AÇÃO junto com o motivo. Sem ela a tela sabe que algo falhou
+         e não sabe o quê, e aí só resta a frase genérica — que está errada
+         para `atualizar` e `apagar`. Ver `gFalhaTexto`. */
+      gSincFalhas[t.id] = { acao: p.acao, msg: gMsgErro(e) };
       /* Falhou, então nada ficou em trânsito: quem segura esta tarefa agora
          é a marca de FALHA, que o clique dele limpa. Deixar as duas marcas
          faria o "Tentar de novo" parecer morto — limpa uma e a outra continua
@@ -1380,6 +1447,30 @@ function gTentarEnvioDeNovo(){
   render();
   if (gEscrEstado === 'falta') gAutorizarEnvio();
   else gSincronizar();
+}
+
+/* Tentar de novo UMA tarefa. Não é luxo em cima do botão da tira: os dois
+   respondem perguntas diferentes.
+
+   O da tira é "a rede piscou, tenta tudo". Serve quando a causa é comum às
+   falhas. Mas quando UMA tarefa falha por motivo próprio — dado que o Google
+   recusa, evento apagado na mão do outro lado — o botão de tudo faz o
+   caminho errado: limpa as marcas boas junto, retenta as que iam falhar de
+   novo e gasta cota dele para chegar no mesmo lugar. O contador vai de 3 para
+   1 e não há como agir só na que sobrou.
+
+   Limpar uma marca destrava só aquela porque a varredura filtra por marca:
+   quem continua marcado continua de fora. */
+function gTentarUm(id){
+  if (!gSincFalhas[id]) return;
+  delete gSincFalhas[id];
+  /* A marca de trânsito também sai. Ela é o "já tratei desde o último aviso do
+     Firebase", e sem limpá-la a varredura pularia esta tarefa pelo OUTRO
+     motivo — o clique pareceria morto. Mesma armadilha das duas marcas que a
+     3b já pagou uma vez. */
+  delete gSincFeitos[id];
+  render();
+  gSincronizar();
 }
 
 /* Único caminho interativo — nasce de clique, então pode abrir pop-up. */
@@ -1801,10 +1892,13 @@ function gSetupAgenda(){
       ruim = false; acao = null;
       if (ids.length){
         ruim = true;
-        txt  = '<b>' + ids.length + (ids.length === 1 ? ' prazo' : ' prazos') +
-               '</b> não chegou ao Google. ' + esc(gSincFalhas[ids[0]] || '');
+        txt  = gFalhaResumo(gSincFalhas);
+        /* Com mais de uma, o rótulo tem de dizer que este botão pega TODAS —
+           senão ele parece o mesmo botão do cartão e dá a impressão de que
+           não fez nada quando as outras continuam marcadas. */
         acao = '<button class="btn btn-sm" onclick="gTentarEnvioDeNovo()">' +
-               'Tentar de novo</button>';
+               (ids.length > 1 ? 'Tentar todas de novo' : 'Tentar de novo') +
+               '</button>';
       } else if (gEscrEstado === 'falta'){
         ruim = true;
         txt  = 'Agenda ' + nome + ' encontrada, mas falta a sua permissão para ' +
@@ -2031,12 +2125,37 @@ function htmlCard(t, hoje){
     ? '<span class="sinal" title="' + esc(av.texto) + '"><svg class="ic"><use href="#ic-alerta"/></svg></span>'
     : '';
 
-  return '<div class="tk' + (t.col === 'feito' ? ' feita' : '') + '" draggable="true" ' +
+  /* A falha do Google no próprio cartão. A tira já dá o NÚMERO; ela não dá o
+     QUAL, e num quadro de quarenta cartões esse é o dado que falta. Note que
+     isto não depende do chip de prazo nem da coluna: a falha de `apagar`
+     acontece justamente na tarefa que foi para "feito" ou perdeu o prazo, e é
+     a mais grave das quatro — compromisso vivo na agenda dele sem tarefa que
+     o justifique.
+
+     `data-falha` é o estado legível por máquina, ao lado da frase. A bancada
+     confere por ele: frase muda de redação sem mudar de significado, e
+     asserção presa à redação reprova por motivo errado. Mesma regra do
+     `data-cal` da tira. */
+  const f = gSincFalhas[t.id];
+  let falha = '';
+  if (f){
+    const dica = gFalhaTexto(f.acao) + '. ' + (f.msg || '');
+    falha = '<span class="tk-falha" data-falha="' + esc(f.acao || '') + '" ' +
+              'title="' + esc(dica) + '">' +
+              '<svg class="ic"><use href="#ic-alerta"/></svg>' + esc(gFalhaTexto(f.acao)) +
+            '</span>' +
+            '<button class="tk-refaz" onclick="gTentarUm(\'' + esc(t.id) + '\')" ' +
+              'title="Tentar acertar esta tarefa com o Google de novo">' +
+              'Tentar de novo</button>';
+  }
+
+  return '<div class="tk' + (t.col === 'feito' ? ' feita' : '') +
+      (f ? ' com-falha' : '') + '" draggable="true" ' +
       'id="tk-' + esc(t.id) + '" ondragstart="cardDragStart(event,\'' + t.id + '\')" ' +
       'ondragend="cardDragEnd(\'' + t.id + '\')">' +
     '<div class="tk-top"><div class="tk-tit">' + esc(t.titulo) + '</div>' + sinal + '</div>' +
     (t.nota ? '<div class="tk-nota">' + esc(t.nota) + '</div>' : '') +
-    '<div class="tk-pe">' + gut + prazo +
+    '<div class="tk-pe">' + gut + prazo + falha +
       '<span class="tk-acoes">' +
         '<button class="icon-btn" onclick="moverTarefa(\'' + t.id + '\',-1)" ' +
           (idx <= 0 ? 'disabled ' : '') + 'title="Mover para ' + esc(COL_NOME[COL_IDS[idx-1]] || '') + '">' +
@@ -2315,6 +2434,11 @@ window.__agenda = {
   gTarefasDoDia, gFatias, gNomeNorm, gEscolherAgenda, GOOGLE_AGENDA_TAREFAS,
   gEventoURL, gInstante, gCorpoEvento, gSelo, gDeveTerEvento, gPlano,
   gPendentes, GCAL_DUR_MIN,
+  /* Expostas como FUNÇÃO PURA de propósito: a frase por tipo de falha é a
+     regra desta fatia, e medi-la só pela tela exigiria encenar as quatro
+     falhas para provar quatro strings. Asserção na função prova a regra onde
+     ela mora; a tela continua com as dela. */
+  gFalhaTexto, gFalhaResumo,
   semSessaoAtual: function(){ return semSessao; },
   gEscrEstadoAtual : function(){ return gEscrEstado; },
   gSincFalhasAtual : function(){ return gSincFalhas; },
