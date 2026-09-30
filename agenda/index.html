@@ -179,6 +179,53 @@ textarea{resize:vertical;min-height:64px;line-height:1.5}
 .pl-semana   .n{color:var(--yellow)}
 .pl-semgut   .n{color:var(--muted)}
 
+/* ── barra de frentes (o segundo eixo de recorte) ──────────────────── */
+/* Forma DIFERENTE do placar de propósito. O placar é número grande e o
+   recorte da fila; a frente e um rótulo com contagem pequena. Dois eixos com
+   a mesma forma seriam lidos como um seletor só, e a primeira consequencia
+   seria ele achar que escolher "Igreja" desliga "Atrasadas". */
+.tagbar{display:flex;gap:7px;flex-wrap:wrap;margin:-4px 0 13px}
+.tg{background:transparent;border:1px solid var(--border);border-radius:99px;
+  padding:4px 11px 4px 9px;cursor:pointer;font-family:inherit;color:var(--muted);
+  display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;
+  transition:border-color .15s,color .15s,opacity .15s}
+.tg:hover{border-color:var(--accent);color:var(--text)}
+.tg.on{border-color:var(--accent);color:var(--text);background:rgba(221,92,51,.09)}
+.tg.vazio{opacity:.4}
+.tg .tgc{font-variant-numeric:tabular-nums;font-size:10px;color:var(--muted);
+  background:var(--card);border-radius:99px;padding:1px 6px;min-width:19px;text-align:center}
+/* O ponto colorido antes do rótulo é o que diferencia as frentes. A cor NÃO
+   vai no texto nem no fundo do chip por um motivo de hierarquia: vermelho e
+   amarelo no quadro significam "isto precisa de você" (prazo vencido, falha
+   com o Google). Frente pintada de vermelho competiria com o único sinal que
+   não pode perder a disputa. Ver "Forma visual fala mais alto que rótulo". */
+.tg::before,.tg-chip::before{content:'';width:7px;height:7px;border-radius:50%;
+  background:var(--gray);flex:none}
+.tg-ibnet::before  {background:var(--accent)}
+.tg-unitel::before {background:var(--blue)}
+.tg-igreja::before {background:var(--green)}
+.tg-pessoal::before{background:var(--yellow)}
+.tg-outros::before {background:var(--gray)}
+/* "sem contexto" é o único que pode usar traçado: ele não é uma frente, é a
+   fila de triagem se anunciando. Aparece só quando existe o quê. */
+.tg-sem{border-style:dashed}
+.tg-sem::before{background:transparent;border:1px solid var(--muted)}
+
+/* O chip no cartão. Neutro, pequeno, e SEM hover de clique: filtrar é papel
+   da barra. Chip clicável no cartão daria dois lugares para a mesma ação e
+   roubaria o clique de editar. */
+.tg-chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;
+  color:var(--muted);background:var(--card);border:1px solid var(--border);
+  border-radius:99px;padding:2px 8px 2px 7px}
+
+/* A declaração de que o quadro está parcial. Obrigações 2 e 3 de "Filtro
+   recorta a lista, nunca o total": agrupamento parcial se declara parcial, e
+   o texto afirma o que NÃO mudou com o recorte. */
+.recorte-nota{display:flex;align-items:flex-start;gap:8px;font-size:11.5px;
+  color:var(--muted);background:var(--card);border:1px dashed var(--border);
+  border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.45}
+.recorte-nota .ic{color:var(--accent);flex:none;margin-top:1px}
+
 /* ── quadro ────────────────────────────────────────────────────────── */
 /* Sem `align-items:start`: as quatro colunas sobem juntas ate a altura da
    mais cheia. Nao e so estetica — a coluna e o alvo de soltar, e com altura
@@ -372,6 +419,18 @@ body.light .gut i{background:#eef1f6}
     <div class="mb-field"><label>Nota <span class="muted" style="text-transform:none;letter-spacing:0">(opcional)</span></label>
       <textarea id="tm-nota" maxlength="1000" placeholder="Contexto, link, quem pediu…"></textarea></div>
 
+    <!-- A frente vem ANTES de coluna/prazo porque e a pergunta que muda o
+         resto: saber de quem e a tarefa e o que decide se vale priorizar.
+
+         Nasce vazia e OPCIONAL de proposito. A caixa de entrada existe para
+         receber sem triagem ("tudo que chega sem triagem cai aqui") — cobrar
+         contexto na porta empurraria ele a marcar qualquer coisa so para
+         fechar o modal, e tag chutada e pior que tag ausente: a ausencia a
+         barra conta, o chute ninguem descobre. Quem cobra e a SAIDA da caixa
+         de entrada, exatamente como ja acontece com o GUT. -->
+    <div class="mb-field"><label>Frente <span class="muted" style="text-transform:none;letter-spacing:0">(opcional — cobrada ao sair da caixa de entrada)</span></label>
+      <select id="tm-tag"></select></div>
+
     <div class="mb-row mb-row-3">
       <div class="mb-field"><label>Coluna</label>
         <select id="tm-col">
@@ -488,8 +547,47 @@ const COLS = [
 const COL_IDS  = COLS.map(c => c.id);
 const COL_NOME = Object.fromEntries(COLS.map(c => [c.id, c.nome]));
 
-let tarefas   = [];      // [{id, titulo, nota, col, g, u, t, prazo, hora, criado, feitoEm, origem}]
+/* ── frentes: de quem é a tarefa ──────────────────────────────────── */
+/* Eixo SEPARADO do `foco`, e é a decisão que sustenta a fatia. Os dois
+   recortam o quadro e respondem perguntas diferentes: `foco` é "que fatia da
+   fila" (atrasadas, 7 dias, sem GUT), a frente é "de qual lado da vida".
+   Enfiar as frentes dentro de `RECORTES` faria escolher "Igreja" desligar
+   "Atrasadas" — e "o que está atrasado na Igreja" é a primeira pergunta que
+   se faz com isto pronto.
+
+   O registro guarda o ID, nunca o rótulo. Renomear "Unitel Internet" na linha
+   abaixo não pode órfãozar tarefa nenhuma — mesmo motivo de `COLS`. */
+const TAGS = [
+  { id:'ibnet',   nome:'IBnet Telecom',   cls:'tg-ibnet'   },
+  { id:'unitel',  nome:'Unitel Internet', cls:'tg-unitel'  },
+  { id:'igreja',  nome:'Igreja',          cls:'tg-igreja'  },
+  { id:'pessoal', nome:'Pessoal',         cls:'tg-pessoal' },
+  { id:'outros',  nome:'Outros',          cls:'tg-outros'  },
+];
+const TAG_IDS  = TAGS.map(x => x.id);
+const TAG_NOME = Object.fromEntries(TAGS.map(x => [x.id, x.nome]));
+const TAG_CLS  = Object.fromEntries(TAGS.map(x => [x.id, x.cls]));
+/* "Sem frente" é estado PRÓPRIO, nunca "Outros". `Outros` é escolha
+   declarada — ele olhou e decidiu que não é de nenhuma das quatro. Ausência é
+   triagem que não aconteceu, e é o estado de TODA tarefa criada antes desta
+   fatia. Juntar as duas faria `Outros` virar mentira no dia em que ele usasse
+   de verdade, e sumiria com a fila que ainda precisa de contexto. Dado
+   declarado vence dado deduzido. */
+const TAG_SEM = 'semtag';
+/* Tag fora da lista não pode sumir da tela. Ela chega por duas portas
+   previsíveis: a fatia 4 (WhatsApp) gravando um id que o painel não conhece, e
+   eu mesmo tirando uma linha de `TAGS` com tarefas ainda apontando para ela.
+   Chip vazio faria a tarefa parecer sem contexto justamente quando ela TEM um
+   que o painel não sabe ler — e aí ela entraria na fila de triagem por
+   engano. */
+function tagNome(id){
+  if (!id) return null;
+  return TAG_NOME[id] || (String(id) + ' (fora da lista)');
+}
+
+let tarefas   = [];      // [{id, titulo, nota, col, g, u, t, tag, prazo, hora, criado, feitoEm, origem}]
 let foco      = 'todas'; // recorte do quadro — NUNCA recorta o placar
+let tagFoco   = 'todas'; // segundo eixo, independente do `foco`
 let editId    = null;
 let delId     = null;
 let carregando= true;
@@ -581,6 +679,27 @@ function selecionar(lista, chave, hoje){
   return lista.filter(t => f(t, hoje));
 }
 function contar(lista, chave, hoje){ return selecionar(lista, chave, hoje).length; }
+
+/* O recorte por frente, no mesmo desenho: uma função pura seleciona, outra
+   pura conta, e as duas perguntam a MESMA coisa. Contar por um caminho e
+   filtrar por outro cria duas verdades que divergem no primeiro caso de borda,
+   e ninguém confere um número que concorda consigo mesmo.
+
+   Não recebe `hoje` porque frente não depende de data — e pedir um parâmetro
+   que não se usa convida o próximo a achar que depende. */
+function selecionarTag(lista, chave){
+  if (!chave || chave === 'todas') return lista.slice();
+  if (chave === TAG_SEM) return lista.filter(t => !t.tag);
+  return lista.filter(t => t.tag === chave);
+}
+function contarTag(lista, chave){ return selecionarTag(lista, chave).length; }
+/* Os dois eixos compostos numa função só, para que quadro, contagem do
+   cabeçalho da coluna e a linha de "quadro filtrado" não possam discordar
+   sobre o que está à vista. Três lugares compondo à mão seriam três chances
+   de esquecer um eixo. */
+function selecionarVisiveis(lista, chave, tag, hoje){
+  return selecionarTag(selecionar(lista, chave, hoje), tag);
+}
 
 /* Ordem dentro da coluna: GUT desc → prazo mais próximo → mais antiga.
    Sem GUT cai para o fim, porque ainda não foi priorizada. */
@@ -902,7 +1021,15 @@ function gPorDia(itens, diaISO){
    A ordem é `ordenarCol`, a MESMA do quadro. A célula quase sempre só cabe
    uma, e a que aparece tem de ser a que o quadro também põe em primeiro
    lugar — com duas ordens, o dia 12 teria uma tarefa "mais importante" na
-   grade e outra na coluna, e nenhuma das duas seria verificável. */
+   grade e outra na coluna, e nenhuma das duas seria verificável.
+
+   A grade IGNORA a frente escolhida, do mesmo jeito que já ignora o `foco` do
+   placar — e aqui o motivo é mais forte que "é o meu mês". Metade do que a
+   grade desenha são compromissos vindos do Google, que não têm frente e nunca
+   vão ter. Filtrar só a metade das tarefas deixaria uma grade meio recortada:
+   o dia 12 perderia a tarefa da IBnet e manteria a reunião da IBnet, e nenhum
+   rótulo daria conta de explicar isso. Grade meio filtrada é pior que grade sem
+   filtro. */
 function gTarefasDoDia(lista, diaISO, hoje){
   const doDia = (lista||[]).filter(function(t){
     return t && t.col !== 'feito' && t.prazo === diaISO;
@@ -1017,7 +1144,15 @@ function gDeveTerEvento(t){
 
 /* O corpo do evento. G, U, T e coluna NÃO entram: a decisão antiga continua
    valendo, o Calendar não tem campo para eles e inventar um formato dentro
-   da descrição é o que o primeiro app que reescrever o campo apaga. */
+   da descrição é o que o primeiro app que reescrever o campo apaga.
+
+   A FRENTE também não entra, e é a mesma decisão, não uma nova: ela é campo de
+   quadro igual a GUT e coluna. Botar "[Igreja]" no título é tentador e cobra
+   caro — o título passa a ser dois dados colados num campo só, o selo
+   (`gSelo`) passa a mudar quando ele só reclassifica a tarefa, e toda tarefa
+   reclassificada vira uma reescrita de evento no Google sem nada ter mudado de
+   horário. Se ele pedir a frente no Google um dia, o lugar é uma agenda por
+   frente, não um prefixo no texto. */
 function gCorpoEvento(t){
   const ini = gInstante(t && t.prazo, t && t.hora);
   if (ini === null) return null;
@@ -1763,7 +1898,8 @@ function render(){
   const abertas= tarefas.filter(t => t.col !== 'feito').length;
   sub.textContent = abertas + (abertas === 1 ? ' tarefa aberta' : ' tarefas abertas');
 
-  el.innerHTML = faixa + htmlPlacar(hoje) + htmlBoard(hoje);
+  el.innerHTML = faixa + htmlPlacar(hoje) + htmlTags() +
+                 htmlRecorteAviso(hoje) + htmlBoard(hoje);
 }
 
 /* "seg, 22/09 · hoje". O apelido do dia existe porque a data sozinha não
@@ -2041,30 +2177,109 @@ function htmlAgenda(){
     gSetupAgenda() + '</div>';
 }
 
+/* O rótulo de cada recorte mora em UM lugar. Ele é lido pelo placar e pela
+   frase da coluna vazia, e com duas cópias a segunda envelhece: o placar
+   diria "Em 7 dias" e a coluna vazia continuaria falando de "semana". */
+const ROT_FOCO = {
+  todas:     'No quadro',
+  atrasadas: 'Atrasadas',
+  semana:    'Em 7 dias',
+  semgut:    'Sem GUT',
+};
 function htmlPlacar(hoje){
-  /* Os números contam a base inteira. O recorte para no quadro — total não se filtra. */
-  const chip = (chave, rotulo, dica, cls) => {
+  /* Os números contam a base inteira. O recorte para no quadro — total não se
+     filtra. E isto vale também para a frente escolhida: esconder uma tarefa
+     atrasada da IBnet porque ele está olhando a Igreja é esconder pendência,
+     que é pior que mentir em total — total errado alguém confere, pendência
+     escondida ninguém procura. Quem declara que o quadro está parcial é a
+     `htmlRecorteAviso` logo abaixo. */
+  const chip = (chave, dica, cls) => {
     const n = contar(tarefas, chave, hoje);
     return '<button class="pl ' + cls + (foco===chave?' on':'') + (n?'':' vazio') +
       '" onclick="trocarFoco(\'' + chave + '\')" title="' + esc(dica) +
       (n ? ' — clique para ver só estas' : '') + '">' +
-      '<span class="n">' + n + '</span><span class="t">' + rotulo + '</span></button>';
+      '<span class="n">' + n + '</span><span class="t">' + ROT_FOCO[chave] + '</span></button>';
   };
   return '<div class="placar">' +
-    chip('todas',     'No quadro',   'Tudo que existe na agenda', 'pl-todas') +
-    chip('atrasadas', 'Atrasadas',   'Prazo já passou e a tarefa não está em Feito', 'pl-atrasada') +
-    chip('semana',    'Em 7 dias',   'Prazo cai de hoje até daqui a 7 dias', 'pl-semana') +
-    chip('semgut',    'Sem GUT',     'Ainda sem nota de prioridade', 'pl-semgut') +
+    chip('todas',     'Tudo que existe na agenda', 'pl-todas') +
+    chip('atrasadas', 'Prazo já passou e a tarefa não está em Feito', 'pl-atrasada') +
+    chip('semana',    'Prazo cai de hoje até daqui a 7 dias', 'pl-semana') +
+    chip('semgut',    'Ainda sem nota de prioridade', 'pl-semgut') +
     '</div>';
+}
+
+/* A barra de frentes. Cada botão traz a SUA contagem — é o número que
+   descreve o que aquele recorte põe na tela, obrigação 1 de "Filtro recorta a
+   lista, nunca o total". Contagem sobre a base inteira, não sobre o `foco`
+   ativo: são eixos independentes, e o número da interseção é o único que a
+   linha de aviso publica, com nome.
+
+   O botão `sem frente` não é comodidade: é como a fila de triagem se
+   anuncia. Sem ele, tarefa sem frente não aparece em recorte nenhum e o buraco
+   cresce calado — e no dia em que esta fatia subir, TODA tarefa antiga está
+   nele. Aparece só quando existe o quê: chip que grita à toa é chip ignorado. */
+function htmlTags(){
+  const chip = (chave, rotulo, n, cls) =>
+    '<button class="tg ' + cls + (tagFoco===chave?' on':'') + (n?'':' vazio') +
+    '" data-tg="' + esc(chave) + '" onclick="trocarTag(\'' + chave + '\')" title="' +
+    esc(chave === 'todas' ? 'Todas as frentes juntas'
+      : chave === TAG_SEM ? 'Tarefas que ainda não têm frente — a fila de triagem'
+      : 'Ver só o que é de ' + rotulo) + '">' +
+    '<span class="tgn">' + esc(rotulo) + '</span>' +
+    '<span class="tgc">' + n + '</span></button>';
+
+  let h = '<div class="tagbar">' + chip('todas', 'Todas', tarefas.length, 'tg-todas');
+  for (const g of TAGS) h += chip(g.id, g.nome, contarTag(tarefas, g.id), g.cls);
+  const sem = contarTag(tarefas, TAG_SEM);
+  if (sem) h += chip(TAG_SEM, 'sem frente', sem, 'tg-sem');
+  return h + '</div>';
+}
+
+/* Obrigações 2 e 3 de "Filtro recorta a lista, nunca o total": agrupamento
+   parcial se DECLARA parcial, e o texto afirma o que não mudou. Sem esta
+   linha o placar diz "3 atrasadas" com o quadro mostrando uma, e não há como
+   saber se as outras duas são de outra frente ou se sumiram.
+
+   Só aparece quando a frente está escolhida. O `foco` não precisa disto
+   porque o próprio chip fica aceso no placar, à vista; a frente também fica,
+   mas ela esconde tarefa de TODAS as colunas ao mesmo tempo, que é o recorte
+   com mais poder de fazer pendência desaparecer. */
+function htmlRecorteAviso(hoje){
+  if (tagFoco === 'todas') return '';
+  const nVis = selecionarVisiveis(tarefas, foco, tagFoco, hoje).length;
+  const rot  = tagFoco === TAG_SEM ? 'sem frente' : tagNome(tagFoco);
+  return '<div class="recorte-nota" data-recorte="' + esc(tagFoco) + '">' +
+    '<svg class="ic"><use href="#ic-alerta"/></svg><div>' +
+    'Quadro filtrado por <b>' + esc(rot) + '</b>' +
+    (foco === 'todas' ? '' : ' e <b>' + ROT_FOCO[foco] + '</b>') +
+    ': <b>' + nVis + '</b> de ' + tarefas.length + ' tarefas à vista. ' +
+    'Os números do placar acima e a grade do mês <b>não</b> mudam com este ' +
+    'recorte — eles continuam contando a agenda inteira.' +
+    '</div></div>';
 }
 
 function trocarFoco(chave){
   foco = (foco === chave) ? 'todas' : chave;
   render();
 }
+/* Clicar na frente já escolhida desliga o recorte, igual ao placar. Um gesto
+   só para ligar e desligar evita o beco de "filtrei e não acho o botão de
+   voltar" — e `Todas` continua ali como saída explícita. */
+function trocarTag(chave){
+  tagFoco = (tagFoco === chave) ? 'todas' : chave;
+  render();
+}
 
 function htmlBoard(hoje){
-  const visiveis = selecionar(tarefas, foco, hoje);
+  const visiveis = selecionarVisiveis(tarefas, foco, tagFoco, hoje);
+  /* A coluna vazia diz QUAIS recortes a deixaram vazia, nomeando cada um.
+     "Nada com o recorte atual" com dois eixos ligados manda ele procurar o que
+     já era sabido — e com a frente escolhida, some tarefa de todas as quatro
+     colunas ao mesmo tempo, então a frase é o único lugar onde o motivo
+     aparece perto do vazio. */
+  const ativos = [];
+  if (foco !== 'todas')    ativos.push(ROT_FOCO[foco]);
+  if (tagFoco !== 'todas') ativos.push(tagFoco === TAG_SEM ? 'sem frente' : tagNome(tagFoco));
   let h = '<div class="board">';
   for (const c of COLS){
     const itens = ordenarCol(visiveis.filter(t => t.col === c.id));
@@ -2079,7 +2294,8 @@ function htmlBoard(hoje){
       '<div class="col-body">';
     if (!itens.length){
       h += '<div class="col-vazia">' +
-           (foco === 'todas' ? esc(c.vazia) : 'Nada nesta coluna com o recorte atual.') +
+           (!ativos.length ? esc(c.vazia)
+              : 'Nada nesta coluna em ' + esc(ativos.join(' + ')) + '.') +
            '</div>';
     } else {
       h += itens.map(t => htmlCard(t, hoje)).join('');
@@ -2125,6 +2341,24 @@ function htmlCard(t, hoje){
     ? '<span class="sinal" title="' + esc(av.texto) + '"><svg class="ic"><use href="#ic-alerta"/></svg></span>'
     : '';
 
+  /* O chip de frente vem PRIMEIRO no pé do cartão porque é o que se varre na
+     vertical: "o que aqui é da Igreja?" se responde correndo o olho pela
+     coluna. GUT e prazo se leem de um cartão só.
+
+     Cartão sem frente não ganha chip nenhum. Marcar quarenta cartões antigos
+     com aviso pintaria o quadro inteiro de pendência no primeiro minuto — e
+     aviso que grita à toa é aviso ignorado. Quem conta a ausência é o botão
+     `sem frente` da barra, que traz o número e some quando chega a zero.
+
+     `data-tag` é o estado legível por máquina ao lado do rótulo, mesma regra
+     do `data-falha`: redação muda sem mudar de significado, e asserção presa à
+     redação reprova por motivo errado. */
+  const tag = t.tag
+    ? '<span class="tg-chip ' + (TAG_CLS[t.tag] || 'tg-outros') + '" ' +
+      'data-tag="' + esc(t.tag) + '" title="Frente: ' + esc(tagNome(t.tag)) + '">' +
+      esc(tagNome(t.tag)) + '</span>'
+    : '';
+
   /* A falha do Google no próprio cartão. A tira já dá o NÚMERO; ela não dá o
      QUAL, e num quadro de quarenta cartões esse é o dado que falta. Note que
      isto não depende do chip de prazo nem da coluna: a falha de `apagar`
@@ -2155,7 +2389,7 @@ function htmlCard(t, hoje){
       'ondragend="cardDragEnd(\'' + t.id + '\')">' +
     '<div class="tk-top"><div class="tk-tit">' + esc(t.titulo) + '</div>' + sinal + '</div>' +
     (t.nota ? '<div class="tk-nota">' + esc(t.nota) + '</div>' : '') +
-    '<div class="tk-pe">' + gut + prazo + falha +
+    '<div class="tk-pe">' + tag + gut + prazo + falha +
       '<span class="tk-acoes">' +
         '<button class="icon-btn" onclick="moverTarefa(\'' + t.id + '\',-1)" ' +
           (idx <= 0 ? 'disabled ' : '') + 'title="Mover para ' + esc(COL_NOME[COL_IDS[idx-1]] || '') + '">' +
@@ -2218,13 +2452,26 @@ function mudarColuna(id, col){
   const t = tarefas.find(x => x.id === id);
   if (!t || t.col === col) return;
 
-  /* Sair da caixa de entrada sem nota GUT é o furo que a matriz existe para
-     tapar. Não trava o gesto — abre a ficha já com a coluna nova escolhida,
-     para ele dar G, U e T. Travar calado seria pior que não avisar. */
-  if (t.col === 'entrada' && col !== 'entrada' && col !== 'feito' && !temGUT(t)){
-    abrirTarefa(id, col);
-    toast('Dê G, U e T antes de priorizar esta tarefa.');
-    return;
+  /* Sair da caixa de entrada sem nota GUT ou sem frente é o furo que a triagem
+     existe para tapar. Não trava o gesto — abre a ficha já com a coluna nova
+     escolhida. Travar calado seria pior que não avisar.
+
+     A frase diz QUAL das duas coisas falta, e diz as duas quando faltam as
+     duas. Recado único ("complete a triagem") obrigaria ele a caçar na ficha o
+     que o sistema já sabia: a mensagem tem de nomear o estado, não a operação
+     que foi barrada. É por isso que são três frases e não uma. */
+  if (t.col === 'entrada' && col !== 'entrada' && col !== 'feito'){
+    const faltaGUT = !temGUT(t);
+    const faltaTag = !t.tag;
+    if (faltaGUT || faltaTag){
+      abrirTarefa(id, col);
+      toast(faltaGUT && faltaTag
+              ? 'Escolha a frente e dê G, U e T antes de priorizar esta tarefa.'
+          : faltaGUT
+              ? 'Dê G, U e T antes de priorizar esta tarefa.'
+              : 'Escolha a frente desta tarefa antes de priorizar.');
+      return;
+    }
   }
 
   const patch = { col: col };
@@ -2243,6 +2490,21 @@ function preencherEscalas(){
     sel.innerHTML = h;
   });
 }
+/* A lista de frentes do formulário sai de `TAGS`, nunca escrita à mão aqui:
+   com duas listas, acrescentar uma frente na de cima a deixaria filtrável e
+   não escolhível — e o sintoma seria "criei a tag e ela não aparece". */
+function preencherTags(tagAtual){
+  const sel = document.getElementById('tm-tag');
+  let h = '<option value="">— sem frente —</option>';
+  for (const g of TAGS) h += '<option value="' + esc(g.id) + '">' + esc(g.nome) + '</option>';
+  /* Tag gravada que não está mais em `TAGS` PRECISA entrar na lista, senão
+     abrir a ficha e salvar APAGA o contexto da tarefa. Perda de dado causada
+     pela tela, calada, e sem nenhum erro para investigar depois. */
+  if (tagAtual && !TAG_IDS.includes(tagAtual)){
+    h += '<option value="' + esc(tagAtual) + '">' + esc(tagNome(tagAtual)) + '</option>';
+  }
+  sel.innerHTML = h;
+}
 function abrirTarefa(id, colSugerida){
   editId = id || null;
   const t = id ? tarefas.find(x => x.id === id) : null;
@@ -2250,6 +2512,11 @@ function abrirTarefa(id, colSugerida){
   document.getElementById('tm-titulo').value = t ? (t.titulo||'') : '';
   document.getElementById('tm-nota').value   = t ? (t.nota||'')   : '';
   document.getElementById('tm-col').value    = colSugerida || (t ? t.col : 'entrada');
+  /* Repovoa a lista a cada abertura, porque a opção de resgate depende da
+     tarefa que está sendo aberta. Preencher uma vez no boot deixaria a tag
+     fora da lista sem opção — e o salvar seguinte a apagaria. */
+  preencherTags(t ? (t.tag || null) : null);
+  document.getElementById('tm-tag').value    = t ? (t.tag||'')    : '';
   document.getElementById('tm-prazo').value  = t ? (t.prazo||'')  : '';
   document.getElementById('tm-hora').value   = t ? (t.hora||'')   : '';
   document.getElementById('tm-g').value      = t && t.g ? String(t.g) : '';
@@ -2317,6 +2584,11 @@ function salvarTarefa(){
     titulo : titulo,
     nota   : document.getElementById('tm-nota').value.trim() || null,
     col    : col,
+    /* Grava o ID, nunca o rótulo — renomear a frente na lista não pode mexer
+       em registro nenhum. Vazio vira `null` e não string vazia: os dois
+       significam "sem frente" para o olho e coisas diferentes para o filtro,
+       e `''` seria um terceiro estado que ninguém desenhou. */
+    tag    : document.getElementById('tm-tag').value || null,
     prazo  : prazo,
     /* Sem prazo, sem hora — a regra se repete aqui e não só na tela,
        porque a tela pode ser contornada e o registro, não. */
@@ -2414,6 +2686,10 @@ window.addEventListener('message', e => {
 
 /* ── boot ─────────────────────────────────────────────────────────── */
 preencherEscalas();
+/* A lista de frentes também nasce no boot, mesmo que `abrirTarefa` a repovoe
+   depois: `select` vazio na ficha é o sintoma que aparece se alguma coisa
+   quebrar antes do primeiro clique, e ele é mudo. */
+preencherTags(null);
 /* Não chama `iniciarDados()` aqui de propósito: assinar antes de o Firebase
    dizer se há sessão produz PERMISSION_DENIED por CORRIDA, e a recusa por
    corrida tem a mesma cara da recusa por conta errada. Quem destrava a
@@ -2429,6 +2705,12 @@ render();
 window.__agenda = {
   produtoGUT, faixaGUT, urgenciaDoPrazo, avisoPrazo, diffDias,
   selecionar, contar, ordenarCol, temGUT, esc, RECORTES, COL_IDS,
+  /* A frente sai como função pura porque a regra dela é de seleção, não de
+     pixel: "sem frente não é Outros" e "tag fora da lista não vira vazio" se
+     provam na função em duas linhas, e encená-las na tela exigiria montar o
+     quadro cinco vezes. A tela continua com as asserções dela. */
+  selecionarTag, contarTag, selecionarVisiveis, tagNome,
+  TAGS, TAG_IDS, TAG_NOME, TAG_SEM, ROT_FOCO,
   gOrganizar, gCobreODia, gRecusado, gDiaInteiro, gJanela, gHHMM, fmtDiaLongo,
   gDiasDoMes, gPorDia, fmtMesLongo, gTrocarVista, gAbrirDia, gAndar, gHoje,
   gTarefasDoDia, gFatias, gNomeNorm, gEscolherAgenda, GOOGLE_AGENDA_TAREFAS,
