@@ -4,8 +4,14 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Log de Atividades — IBNET</title>
+<!-- `auth` entrou em 01/10/2026, junto com o fechamento da LEITURA de `logs` nas
+     regras do RTDB. Antes desta tag a tela lia sem credencial nenhuma, porque a
+     regra era `.read: true` — e qualquer pessoa com a URL lia também. A escrita
+     segue aberta de propósito: quem grava aqui é o PORTAL, na hora do login,
+     quando ainda não existe sessão para apresentar. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -27,6 +33,43 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 #access-denied .ad-icon{font-size:33px}
 #access-denied h2{font-size:16px;font-weight:600;color:var(--red)}
 #access-denied p{font-size:13px;color:var(--muted)}
+
+/* ── ENTRAR NO FIREBASE ────────────────────────────────────────────────────── */
+/* Segunda credencial da tela. O login do portal diz QUEM é; este diz ao banco
+   que ele pode LER. Sem ele a leitura volta PERMISSION_DENIED — recusa certa
+   pelo motivo errado, porque o que falta não é permissão, é entrar. */
+#auth-modal{
+  position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);z-index:10000;padding:20px
+}
+#auth-modal.show{display:flex}
+#auth-modal .au-box{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:22px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px
+}
+#auth-modal h3{font-size:15px;font-weight:600}
+#auth-modal .au-sub{font-size:12px;color:var(--muted);line-height:1.5}
+#auth-modal input{
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  border-radius:7px;padding:9px 11px;font-size:13px;font-family:var(--font);width:100%
+}
+#auth-modal input:focus{outline:none;border-color:var(--accent)}
+#auth-modal button{
+  background:var(--accent);border:none;color:#fff;border-radius:7px;
+  padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)
+}
+#auth-modal button:disabled{opacity:.6;cursor:default}
+#au-erro{display:none;font-size:12px;color:var(--red)}
+
+/* Estado da leitura dentro da tabela. Erro ganha de "carregando": erro é
+   notícia, carregando é ausência de notícia. */
+.log-estado{text-align:center;padding:40px 24px;font-size:13px;line-height:1.6}
+.log-estado.ruim{color:var(--red)}
+.log-estado .le-acao{
+  margin-top:12px;background:transparent;border:1px solid var(--accent);
+  color:var(--accent);border-radius:7px;padding:7px 14px;font-size:12px;
+  font-weight:600;cursor:pointer;font-family:var(--font)
+}
 
 /* ── HEADER ────────────────────────────────────────────────────────────────── */
 .log-header{
@@ -188,6 +231,20 @@ body.light .filter-input,body.light .filter-select{background:#f8fafc;border-col
   <p>Esta área é exclusiva para administradores.</p>
 </div>
 
+<!-- ENTRAR NO FIREBASE — segunda credencial, a que o banco enxerga -->
+<div id="auth-modal">
+  <div class="au-box">
+    <h3>Entrar para ver o log</h3>
+    <p class="au-sub">O log fica guardado no Firebase e só abre para a sua conta.
+      É a mesma senha da Agenda, não a do portal.</p>
+    <input type="email" id="au-email" placeholder="E-mail" autocomplete="username"/>
+    <input type="password" id="au-pass" placeholder="Senha" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')fazerLogin()"/>
+    <div id="au-erro"></div>
+    <button id="au-btn" onclick="fazerLogin()">Entrar</button>
+  </div>
+</div>
+
 <!-- LOG VIEWER -->
 <div id="log-app" style="display:none">
   <header class="log-header">
@@ -305,9 +362,15 @@ const FB = {
   messagingSenderId:"468380845527",
   appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
 };
+/* Instância PADRÃO, não mais `'logs-viewer'`. A sessão do Firebase é guardada
+   por nome de instância (`firebase:authUser:<apiKey>:<nome>`), então nome
+   diferente = login separado. O Comercial usa a padrão; com as duas na padrão,
+   uma senha digitada vale para as duas telas. A Agenda e o Financeiro V02 têm
+   nome próprio e seguem com login próprio — trocar o nome deles aqui seria
+   mexer em módulo que funciona para ganhar conveniência. */
 let _app, db;
-try { _app = firebase.app('logs-viewer'); } catch(e) {
-  _app = firebase.initializeApp(FB, 'logs-viewer');
+try { _app = firebase.app(); } catch(e) {
+  _app = firebase.initializeApp(FB);
 }
 db = firebase.database(_app);
 
@@ -323,6 +386,109 @@ function getSession() {
   try { return JSON.parse(sessionStorage.getItem('ibnet_session') || 'null'); } catch { return null; }
 }
 
+// ── ENTRAR NO FIREBASE ────────────────────────────────────────────────────────
+/* São DUAS portas, e elas respondem perguntas diferentes:
+   - `getSession()` é o portal: "quem é você e você é admin?"
+   - o Firebase: "o banco deixa você ler?"
+   A primeira é interface e mora no fonte; a segunda é a que a regra do RTDB
+   enxerga. Passar na primeira e falhar na segunda é o estado novo que esta tela
+   precisa saber desenhar. */
+const auth = firebase.auth(_app);
+try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e){}
+
+/* 'carregando' | 'ok' | 'sem-sessao' | 'erro'. Começa em carregando, que é a
+   verdade: nada chegou ainda. */
+let estado  = 'carregando';
+let detalhe = '';
+
+/* Declarados AQUI, acima de quem os usa, e não junto do `loadLogs`. `let` é
+   hoisted sem valor: função chamada antes da linha da declaração estoura em
+   ReferenceError, e o sintoma engana — a tela monta e só a cauda morre
+   ([[Excecao depois do efeito visivel passa por defeito cosmetico]]). Hoje
+   `init()` roda no fim do <script> e nada chamaria antes; "hoje" não é garantia. */
+const TIMEOUT_LEITURA = 12000;   // 12s, não 3: aviso que grita à toa vira aviso ignorado
+let _inscrito  = false;
+let _refLigada = null;
+let _relogio   = null;
+
+function abrirAuth(){
+  const m = document.getElementById('auth-modal');
+  if (m.classList.contains('show')) return;
+  m.classList.add('show');
+  const e = document.getElementById('au-email');
+  const s = getSession();
+  if (!e.value && s && s.email) e.value = s.email;
+  setTimeout(() => (e.value ? document.getElementById('au-pass') : e).focus(), 60);
+}
+function fecharAuth(){
+  document.getElementById('auth-modal').classList.remove('show');
+  document.getElementById('au-pass').value = '';
+  document.getElementById('au-erro').style.display = 'none';
+}
+function erroAuth(msg){
+  const el = document.getElementById('au-erro');
+  el.textContent = msg; el.style.display = '';
+}
+function msgErroAuth(e){
+  const c = (e && e.code) || '';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c))
+    return 'E-mail ou senha incorretos.';
+  if (/invalid-email/.test(c))          return 'E-mail inválido.';
+  if (/too-many-requests/.test(c))      return 'Muitas tentativas. Aguarde alguns minutos.';
+  if (/network-request-failed/.test(c)) return 'Sem conexão com a internet.';
+  if (/operation-not-allowed/.test(c))  return 'Login por e-mail/senha não está ativado no Firebase.';
+  if (/user-disabled/.test(c))          return 'Esta conta está desativada.';
+  return 'Não foi possível entrar. ' + ((e && e.message) || '');
+}
+function fazerLogin(){
+  const email = document.getElementById('au-email').value.trim();
+  const pass  = document.getElementById('au-pass').value;
+  const btn   = document.getElementById('au-btn');
+  if (!email || !pass){ erroAuth('Preencha e-mail e senha.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(() => { document.getElementById('au-pass').value = ''; })
+    .catch(e => { erroAuth(msgErroAuth(e)); })
+    .then(() => { btn.disabled = false; btn.textContent = 'Entrar'; });
+}
+
+/* `on()` EMPILHA: religar sem desligar deixa duas inscrições no mesmo caminho e
+   a tabela redesenha em dobro a cada mudança. No caminho do erro o próprio
+   Firebase cancela a inscrição; no caminho do RELÓGIO não cancela ninguém — ela
+   continua viva, podendo responder depois. Por isso desligar é explícito. */
+function desligarLeitura(){
+  if (_refLigada) { try { _refLigada.off(); } catch(e){} }
+  clearTimeout(_relogio);
+  _refLigada = null;
+  _inscrito  = false;
+}
+
+function semSessaoAgora(){
+  desligarLeitura();
+  allLogs = [];
+  estado  = 'sem-sessao';
+  detalhe = '';
+  applyFilters();
+  abrirAuth();
+}
+
+/* `onAuthStateChanged` avisa quando SABE; "ainda não sei" não tem callback.
+   Sem este prazo, um SDK que não se pronuncia deixa a tela em "carregando"
+   para sempre — o mesmo buraco do `on('value')` mudo, um andar acima. */
+const AUTH_PRAZO = 8000;
+let _authFalou = false;
+let _authPrazo = null;
+
+function ligarAuth(){
+  auth.onAuthStateChanged(u => {
+    _authFalou = true;
+    clearTimeout(_authPrazo);
+    if (u){ fecharAuth(); loadLogs(); return; }
+    semSessaoAgora();
+  });
+  _authPrazo = setTimeout(() => { if (!_authFalou) semSessaoAgora(); }, AUTH_PRAZO);
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function init() {
   const session = getSession();
@@ -332,19 +498,86 @@ function init() {
   }
   document.getElementById('access-denied').classList.add('hidden');
   document.getElementById('log-app').style.display = '';
-  loadLogs();
+  /* A tela monta ANTES de saber se há sessão, de propósito: quem decide o que
+     mostrar na tabela é o estado, e "carregando" é a verdade neste instante. */
+  applyFilters();
+  ligarAuth();
 }
 
 // ── CARREGAR DO FIREBASE (últimos 30 dias) ────────────────────────────────────
+/* `on('value', cb)` SEM o terceiro argumento emudece em PERMISSION_DENIED: não
+   vira exceção, não vira log, não vira promessa rejeitada. Vira NADA, e a tela
+   fica em "Nenhuma ação registrada ainda" — vazio-porque-quebrou com cara de
+   vazio-porque-está-tudo-bem. Era exatamente este o caso desta tela até
+   01/10/2026, e ele só ia aparecer no dia em que a regra fechasse. Por isso o
+   segundo callback E o relógio: erro não cobre "nunca respondeu". */
 function loadLogs() {
+  if (_inscrito) return;
+  /* Assinar sem sessão só produz a recusa que vira beco. O "Entrar" da tabela
+     cai aqui: sem esta saída ele repetiria para sempre a leitura sem credencial. */
+  if (!auth.currentUser){ semSessaoAgora(); return; }
+  _inscrito = true;
+  estado    = 'carregando';
+  detalhe   = '';
+  applyFilters();
+
   // Usamos a chave numérica (Date.now()) como pivot temporal — sem índice extra
   const cutoffKey = String(Date.now() - RETENTION_MS);
-  db.ref('logs').orderByKey().startAt(cutoffKey).on('value', snap => {
-    const v = snap.val() || {};
-    allLogs = Object.values(v).sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
-    populateUserFilter();
+  _refLigada = db.ref('logs').orderByKey().startAt(cutoffKey);
+  _relogio = setTimeout(() => {
+    if (estado !== 'carregando') return;
+    estado  = 'erro';
+    detalhe = 'O Firebase não respondeu em 12 segundos.';
     applyFilters();
-  });
+  }, TIMEOUT_LEITURA);
+
+  _refLigada.on('value',
+    snap => {
+      clearTimeout(_relogio);
+      const v = snap.val() || {};
+      allLogs = Object.values(v).sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+      estado  = 'ok';
+      detalhe = '';
+      populateUserFilter();
+      applyFilters();
+    },
+    err => {
+      clearTimeout(_relogio);
+      _inscrito = false;          // o listener foi cancelado pelo próprio Firebase
+      allLogs   = [];
+      /* PERMISSION_DENIED aqui quer dizer "entrou com uma conta que a regra não
+         reconhece" — diferente de "não entrou", que o `onAuthStateChanged` já
+         pegou antes. Duas frases porque são dois mundos. */
+      if (String(err && err.code || '').toUpperCase().indexOf('PERMISSION') >= 0){
+        estado  = 'erro';
+        detalhe = 'Esta conta não tem permissão de ler o log.' +
+                  (auth.currentUser ? ' Conectada: ' + auth.currentUser.email : '');
+      } else {
+        estado  = 'erro';
+        detalhe = (err && err.message) || 'Falha ao ler o log.';
+      }
+      applyFilters();
+    }
+  );
+}
+
+/* A porta de saída dos dois estados ruins — e UM portão só, o que mora dentro do
+   `loadLogs`. Aqui havia uma segunda cópia da mesma trava (`if (!currentUser)
+   abrirAuth()`), e manter duas travas para a mesma porta custou duas coisas.
+
+   A primeira é de medida: a trava de dentro ficava inalcançável, e código
+   inalcançável não tem como reprovar teste. A varredura de 02/10/2026 apagou a
+   trava do `loadLogs` (sabotagem s10) e a suíte passou VERDE nas 77 — não porque
+   a proteção fosse boa, mas porque nenhum dedo chegava nela.
+
+   A segunda é de tela, e vale por si: `abrirAuth()` sozinho abre o login POR
+   CIMA do quadro anterior, que continua dizendo "Esta conta não tem permissão de
+   ler o log" — afirmação sobre uma conta que já não existe. Caindo no `loadLogs`,
+   a tela repinta o estado verdadeiro ("Entre com a sua conta") e aí oferece o
+   login. [[Vazio porque quebrou nao pode parecer vazio porque esta tudo bem]] */
+function tentarDeNovo(){
+  desligarLeitura();
+  loadLogs();
 }
 
 // ── USER FILTER OPTIONS ───────────────────────────────────────────────────────
@@ -358,6 +591,14 @@ function populateUserFilter() {
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
 function updateStats() {
+  /* Zero é um número, e número afirma. "0 registros" com a leitura negada é a
+     mesma mentira da tabela vazia, só menor e mais convincente — a forma visual
+     fala mais alto que o rótulo. Travessão não afirma nada, que é o certo aqui. */
+  if (estado !== 'ok') {
+    ['stat-total','stat-today','stat-filtered','stat-users']
+      .forEach(id => { document.getElementById(id).textContent = '—'; });
+    return;
+  }
   const today     = new Date().toISOString().slice(0, 10);
   const todayCount= allLogs.filter(l => l.ts && l.ts.slice(0,10) === today).length;
   const users     = new Set(allLogs.map(l => l.usuario)).size;
@@ -425,6 +666,25 @@ function esc(s) {
 function renderTable() {
   const tbody = document.getElementById('log-tbody');
 
+  /* ERRO E FALTA DE SESSÃO GANHAM DE "VAZIO". Tabela vazia é uma afirmação —
+     "não houve ação" — e ela é falsa quando a leitura foi negada ou nem
+     aconteceu. Cada estado tem frase própria E porta de saída: acusar sem
+     oferecer o que fazer vira beco
+     ([[Perguntar se a tela acusa nao e perguntar se a tela tem saida]]). */
+  if (estado !== 'ok') {
+    const quadro = {
+      'carregando':  { cls:'',     txt:'Carregando o log…',                      botao:'' },
+      'sem-sessao':  { cls:'',     txt:'Entre com a sua conta para ver o log.',  botao:'Entrar' },
+      'erro':        { cls:'ruim', txt:'O log não pôde ser lido. ' + detalhe,    botao:'Tentar de novo' }
+    }[estado] || { cls:'ruim', txt:'Estado desconhecido da leitura: ' + estado, botao:'Tentar de novo' };
+    tbody.innerHTML = `<tr><td colspan="5" class="log-estado ${quadro.cls}">
+      ${quadro.txt}
+      ${quadro.botao ? `<br><button class="le-acao" onclick="tentarDeNovo()">${quadro.botao}</button>` : ''}
+    </td></tr>`;
+    renderPagination();
+    return;
+  }
+
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="log-empty">
       ${allLogs.length ? 'Nenhum registro encontrado com os filtros atuais.' : 'Nenhuma ação registrada ainda.'}
@@ -459,8 +719,11 @@ function renderPagination() {
   const start = total ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
   const end   = Math.min(currentPage * PAGE_SIZE, total);
 
+  /* Mesmo cuidado dos contadores: "Nenhum registro" é afirmação sobre o log, e
+     ela é falsa quando a leitura não aconteceu. */
   document.getElementById('page-info').textContent =
-    total ? `Mostrando ${start}–${end} de ${total} registros` : 'Nenhum registro';
+    estado !== 'ok' ? '' :
+    (total ? `Mostrando ${start}–${end} de ${total} registros` : 'Nenhum registro');
 
   const container = document.getElementById('page-btns');
   if (totalPages <= 1) { container.innerHTML = ''; return; }

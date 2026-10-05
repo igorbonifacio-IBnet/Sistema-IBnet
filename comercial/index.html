@@ -5,8 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Dashboard Comercial</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- `auth` entrou em 01/10/2026, junto com o fechamento da LEITURA de `comercial`
+     nas regras do RTDB. Antes desta tag a tela lia sem credencial nenhuma, porque
+     a regra era `.read: true` — e `comercial/vendas` tem nome, bairro, plano,
+     contrato e churn de cliente. A ESCRITA segue aberta de propósito: quem grava
+     aqui é o robô do SGP (Apps Script), que não tem sessão para apresentar. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -25,6 +31,45 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',Arial,sans-se
 #loading-overlay.hidden{display:none}
 .spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── A CAPA É A RESPOSTA, não um enfeite de carregamento ──────────────────────
+   Nesta tela o painel INTEIRO é uma afirmação: doze indicadores, quatro
+   gráficos, "0 clientes" e R$ 0,00 de MRR. Mostrar isso com a leitura negada
+   diz "a IBnet não tem cliente nenhum" — mentira maior e mais convincente que a
+   tabela vazia do Log, porque tem a forma de um painel pronto. Por isso o erro e
+   a falta de sessão mantêm a capa de pé em vez de revelar o painel zerado:
+   esconder tudo é a única resposta honesta quando nada foi lido. */
+#ov-msg{font-size:14px;color:var(--muted);max-width:420px;text-align:center;line-height:1.6}
+#ov-msg.ruim{color:var(--red)}
+#ov-acao{
+  background:transparent;border:1px solid var(--accent);color:var(--accent);
+  border-radius:7px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;
+  font-family:inherit
+}
+#ov-acao[hidden]{display:none}
+
+/* O login do banco — segunda credencial, a que a regra do RTDB enxerga */
+#ov-login{display:none;flex-direction:column;gap:12px;width:100%;max-width:340px;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+#ov-login.show{display:flex}
+#ov-login h3{font-size:15px;font-weight:600}
+#ov-login .ov-sub{font-size:12px;color:var(--muted);line-height:1.5}
+#ov-login input{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  border-radius:7px;padding:9px 11px;font-size:13px;font-family:inherit;width:100%}
+#ov-login input:focus{outline:none;border-color:var(--accent)}
+#ov-login button{background:var(--accent);border:none;color:#fff;border-radius:7px;
+  padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+#ov-login button:disabled{opacity:.6;cursor:default}
+#ov-erro{display:none;font-size:12px;color:var(--red)}
+
+/* O aviso que NÃO apaga o que já foi lido: falha de atualização depois de um
+   carregamento bom não justifica esconder dado bom. */
+#aviso-stale{display:none;font-size:11px;color:var(--yellow);border:1px solid rgba(198,166,103,.3);
+  background:rgba(198,166,103,.08);border-radius:6px;padding:3px 8px}
+#aviso-stale.show{display:inline-block}
+
+.tb-estado{text-align:center;padding:34px 20px;font-size:13px;color:var(--muted)}
+.tb-estado.ruim{color:var(--red)}
 
 /* mini header inside iframe */
 .mini-header{
@@ -321,13 +366,25 @@ body.light .qf-btn.active[data-status="__SEM_STATUS__"]{background:#475569}
 <body>
 
 <div id="loading-overlay">
-  <div class="spinner"></div>
-  <p style="font-size:14px;color:var(--muted)">Carregando dados comerciais…</p>
+  <div class="spinner" id="ov-spin"></div>
+  <p id="ov-msg">Carregando dados comerciais…</p>
+  <button id="ov-acao" hidden onclick="tentarDeNovo()">Tentar de novo</button>
+  <div id="ov-login">
+    <h3>Entrar para ver o comercial</h3>
+    <p class="ov-sub">Os dados de cliente ficam no Firebase e só abrem para a sua
+      conta. É a mesma senha da Agenda e do Log, não a do portal.</p>
+    <input type="email" id="ov-email" placeholder="E-mail" autocomplete="username"/>
+    <input type="password" id="ov-pass" placeholder="Senha" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')fazerLogin()"/>
+    <div id="ov-erro"></div>
+    <button id="ov-btn" onclick="fazerLogin()">Entrar</button>
+  </div>
 </div>
 
 <div class="mini-header">
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span id="last-update">—</span>
+    <span id="aviso-stale"></span>
     <span id="auto-countdown" style="font-size:11px;color:var(--muted)"></span>
   </div>
   <button class="btn-refresh" id="refresh-btn">↻ Atualizar</button>
@@ -534,8 +591,56 @@ const SHEETS = [
 const ROWS_PER_PAGE = 20;
 const MES_ABBR = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
 
+// ── Firebase ──
+/* O `initializeApp` morava no RODAPÉ deste script, logo acima do boot. Subiu para
+   cá porque agora existe `auth` como constante de módulo, e `const` é hoisted sem
+   valor: qualquer função que falasse de `auth` antes desta linha rodar estouraria
+   em ReferenceError — e esse sintoma engana, porque a tela já estaria montada e só
+   a cauda morreria. Inicializar antes de declarar é a ordem que torna o erro
+   impossível, em vez de improvável.
+   Instância PADRÃO, sem nome: é a mesma que o Log usa, e a persistência do
+   Firebase Auth é indexada por NOME de app. Nome próprio aqui obrigaria o Igor a
+   digitar a mesma senha duas vezes, uma por tela. */
+try {
+  firebase.initializeApp({
+    apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
+    authDomain:"ibnet-platform.firebaseapp.com",
+    databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
+    projectId:"ibnet-platform",
+    storageBucket:"ibnet-platform.firebasestorage.app",
+    messagingSenderId:"468380845527",
+    appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
+  });
+} catch(e) {}
+
+const auth = firebase.auth();
+/* LOCAL: a sessão sobrevive ao fechar o navegador. Sem isso, cada abertura do
+   portal pediria a senha de novo — e aviso que aparece todo dia vira clique
+   automático, que é o contrário de segurança. */
+try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e) {}
+
 // ── Firebase: nó das vendas ──
 const vendasRef = () => firebase.database().ref('comercial/vendas');
+
+/* ── O ESTADO DA LEITURA ──────────────────────────────────────────────────────
+   Esta tela mentia de um jeito pior que a do Log. Lá, a leitura negada deixava a
+   tabela em "Nenhuma ação registrada ainda". Aqui ela deixa a tabela vazia, o
+   rodapé em "0 clientes" e DOZE cartões de KPI em 0 / R$ 0,00 / 0% — um painel
+   com cara de pronto afirmando que a empresa não tem cliente nenhum. O Igor não
+   tem como distinguir isso de um mês ruim.
+
+   Por isso aqui o remédio é outro: em vez de revelar o painel zerado, a CAPA
+   continua de pé e explica. Nesta tela o painel inteiro é a afirmação.
+   [[Vazio porque quebrou nao pode parecer vazio porque esta tudo bem]] */
+let estado  = 'carregando';   // carregando | ok | sem-sessao | erro
+let detalhe = '';
+const TIMEOUT_LEITURA = 12000;  // 12s, não 3: aviso que grita à toa vira aviso ignorado
+const AUTH_PRAZO      = 8000;
+let _vendasSubscribed = false;
+let _refLigada = null;
+let _relogio   = null;
+let _authFalou = false;
+let _authPrazo = null;
 
 // ── Sessão / permissões (sessionStorage é compartilhado com o portal, mesma origem) ──
 function getRole(){ try { return (JSON.parse(sessionStorage.getItem('ibnet_session')||'null')||{}).role || ''; } catch(e){ return ''; } }
@@ -792,6 +897,11 @@ function rowToVenda(r) {
 }
 
 function applyVendasSnapshot(obj) {
+  /* O estado vira 'ok' ANTES de desenhar: `applyFilters()` chama `updateKPIs` e
+     `renderTable`, e os dois consultam `estado` para decidir entre número e
+     travessão. Marcar depois pintaria a tela boa com a cara de carregando. */
+  estado  = 'ok';
+  detalhe = '';
   allData = Object.entries(obj || {}).map(([id, v]) => vendaToRow(id, v));
   recomputeMesOrder();
   populateFilters();
@@ -800,29 +910,248 @@ function applyVendasSnapshot(obj) {
   applyFilters();
   refreshChartTheme();
   document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleString('pt-BR');
-  document.getElementById('loading-overlay').classList.add('hidden');
+  avisoStale('');
+  pintarCapa();
+}
+
+/* ── A CAPA ───────────────────────────────────────────────────────────────────
+   Uma função só desenha a capa, e ela desenha a partir do estado. Espalhar
+   `classList.add('hidden')` pelos caminhos de erro foi exatamente o que produziu
+   o painel zerado: cada `catch` escondia a capa por conta própria e o que
+   aparecia embaixo era um dashboard inteiro afirmando zero. */
+function pintarCapa() {
+  const capa  = document.getElementById('loading-overlay');
+  const spin  = document.getElementById('ov-spin');
+  const msg   = document.getElementById('ov-msg');
+  const acao  = document.getElementById('ov-acao');
+  const login = document.getElementById('ov-login');
+  if (!capa) return;
+
+  if (estado === 'ok') { capa.classList.add('hidden'); return; }
+  capa.classList.remove('hidden');
+
+  const quadro = {
+    'carregando': { txt:'Carregando dados comerciais…',               spin:true,  botao:false, login:false, ruim:false },
+    'sem-sessao': { txt:'',                                           spin:false, botao:false, login:true,  ruim:false },
+    'erro':       { txt:'Os dados comerciais não puderam ser lidos. ' + detalhe,
+                                                                      spin:false, botao:true,  login:false, ruim:true  }
+  }[estado] || { txt:'Estado desconhecido da leitura: ' + estado,
+                 spin:false, botao:true, login:false, ruim:true };
+
+  spin.style.display  = quadro.spin ? '' : 'none';
+  msg.textContent     = quadro.txt;
+  msg.style.display   = quadro.txt ? '' : 'none';
+  msg.classList.toggle('ruim', quadro.ruim);
+  acao.hidden         = !quadro.botao;
+  login.classList.toggle('show', quadro.login);
+  if (quadro.login) {
+    const e = document.getElementById('ov-email');
+    const s = (() => { try { return JSON.parse(sessionStorage.getItem('ibnet_session')||'null')||{}; } catch(_){ return {}; } })();
+    if (!e.value && s.email) e.value = s.email;
+    setTimeout(() => (e.value ? document.getElementById('ov-pass') : e).focus(), 60);
+  }
+}
+
+/* O aviso NÃO-destrutivo: a leitura falhou DEPOIS de uma boa, e a tela já tem
+   dados de verdade na mão. Apagá-los para mostrar a capa seria trocar informação
+   velha mas verdadeira por nenhuma informação. Aqui a tela avisa que parou de
+   atualizar e deixa o que tinha no ar. */
+function avisoStale(txt) {
+  const el = document.getElementById('aviso-stale');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.classList.toggle('show', !!txt);
+}
+
+/* `on()` EMPILHA: religar sem desligar deixa duas inscrições no mesmo caminho.
+   No caminho do erro o próprio Firebase cancela a inscrição; no caminho do
+   RELÓGIO não cancela ninguém — ela continua viva e pode responder depois. */
+function desligarLeitura() {
+  if (_refLigada) { try { _refLigada.off(); } catch(e){} }
+  clearTimeout(_relogio);
+  _refLigada = null;
+  _vendasSubscribed = false;
+}
+
+function semSessaoAgora() {
+  desligarLeitura();
+  allData = [];
+  estado  = 'sem-sessao';
+  detalhe = '';
+  avisoStale('');
+  applyFilters();
+  pintarCapa();
+}
+
+/* Duas falhas diferentes, e a diferença é visível para o Igor: sem dados na mão,
+   a capa sobe e explica; COM dados na mão, o painel fica e ganha um aviso. */
+function falhaLeitura(err) {
+  const permissao = String((err && err.code) || '').toUpperCase().indexOf('PERMISSION') >= 0 ||
+                    /permission/i.test(String((err && err.message) || ''));
+  const frase = permissao
+    ? 'Esta conta não tem permissão de ler os dados comerciais.' +
+      (auth.currentUser ? ' Conectada: ' + auth.currentUser.email : '')
+    : ((err && err.message) || 'Falha ao ler os dados comerciais.');
+
+  if (allData.length) {
+    avisoStale('⚠ parou de atualizar: ' + frase);
+    /* Não basta NÃO apagar os dados: tem de DESFAZER a capa que o chamador já
+       levantou. Quem entra aqui vindo do botão `Atualizar` passou por
+       `loadData`, que põe `estado='carregando'` antes de ler; sair daqui com um
+       `return` seco deixava esse estado de pé e a capa com ele — spinner eterno
+       por cima das vendas, e o aviso que explica o motivo escondido ATRÁS da
+       capa. A tela ficava com três coisas verdadeiras no DOM e nenhuma à vista.
+       `estado='ok'` é honesto porque o dado é real; o que ele não é mais é
+       FRESCO, e dizer isso é exatamente o trabalho do `avisoStale`.
+       [[Vazio porque quebrou nao pode parecer vazio porque esta tudo bem]] */
+    estado  = 'ok';
+    detalhe = '';
+    pintarCapa();
+    return;
+  }
+  desligarLeitura();
+  estado  = 'erro';
+  detalhe = frase;
+  applyFilters();
+  pintarCapa();
 }
 
 // Listener em tempo real — sincroniza entre dispositivos automaticamente
-let _vendasSubscribed = false;
 function subscribeVendas() {
   if (_vendasSubscribed) return;
+  /* O ÚNICO portão de sessão desta tela. `tentarDeNovo` não repete esta trava de
+     propósito: na tela de Log havia uma cópia dela no botão, a de dentro ficou
+     inalcançável, e a sabotagem que a apagou passou VERDE em 77 asserções
+     (02/10/2026). Portão repetido é portão que ninguém mede. */
+  if (!auth.currentUser) { semSessaoAgora(); return; }
   _vendasSubscribed = true;
-  vendasRef().on('value',
-    snap => applyVendasSnapshot(snap.val() || {}),
-    err  => { console.error('Firebase vendas:', err); document.getElementById('loading-overlay').classList.add('hidden'); }
+  estado  = 'carregando';
+  detalhe = '';
+  pintarCapa();
+
+  _refLigada = vendasRef();
+  /* `on('value', cb)` SEM o terceiro argumento emudece em PERMISSION_DENIED: não
+     vira exceção, não vira log, não vira promessa rejeitada. Vira NADA. E o erro
+     também não cobre "nunca respondeu" — para isso existe o relógio. */
+  _relogio = setTimeout(() => {
+    if (estado !== 'carregando') return;
+    falhaLeitura({ message: 'O Firebase não respondeu em 12 segundos.' });
+  }, TIMEOUT_LEITURA);
+
+  _refLigada.on('value',
+    snap => { clearTimeout(_relogio); applyVendasSnapshot(snap.val() || {}); },
+    err  => {
+      clearTimeout(_relogio);
+      _vendasSubscribed = false;   // o listener foi cancelado pelo próprio Firebase
+      console.error('Firebase vendas:', err);
+      falhaLeitura(err);
+    }
   );
+}
+
+/* A porta de saída dos estados ruins. Um portão só — o de `subscribeVendas`. */
+function tentarDeNovo() {
+  desligarLeitura();
+  subscribeVendas();
 }
 
 async function loadData(silent = false) {
   const btn = document.getElementById('refresh-btn');
   btn.textContent = '⟳ Atualizando…'; btn.style.opacity = '.6'; btn.style.pointerEvents = 'none';
-  if (!silent) document.getElementById('loading-overlay').classList.remove('hidden');
   try {
+    if (!auth.currentUser) { semSessaoAgora(); return; }
+    /* `!allData.length` junto do `!silent`: a capa só sobe quando não há nada
+       para esconder. Com o painel cheio, trocar as vendas por um spinner é a
+       mesma troca que o `avisoStale` recusa logo acima — informação verdadeira
+       por nenhuma informação — e aqui ainda por cima é desnecessária, porque o
+       próprio botão já virou "⟳ Atualizando…" duas linhas atrás. Era também o
+       que fazia a capa presa ser VISÍVEL: sem este guarda, toda recusa depois
+       de uma leitura boa passava primeiro por uma capa levantada. */
+    if (!silent && !allData.length) { estado = 'carregando'; pintarCapa(); }
     const snap = await vendasRef().once('value');
     applyVendasSnapshot(snap.val() || {});
-  } catch(e) { console.error(e); document.getElementById('loading-overlay').classList.add('hidden'); }
-  btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+  } catch(e) {
+    console.error(e);
+    falhaLeitura(e);
+  } finally {
+    btn.textContent = '↻ Atualizar'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+  }
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+/* `display = 'block'`, nunca `display = ''`. A folha de estilo declara
+   `#ov-erro{display:none}`, e string vazia APAGA o estilo inline em vez de
+   revelar o elemento — quem volta a mandar é a regra do CSS, que diz `none`. O
+   efeito era a pior versão possível deste módulo: senha errada, e o formulário
+   ficava calado. O Igor digitaria de novo sem nunca saber o que havia de errado.
+   Quem achou foi a bancada, no cenário "entrar": o roteiro esperou 4s pela
+   mensagem e desistiu. A mesma troca em `#ov-msg` é inofensiva porque aquele não
+   nasce escondido no CSS — o que faz desta a armadilha difícil de ver lendo.
+   [[Vazio porque quebrou nao pode parecer vazio porque esta tudo bem]] */
+function erroLogin(msg) {
+  const el = document.getElementById('ov-erro');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+function msgErroAuth(e) {
+  const c = (e && e.code) || '';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c))
+    return 'E-mail ou senha incorretos.';
+  if (/invalid-email/.test(c))          return 'E-mail inválido.';
+  if (/too-many-requests/.test(c))      return 'Muitas tentativas. Aguarde alguns minutos.';
+  if (/network-request-failed/.test(c)) return 'Sem conexão com a internet.';
+  if (/operation-not-allowed/.test(c))  return 'Login por e-mail/senha não está ativado no Firebase.';
+  if (/user-disabled/.test(c))          return 'Esta conta está desativada.';
+  return 'Não foi possível entrar. ' + ((e && e.message) || '');
+}
+function fazerLogin() {
+  const email = document.getElementById('ov-email').value.trim();
+  const pass  = document.getElementById('ov-pass').value;
+  const btn   = document.getElementById('ov-btn');
+  if (!email || !pass) { erroLogin('Preencha e-mail e senha.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(() => {
+      document.getElementById('ov-pass').value = '';
+      document.getElementById('ov-erro').style.display = 'none';
+    })
+    .catch(e => { erroLogin(msgErroAuth(e)); })
+    /* `.then` final, não `.finally`: o botão tem de voltar a "Entrar" nos dois
+       caminhos, e botão preso em "Entrando…" é tela que parece travada. */
+    .then(() => { btn.disabled = false; btn.textContent = 'Entrar'; });
+}
+
+/* O CAC é crachá de linha, não é a tela: cada linha mostra o custo de ativação do
+   cliente. Chegando depois das vendas, as linhas já desenhadas diriam "Sem CAC" —
+   que é uma afirmação falsa sobre um cliente que tem CAC. Daí o redesenho quando
+   ele chega. Falha dele não derruba nada: `loadCACData` engole o próprio erro e a
+   tabela fica sem o crachá, que é degradação visível e honesta. */
+function carregarCAC() {
+  loadCACData().then(() => { if (estado === 'ok') renderTable(); });
+}
+
+/* `onAuthStateChanged` avisa quando SABE; "ainda não sei" não tem callback. Sem
+   este prazo, um SDK que não se pronuncia deixa a capa em "Carregando…" para
+   sempre — o mesmo buraco do `on('value')` mudo, um andar acima. */
+function ligarAuth() {
+  auth.onAuthStateChanged(u => {
+    _authFalou = true;
+    clearTimeout(_authPrazo);
+    if (u) {
+      /* As VENDAS primeiro, e o CAC em paralelo. Antes era
+         `loadCACData().then(() => subscribeVendas())`, e isso punha o enfeite na
+         frente da tela: o CAC são dois `once()`, e `once()` que nunca responde
+         não rejeita — fica pendurado. A tela inteira ficaria em "Carregando…"
+         para sempre, e sem nem o relógio de 12s, que só começa a contar dentro do
+         `subscribeVendas` que nunca seria chamado. Quem manda na tela é o nó que
+         a tela mostra. */
+      subscribeVendas();
+      carregarCAC();
+      return;
+    }
+    semSessaoAgora();
+  });
+  _authPrazo = setTimeout(() => { if (!_authFalou) semSessaoAgora(); }, AUTH_PRAZO);
 }
 
 // ── SINCRONIZAÇÃO COM O SGP (somente admin) ──
@@ -917,7 +1246,12 @@ function applyFilters() {
            (!bairro || rBairro   === bairro);
   });
   currentPage = 1;
-  updateKPIs(); updateCharts(); renderTable();
+  /* Os gráficos ficam de fora quando a leitura não valeu. Donut com "0" no meio e
+     barras todas no chão desenham um mês péssimo, não uma leitura que falhou — e
+     gráfico é a parte da tela que o Igor olha primeiro, antes de qualquer texto. */
+  updateKPIs();
+  if (estado === 'ok') updateCharts();
+  renderTable();
 }
 
 function resetFilters() {
@@ -929,7 +1263,17 @@ function resetFilters() {
 function count(col, val) { return filteredData.filter(r => (r[col]||'').toString().trim() === val).length; }
 function getVal(r) { return parseValor(r['Valor mensal num'] || r['Valor Mensal (R$)'] || ''); }
 
+const IDS_KPI = ['k-total','k-mrr','k-ticket','k-pagos','k-pendentes','k-atraso',
+                 'k-cancelados','k-rec-real','k-rec-risco','k-taxa-pag','k-inadimp','k-churn'];
+
 function updateKPIs() {
+  /* ZERO É UM NÚMERO, E NÚMERO AFIRMA. "0 clientes · R$ 0,00 de MRR · 0% de
+     inadimplência" com a leitura negada não é um painel vazio: é um painel
+     mentindo com doze bocas, e nenhuma delas diz que ninguém conseguiu ler.
+     Travessão não afirma nada, que é a verdade deste instante. A capa fica por
+     cima, mas os cartões também não podem mentir por baixo dela — o aviso de
+     dados velhos deixa o painel visível de propósito. */
+  if (estado !== 'ok') { IDS_KPI.forEach(id => setText(id, '—')); return; }
   const d = filteredData, total = d.length;
   const pagos=count('Status do Pagamento','Pago'), pendentes=count('Status do Pagamento','Pendente'),
         atraso=count('Status do Pagamento','Em atraso'), cancelados=count('Status do Pagamento','Cancelado'),
@@ -1087,7 +1431,35 @@ function renderStatusLegend(data, colors, total) {
 
 function sortBy(key) { if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; } renderTable(); }
 
+/* Quantas colunas a tabela tem AGORA: a de ações só existe para quem edita, e um
+   colspan curto deixa a linha de estado encolhida num canto em vez de atravessar
+   a tabela. Contar o cabeçalho é mais honesto que fixar o número à mão, que é o
+   tipo de constante que envelhece na primeira coluna nova. */
+function colunasTabela() {
+  const ths = document.querySelectorAll('table thead th');
+  let n = 0;
+  ths.forEach(th => { if (getComputedStyle(th).display !== 'none') n++; });
+  return n || 16;
+}
+
 function renderTable() {
+  const tbodyEstado = document.getElementById('table-body');
+  /* ERRO E FALTA DE SESSÃO GANHAM DE "VAZIO". Tabela vazia é uma afirmação —
+     "não há cliente" — e ela é falsa quando a leitura foi negada ou nem
+     aconteceu. O rodapé mentia junto: "0 clientes". */
+  if (estado !== 'ok') {
+    const quadro = {
+      'carregando': { cls:'',     txt:'Carregando dados comerciais…' },
+      'sem-sessao': { cls:'',     txt:'Entre com a sua conta para ver os dados comerciais.' },
+      'erro':       { cls:'ruim', txt:'Os dados não puderam ser lidos. ' + detalhe }
+    }[estado] || { cls:'ruim', txt:'Estado desconhecido da leitura: ' + estado };
+    tbodyEstado.innerHTML = `<tr><td colspan="${colunasTabela()}" class="tb-estado ${quadro.cls}">${quadro.txt}</td></tr>`;
+    setText('row-count', '—');
+    const pgv = document.getElementById('pagination');
+    if (pgv) pgv.innerHTML = '';
+    return;
+  }
+
   const search = document.getElementById('search-input').value.toLowerCase();
   const colMap = {mes:'Mes',id:'ID Venda',nome:'Nome do Cliente',pop:'POP',bairro:'Região/Bairro',plano:'Plano Contratado',valor:'Valor mensal num',statusContrato:'Status do Contrato',status:'Status do Pagamento',venc:'Data de Vencimento',dias:'Dias em atraso',churn:'Churn',equip:'Equipamento Recolhido',motivo:'Motivo Churn',sn:'_sn'};
   let rows = getAdvFilteredRows([...filteredData]);
@@ -1105,6 +1477,16 @@ function renderTable() {
   const slice = rows.slice((currentPage-1)*ROWS_PER_PAGE, currentPage*ROWS_PER_PAGE);
   document.getElementById('row-count').textContent = `${total} clientes`;
   const tbody = document.getElementById('table-body');
+  /* Agora que a leitura foi boa, vazio pode ser dito — e as duas razões de estar
+     vazio são diferentes para quem olha: filtro apertado se desfaz num clique,
+     base vazia não. */
+  if (!total) {
+    tbody.innerHTML = `<tr><td colspan="${colunasTabela()}" class="tb-estado">${
+      allData.length ? 'Nenhum cliente encontrado com os filtros atuais.'
+                     : 'Nenhuma venda cadastrada ainda.'}</td></tr>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
   tbody.innerHTML = slice.map(r => {
     const churn = getChurn(r), equip = getEquip(r), motivo = getMotivo(r);
     return `<tr>
@@ -1154,20 +1536,15 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
 ['f-mes','f-statusctr','f-status','f-pop','f-plano','f-bairro'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { applyFilters(); syncQfBar(); });
 });
-// Inicializa Firebase e carrega CAC
-try {
-  firebase.initializeApp({
-    apiKey:"AIzaSyDs4qfrO4SaedymaRMH5JmJul0x066PKng",
-    authDomain:"ibnet-platform.firebaseapp.com",
-    databaseURL:"https://ibnet-platform-default-rtdb.firebaseio.com",
-    projectId:"ibnet-platform",
-    storageBucket:"ibnet-platform.firebasestorage.app",
-    messagingSenderId:"468380845527",
-    appId:"1:468380845527:web:88d88aea4731a2f1e8b792"
-  });
-} catch(e) {}
+/* O `initializeApp` subiu para o topo do script (junto de `auth`). Aqui fica só o
+   boot. A tela monta ANTES de saber se há sessão, de propósito: quem decide o que
+   aparece é o estado, e "carregando" é a verdade neste instante. Quem chama o
+   `loadCACData` + `subscribeVendas` agora é o observador do auth — não este
+   rodapé — porque antes de saber se há conta não há leitura que valha. */
 applyRolePermissions();
-loadCACData().then(() => subscribeVendas());
+applyFilters();
+pintarCapa();
+ligarAuth();
 
 // ════════════════════════════════════════════════════════════════════════
 // CRUD — nova / editar / excluir venda (Firebase: comercial/vendas)
@@ -1292,6 +1669,11 @@ function startAutoRefresh() {
   _countdownTimer = setInterval(() => {
     const remaining = _nextRefresh - Date.now();
     const el = document.getElementById('auto-countdown');
+    /* Sem conta, o relógio não tem o que contar: ficar prometendo "próx.
+       atualização em 14:59" por cima de uma capa que pede login é a tela se
+       contradizendo em dois lugares ao mesmo tempo. E `loadData` sem sessão só
+       produziria a recusa, de 15 em 15 minutos, para sempre. */
+    if (!auth.currentUser) { if (el) el.textContent = ''; return; }
     if (remaining <= 0) {
       if (el) el.textContent = '· atualizando…';
       resetCountdown();
