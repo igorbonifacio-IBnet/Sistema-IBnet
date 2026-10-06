@@ -106,6 +106,16 @@ body.light .grp-row td{background:rgba(0,0,0,.03)}
    notícia. Sem cor, senão a lista vira um mural de alertas e o vermelho de quem
    realmente venceu se perde no meio. */
 .p-aberto {background:rgba(120,131,154,.14);color:var(--muted)}
+/* Programado que venceu COM débito agendado no banco. Nem verde nem vermelho
+   de propósito: o dinheiro provavelmente saiu sozinho, então não é "você
+   esqueceu de pagar" (vermelho) nem "está fechado" (verde) — é "confira o
+   extrato". Pintar de vermelho junto com o esquecido faria o Igor pagar de
+   novo uma conta que o banco já debitou. */
+.p-saiu   {background:rgba(198,166,103,.15);color:var(--yellow)}
+/* Marcador do compromisso que já está agendado no banco: sai da conta mesmo
+   que ninguém clique em nada. É a diferença entre "preciso pagar" e "vai
+   sair" — e é por isso que ele pediu o marcador. */
+.p-banco  {background:rgba(107,140,206,.15);color:var(--blue)}
 .rec-obs  {font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
 .rec-obs b{color:var(--yellow);font-weight:600}
 
@@ -231,6 +241,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <button data-view="lanc"   onclick="setView('lanc')">Lançamentos</button>
     <button data-view="div"    onclick="setView('div')">Dívida</button>
     <button data-view="rec"    onclick="setView('rec')">Recorrentes <span class="vs-badge" id="rec-badge" style="display:none">0</span></button>
+    <button data-view="prog"   onclick="setView('prog')">Programado <span class="vs-badge" id="prog-badge" style="display:none">0</span></button>
     <button data-view="rev"    onclick="setView('rev')">Revisar <span class="vs-badge" id="rev-badge" style="display:none">0</span></button>
     <button data-view="plano"  onclick="setView('plano')">Plano de Contas</button>
   </div>
@@ -278,6 +289,42 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <div class="mb-actions">
       <button class="btn btn-ghost" onclick="fecharLanc()">Cancelar</button>
       <button class="btn" id="l-save" onclick="salvarLanc()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal despesa programada — compromisso, não lançamento.
+     Sem campo "Tipo": programado é sempre saída. A aba responde "quanto
+     preciso ter em caixa", e uma entrada aqui entraria no cartão com o sinal
+     invertido, abatendo despesa real. -->
+<div class="modal-ov" id="ag-modal">
+  <div class="modal-box">
+    <h3 id="ag-title">Nova despesa programada</h3>
+    <div class="mb-row">
+      <div class="mb-field"><label>Data em que sai</label><input type="date" id="g-data"/></div>
+      <div class="mb-field"><label>Valor (R$)</label><input type="number" step="0.01" id="g-valor" placeholder="0,00"/></div>
+    </div>
+    <div class="mb-field"><label>Descrição</label>
+      <input type="text" id="g-desc" placeholder="Ex.: NF 4821 fornecedor de ONTs"/></div>
+    <div class="mb-field"><label>Conta do plano (onde entra no fluxo ao confirmar)</label>
+      <select id="g-cat"></select></div>
+    <div class="mb-field"><label>De onde sai o dinheiro</label>
+      <input type="text" id="g-conta" list="r-contas" placeholder="Ex.: Conta corrente SICOOB"/></div>
+    <div class="mb-field" style="flex-direction:row;align-items:center;gap:9px">
+      <input type="checkbox" id="g-banco" style="width:16px;height:16px;padding:0;flex:none"/>
+      <label for="g-banco" style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;
+             color:var(--text);font-weight:400;cursor:pointer">
+        <b>Débito já agendado no banco</b> — sai da conta sozinho, mesmo sem eu confirmar aqui
+      </label>
+    </div>
+    <div class="mb-field"><label>Observação</label><input type="text" id="g-obs" placeholder="opcional"/></div>
+    <div class="alert" style="margin:6px 0 0;font-size:12px">
+      Programar <b>não</b> lança nada no Fluxo de Caixa. O lançamento nasce quando
+      você clicar em <b>confirmar</b>, com esta data e este valor.
+    </div>
+    <div class="mb-actions">
+      <button class="btn btn-ghost" onclick="fecharAg()">Cancelar</button>
+      <button class="btn" id="g-save" onclick="salvarAg()">Salvar</button>
     </div>
   </div>
 </div>
@@ -642,6 +689,18 @@ const db   = firebase.database(_app);
 const lref = db.ref('financeiro/v02/lancamentos');
 const dref = db.ref('financeiro/v02/dividas');
 const rref = db.ref('financeiro/v02/recorrentes');
+/* Despesa programada. Base PRÓPRIA, fora de `lancamentos`, e essa separação é
+   a regra inteira: o que mora aqui é COMPROMISSO — "dia 8 sai o aluguel" —,
+   não dinheiro que saiu. O DFC continua lendo só `lancamentos`, então ele
+   segue 100% realizado e nenhuma linha de futuro entra na apuração.
+
+   Não contradiz "cronograma derivado, nunca lançamento futuro": o que aquela
+   regra proíbe é gravar a OCORRÊNCIA no futuro quando ela dá para calcular a
+   partir de um contrato — foi assim com dívida e recorrente. Despesa avulsa
+   não tem contrato de onde derivar: ou está declarada, ou não existe. Igual a
+   `dividas` e `recorrentes`, o que se grava é o compromisso; o lançamento só
+   nasce na confirmação. */
+const aref = db.ref('financeiro/v02/agendados');
 
 /* ── sessão (o portal envia por postMessage) ─────────────────────── */
 function getSession(){
@@ -661,12 +720,20 @@ let isAdmin = autorizado(session);
 let lancamentos = [];
 let dividas = [];
 let recorrentes = [];
+let agendados = [];
 let view = 'dfc';
-let editId = null, editDiv = null, editRec = null;
+let editId = null, editDiv = null, editRec = null, editAg = null;
 let confRec = null;                       // {id, mes} da recorrente sendo confirmada
 let confDup = null;                       // lançamento do extrato que é o mesmo dinheiro
 let impRows = [], impMarcas = [];         // linhas coladas e o que cada uma repete
 let filtroMes = 'todos', filtroCat = 'todas';
+/* Por que o erro do nó de programados tem variável própria: as outras bases
+   acessórias zeram em silêncio quando a leitura falha, e aba vazia por falha
+   lê igualzinho a aba vazia por não ter nada programado. Numa tela cuja
+   pergunta é "quanto preciso ter em caixa", responder R$ 0,00 por engano é o
+   pior erro possível. Guardar o código do erro é o que permite a aba dizer
+   "não consegui ler" em vez de "nada programado". */
+let agErro = '';
 
 /* Busca livre da lista de lançamentos. Mesma regra dos filtros das recorrentes:
    recorta a LISTA, e o total que aparece embaixo é o total do que está na tela
@@ -780,7 +847,15 @@ function fazerLogin(){
 }
 function sairFinanceiro(){
   auth.signOut().then(()=>{
-    lref.off(); dref.off(); _inscrito=false; lancamentos=[]; dividas=[];
+    lref.off(); dref.off(); rref.off(); aref.off(); _inscrito=false;
+    lancamentos=[]; dividas=[]; recorrentes=[]; agendados=[]; agErro='';
+    // `pintarBadges()` é obrigatório aqui, e a suíte pegou a falta: sair
+    // esvaziava as listas mas deixava os três contadores com o número da
+    // sessão encerrada. A tela de login ficava exibindo "2 vencidos" — um
+    // número que ninguém pode agir sobre, de dados que já saíram da memória, e
+    // numa tela compartilhada isso entrega que existem duas contas atrasadas.
+    // `pinta` esconde no zero, então com as listas vazias os três apagam.
+    pintarBadges();
     render(); abrirAuth(); toast('Você saiu do financeiro.');
   });
 }
@@ -808,7 +883,7 @@ function iniciarDados(){
     render();
   }, err => {
     // As regras negaram a leitura: solta o listener e pede login.
-    lref.off(); dref.off(); rref.off(); _inscrito = false;
+    lref.off(); dref.off(); rref.off(); aref.off(); _inscrito = false;
     const c = (err && (err.code || err.message) || '') + '';
     if (/permission|denied/i.test(c)){
       document.getElementById('mh-sub').textContent = 'login necessário';
@@ -840,6 +915,22 @@ function iniciarDados(){
     pintarBadges();
     if (view === 'rec') render();
   }, () => { recorrentes = []; });
+
+  // Despesas programadas da semana. Ordena por data CRESCENTE — ao contrário
+  // de lançamentos, que olha para trás: aqui a pergunta é o que vem primeiro.
+  aref.on('value', s4 => {
+    const d = s4.val() || {};
+    agendados = Object.entries(d).map(([id,x]) => ({id, ...x}))
+                      .sort((a,b) => (a.data||'').localeCompare(b.data||''));
+    agErro = '';
+    pintarBadges();
+    if (view === 'prog') render();
+  }, err => {
+    agendados = [];
+    agErro = (err && (err.code || err.message) || 'erro desconhecido') + '';
+    pintarBadges();
+    if (view === 'prog') render();
+  });
 }
 
 // Os dois contadores dependem de listas diferentes que chegam em momentos
@@ -853,6 +944,9 @@ function pintarBadges(){
   };
   pinta('rev-badge', lancamentos.filter(l => !l.categoria).length);
   pinta('rec-badge', pendentesRec().length);
+  // Conta TUDO que venceu sem confirmação, sem olhar a janela da aba. O
+  // contador é o que avisa quando a tela está mostrando outra semana.
+  pinta('prog-badge', pendentesAg().length);
 }
 
 function mesesDisponiveis(){
@@ -868,7 +962,7 @@ function setView(v){
 function render(){
   const el = document.getElementById('view');
   if (!autorizado(session)){
-    lancamentos = []; dividas = []; recorrentes = [];
+    lancamentos = []; dividas = []; recorrentes = []; agendados = [];
     document.querySelector('.view-switch')?.style.setProperty('display','none');
     document.getElementById('mh-sub').textContent = 'acesso restrito';
     el.innerHTML = `<div class="card" style="text-align:center;padding:48px 24px">
@@ -891,6 +985,7 @@ function render(){
   if (view==='lanc')  el.innerHTML = htmlLanc();
   if (view==='div')   el.innerHTML = htmlDivida();
   if (view==='rec')   el.innerHTML = htmlRec();
+  if (view==='prog')  el.innerHTML = htmlProg();
   if (view==='rev')   el.innerHTML = htmlRev();
   if (view==='plano') el.innerHTML = htmlPlano();
 
@@ -1344,9 +1439,17 @@ const mesmoDinheiro = (l, dataISO, valor) =>
   && Math.abs(diasEntre(l.data, dataISO)) <= JANELA_CONCIL;
 
 // Lançamento "sem dono" — veio do extrato ou da mão, e não pertence a
-// nenhuma regra nem a nenhuma parcela. É esse que pode ser o mesmo dinheiro
-// de uma ocorrência que ainda está esperando confirmação.
-const semDono = l => !l.recId && !l.divId;
+// nenhuma regra, parcela ou despesa programada. É esse que pode ser o mesmo
+// dinheiro de uma ocorrência que ainda está esperando confirmação.
+//
+// `agId` entra nesta lista junto com a aba Programado, e não é detalhe: é a
+// MESMA lista que serve as duas direções da conciliação. Sem `agId` aqui, um
+// programado confirmado continuaria "sem dono", `casarComOrigem` nunca o
+// acharia, e a importação do extrato lançaria o mesmo débito de novo — o
+// buraco que já custou duplicidade quando a origem era a recorrente.
+// Origem nova obriga a mexer em três pontos: aqui, no rótulo que
+// `conciliarImport` carimba e na lista de motivos da prévia de importação.
+const semDono = l => !l.recId && !l.divId && !l.agId;
 
 // `usados` impede que UM lançamento absorva DUAS ocorrências diferentes na
 // mesma varredura. Sem isso, duas regras de R$ 900 na mesma semana casariam
@@ -2603,6 +2706,7 @@ function contasConhecidas(){
   const s = new Set(['Conta corrente SICOOB']);
   recorrentes.forEach(r => { if (r.conta) s.add(r.conta); });
   lancamentos.forEach(l => { if (l.conta) s.add(l.conta); });
+  agendados.forEach(a => { if (a.conta) s.add(a.conta); });
   return [...s].sort((a,b) => a.localeCompare(b,'pt-BR'));
 }
 
@@ -3585,6 +3689,453 @@ async function confirmarImpRec(){
   btn.disabled = false; btn.textContent = 'Importar';
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   DESPESAS PROGRAMADAS — a semana que vem, em dinheiro
+
+   A pergunta que esta aba responde é uma só, nas palavras dele: "preciso
+   enxergar em um campo os programados para eu enxergar o que precisarei de
+   dinheiro naquela semana". Não é previsão de longo prazo — isso já existe
+   em "Próximos 12 meses" nas Recorrentes. É quanto tem que estar na conta
+   até sexta.
+
+   Três decisões estruturais, todas dele:
+
+   1. BASE PRÓPRIA, FORA DE `lancamentos`. O que mora em `agendados/` é
+      compromisso declarado, não dinheiro movimentado. O DFC continua lendo
+      só `lancamentos` e segue 100% realizado.
+
+   2. A CONFIRMAÇÃO NÃO É AUTOMÁTICA. Ele pediu assim: "não precisa baixar
+      automaticamente, eu posso fazer com 1 clique". É a mesma regra da
+      recorrente — chegar o dia não é prova de que o dinheiro saiu, e um
+      robô confirmando no dia 8 lançaria no caixa um débito que voltou por
+      saldo insuficiente.
+
+   3. MARCADOR "JÁ AGENDADO NO BANCO". A razão é dele: débito agendado no
+      SICOOB sai sozinho mesmo que ninguém abra o sistema; o que está só
+      anotado aqui depende de ele pagar. Duas coisas que exigem ação
+      diferente não podem ter a mesma cor na tela.
+
+   O ESTADO QUE NINGUÉM PEDE é o cruzamento de 2 com 3: venceu, não foi
+   confirmado, e estava agendado no banco. Não é pendência de pagamento, é
+   pendência de CONFERÊNCIA — "o débito saiu, lança no fluxo". Sem estado
+   próprio ele cai na pilha de vermelho e vira conta paga duas vezes.
+   ══════════════════════════════════════════════════════════════════ */
+
+// Em UTC, pelo mesmo motivo de `diasEntre`: somar dia em horário local erra
+// por um dia duas vezes por ano, e aqui o erro moveria uma despesa para fora
+// da semana — que é exatamente o número que esta aba promete.
+const somaDias = (iso, n) =>
+  new Date(Date.parse(iso + 'T00:00:00Z') + n*86400000).toISOString().slice(0,10);
+const DIAS_SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+const diaSemana = iso => DIAS_SEM[new Date(Date.parse(iso + 'T00:00:00Z')).getUTCDay()] || '';
+// Semana começa na segunda. Domingo pertence à semana que acabou, não à que
+// vai começar: quem monta as contas no domingo à noite está fechando a semana.
+function segundaDe(iso){
+  const dow = new Date(Date.parse(iso + 'T00:00:00Z')).getUTCDay();   // 0 = domingo
+  return somaDias(iso, dow === 0 ? -6 : 1 - dow);
+}
+
+/* A janela. As setas andam de 7 em 7 SEMPRE, inclusive quando o alcance é 15
+   ou 30: a seta é a seta da semana, como ele pediu; o alcance só diz até onde
+   a janela enxerga para frente. Com 30 dias as janelas se sobrepõem, e isso é
+   o certo — "quanto preciso no próximo mês" não vira uma caixa estanque. */
+const ALCANCES = [7, 15, 30];
+let progIni  = null;    // segunda-feira da janela na tela; null = semana de hoje
+let progDias = 7;
+function janelaProg(hojeISO){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const ini  = progIni || segundaDe(hoje);
+  const fim  = somaDias(ini, progDias - 1);
+  return { ini, fim, dias: progDias, hoje, contemHoje: hoje >= ini && hoje <= fim };
+}
+function irSemanaProg(delta){ progIni = somaDias(janelaProg().ini, 7*delta); render(); }
+function hojeProg(){ progIni = null; render(); }
+function alcanceProg(d){ progDias = d; render(); }
+// Levar a janela até uma data — usado pelo aviso de vencido fora da janela.
+function irDataProg(iso){ progIni = segundaDe(iso); render(); }
+
+/* A confirmação é DERIVADA, nunca gravada no programado.
+   Mesma escolha de `mapaRealizado` para as recorrentes: se existisse um campo
+   `confirmado:true` no agendado, ele poderia discordar do lançamento — e aí
+   nenhum dos dois é a verdade. Com o mapa, desfazer é apagar o lançamento, e
+   não existe estado para sincronizar. */
+function mapaAgendado(){
+  const m = new Map();
+  lancamentos.forEach(l => { if (l.agId) m.set(l.agId, l); });
+  return m;
+}
+const confirmadoDe = (mapa, agId) => mapa.get(agId) || null;
+
+function estadoAg(a, hojeISO, mapa){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaAgendado();
+  const lanc = confirmadoDe(mp, a.id);
+  if (lanc) return { estado:'confirmado', lanc };
+  if (a.data >= hoje) return { estado:'aberto' };
+  const atraso = diasEntre(a.data, hoje);
+  return { estado: a.noBanco ? 'saiu' : 'vencido', atraso };
+}
+
+/* Pendência olha TUDO, sem janela — e é essa a diferença que faz a aba não
+   mentir. A janela recorta a lista e o cartão; se recortasse a pendência,
+   navegar uma semana para frente apagaria da tela a conta que venceu e
+   ninguém confirmou. Filtro recorta a lista, nunca o total. */
+function pendentesAg(hojeISO, mapa){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mp   = mapa || mapaAgendado();
+  return agendados.filter(a => {
+    const e = estadoAg(a, hoje, mp).estado;
+    return e === 'vencido' || e === 'saiu';
+  });
+}
+const naJanelaAg = j => agendados.filter(a => a.data >= j.ini && a.data <= j.fim);
+
+/* O número grande. Soma só o que AINDA NÃO foi confirmado: se o débito já
+   virou lançamento, o dinheiro já saiu da conta e exigir que ele esteja lá de
+   novo é pedir o dobro.
+
+   `banco` e `mao` existem porque exigem ação diferente, e somam exatamente
+   `total` — nenhum dos três é calculado subtraindo os outros. */
+function precisaEmCaixa(lista, hojeISO, mapa){
+  const mp = mapa || mapaAgendado();
+  const t = { total:0, banco:0, mao:0, qtd:0, qtdBanco:0, conf:0, qtdConf:0, positivos:0 };
+  (lista||[]).forEach(a => {
+    /* `-Math.min(0, v)` e não `Math.abs(v)`: um valor positivo entrando aqui
+       contribui com ZERO em vez de inflar o que precisa ter na conta. Com
+       Math.abs, uma receita digitada por engano viraria despesa e o cartão
+       pediria dinheiro que ninguém precisa. O cadastro já força saída, então
+       positivo aqui só chega por edição direta no banco — e aí aparece
+       contado à parte, não somado torto. */
+    const v = -Math.min(0, +a.valor || 0);
+    if ((+a.valor || 0) > 0) t.positivos++;
+    if (confirmadoDe(mp, a.id)){ t.conf += v; t.qtdConf++; return; }
+    t.total += v; t.qtd++;
+    if (a.noBanco){ t.banco += v; t.qtdBanco++; } else { t.mao += v; }
+  });
+  return t;
+}
+
+function linhaAg(a, hoje, mapa){
+  const e   = estadoAg(a, hoje, mapa);
+  const cls = { confirmado:'st-pago', vencido:'st-vencido', saiu:'st-fora' }[e.estado] || '';
+  const v   = +a.valor || 0;
+  // A linha do extrato que é o mesmo dinheiro. Só interessa quando ainda não
+  // foi confirmado: aí o clique certo é vincular, não lançar de novo.
+  const dup = e.estado === 'confirmado' ? null : noExtratoJa(a.data, v);
+
+  let situacao;
+  if (e.estado === 'confirmado'){
+    const real = Math.abs(+e.lanc.valor || 0), prev = Math.abs(v);
+    // O valor só aparece quando DIFERE do programado — repetir o número que
+    // está duas colunas à esquerda é ruído; a diferença é notícia.
+    const dif = Math.abs(real - prev) >= 0.005
+      ? `<div class="rec-obs">saiu <b>${fmt(real)}</b></div>` : '';
+    situacao = `<span class="pill p-pago">✓ no fluxo</span>`
+             + `<div class="rec-obs">lançado em ${dataBR(e.lanc.data)}</div>${dif}`;
+  } else if (e.estado === 'saiu'){
+    situacao = `<span class="pill p-saiu">confira o extrato</span>`
+             + `<div class="rec-obs">débito agendado · venceu há <b>${e.atraso} dia${e.atraso===1?'':'s'}</b></div>`;
+  } else if (e.estado === 'vencido'){
+    situacao = `<span class="pill p-vencido">não confirmado</span>`
+             + `<div class="rec-obs">venceu há <b>${e.atraso} dia${e.atraso===1?'':'s'}</b></div>`;
+  } else {
+    const d = diasEntre(hoje, a.data);
+    situacao = `<span class="pill p-aberto">programado</span>`
+             + `<div class="rec-obs">${d===0?'é hoje':d===1?'amanhã':`em ${d} dias`}</div>`;
+  }
+
+  const acoes = !isAdmin ? '' : `<td style="white-space:nowrap">${
+    e.estado === 'confirmado'
+      ? `<button class="icon-btn" onclick="excluirAg('${a.id}')">excluir</button>`
+      : (dup
+          ? `<button class="icon-btn" onclick="vincularAg('${a.id}')">vincular ao extrato</button>`
+          : `<button class="icon-btn" onclick="confirmarAg('${a.id}')">confirmar</button>`)
+        + `<button class="icon-btn" onclick="editarAg('${a.id}')">editar</button>`
+        + `<button class="icon-btn" onclick="excluirAg('${a.id}')">excluir</button>`
+  }</td>`;
+
+  return `<tr class="${cls}">
+    <td style="white-space:nowrap;font-size:12px">${esc(dataBR(a.data))}
+      <div class="rec-obs">${diaSemana(a.data)}</div></td>
+    <td><b>${esc(a.descricao||'—')}</b>
+      ${a.noBanco && e.estado!=='confirmado' ? ' <span class="pill p-banco">no banco</span>' : ''}
+      <div style="font-size:11px;color:var(--muted)">${esc(a.categoria||'sem conta do plano')}</div>
+      ${dup ? `<div class="rec-obs">o extrato já tem <b>${fmt(+dup.valor||0)}</b> em ${dataBR(dup.data)} — "${esc(dup.descricao||'—')}"</div>` : ''}
+      ${a.obs ? `<div class="rec-obs">${esc(a.obs)}</div>` : ''}</td>
+    <td style="font-size:12px">${esc(a.conta||'—')}</td>
+    <td class="num ${v<0?'neg':''}">${fmt(v)}</td>
+    <td>${situacao}</td>
+    ${acoes}</tr>`;
+}
+
+function htmlProg(){
+  const hoje  = new Date().toISOString().slice(0,10);
+  const mapa  = mapaAgendado();
+  const j     = janelaProg(hoje);
+  const btnNovo = isAdmin ? `<button class="btn" onclick="abrirAg()">+ Despesa programada</button>` : '';
+
+  /* Leitura que falhou não pode parecer semana sem despesa. Numa aba que
+     responde "quanto preciso em caixa", R$ 0,00 por erro de leitura é a
+     resposta mais perigosa que a tela tem. */
+  if (agErro) return `
+    <div class="alert warn" id="prog-erro">
+      <b>Não consegui ler as despesas programadas.</b>
+      ${/permission|denied/i.test(agErro)
+        ? 'As regras do banco negaram a leitura de <code>financeiro/v02/agendados</code> — o caminho é novo e pode não ter herdado a regra do pai.'
+        : 'Erro: <code>' + esc(agErro) + '</code>'}<br/>
+      <b>A lista abaixo está vazia por causa disso, não porque não há nada programado.</b>
+      Não use o número desta aba para decidir pagamento até ela voltar.
+    </div>
+    <div class="card"><div class="empty">sem leitura do banco</div></div>`;
+
+  if (!agendados.length) return `
+    <div class="alert">
+      Aqui entra o que você já sabe que vai sair e <b>não</b> é recorrente —
+      a nota do fornecedor, o imposto do trimestre, a peça que chega sexta.
+      Você programa a semana de uma vez; a aba soma <b>quanto precisa ter em caixa</b>
+      e, quando o dinheiro sai, <b>um clique</b> transforma o programado em lançamento.
+      <b>Nada entra no Fluxo de Caixa antes desse clique</b> — programado é compromisso,
+      não dinheiro movimentado.
+    </div>
+    <div class="card"><div class="empty" id="prog-vazio">
+      <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:8px">Nenhuma despesa programada</div>
+      Comece pelo que sai nesta semana e você já tem na mão.<br/>
+      O que se repete todo mês não vem para cá — vai em <b>Recorrentes</b>, que calcula sozinho.<br/><br/>
+      ${btnNovo}
+    </div></div>`;
+
+  const naJanela = naJanelaAg(j);
+  const t        = precisaEmCaixa(naJanela, hoje, mapa);
+  const pend     = pendentesAg(hoje, mapa);
+  const pendFora = pend.filter(a => a.data < j.ini || a.data > j.fim);
+  const titulo   = (j.dias === 7 && j.contemHoje)
+    ? 'nesta semana'
+    : `em ${j.dias} dias · ${dataBR(j.ini)} a ${dataBR(j.fim)}`;
+
+  return `
+  ${pend.length ? `
+  <div class="alert warn" id="prog-pend">
+    <b>${pend.length} ${pend.length===1?'programado venceu':'programados venceram'} e não ${pend.length===1?'foi confirmado':'foram confirmados'}.</b>
+    Confirmar é dizer que o dinheiro saiu de verdade — é isso que vira lançamento no fluxo.
+    ${pend.filter(a=>a.noBanco).length ? `<br/><b>${pend.filter(a=>a.noBanco).length}</b> ${
+      pend.filter(a=>a.noBanco).length===1?'estava':'estavam'} com débito agendado no banco:
+      ${pend.filter(a=>a.noBanco).length===1?'esse dinheiro provavelmente já saiu':'esse dinheiro provavelmente já saiu'}
+      — confira o extrato antes de pagar de novo.` : ''}
+    ${pendFora.length ? `<br/><b class="neg">${pendFora.length} ${pendFora.length===1?'está':'estão'} fora da janela que você está vendo</b>
+      e ${pendFora.length===1?'aparece':'aparecem'} na tabela do fim da página.
+      ${pendFora.length===1?`<button class="btn btn-sm" style="margin-left:6px" onclick="irDataProg('${pendFora[0].data}')">ir para ${dataBR(pendFora[0].data)}</button>`:''}` : ''}
+  </div>` : ''}
+
+  <div class="rec-nav">
+    <button class="mchip" onclick="irSemanaProg(-1)" title="uma semana para trás">‹</button>
+    <button class="mchip ${j.contemHoje && j.dias===7 ? 'on' : ''}" onclick="hojeProg()">hoje</button>
+    <button class="mchip" onclick="irSemanaProg(1)" title="uma semana para frente">›</button>
+    <span class="cap" id="prog-janela" style="margin-left:10px">${dataBR(j.ini)} a ${dataBR(j.fim)}</span>
+    <span style="flex:1"></span>
+    <span class="cap">Alcance</span>
+    ${ALCANCES.map(d => `<button class="mchip ${d===j.dias?'on':''}" onclick="alcanceProg(${d})">${d} dias</button>`).join('')}
+  </div>
+
+  <div class="dfc-grid">
+    <div class="dfc-box fin" style="grid-column:1/-1">
+      <div class="lbl">Precisa em caixa ${titulo}</div>
+      <div class="val" id="prog-caixa" style="color:${t.total?'var(--yellow)':'var(--muted)'}">${fmt(t.total)}</div>
+      <div class="sub" id="prog-sub">
+        ${t.qtd} programado${t.qtd===1?'':'s'} ainda não confirmado${t.qtd===1?'':'s'}${
+          t.total ? ` · <b style="color:var(--blue)">${fmt(t.banco)}</b> já agendado${t.qtdBanco===1?'':'s'} no banco (sai sozinho) · <b>${fmt(t.mao)}</b> depende de você pagar` : ''}
+        ${t.qtdConf ? `<br/>${t.qtdConf} já confirmado${t.qtdConf===1?'':'s'} nesta janela (${fmt(t.conf)}) — <b>fora da conta acima</b>, esse dinheiro já saiu.` : ''}
+        ${t.positivos ? `<br/><b class="neg">${t.positivos} com valor positivo</b> — programado é despesa; essa linha entrou por edição direta no banco e não soma.` : ''}
+      </div>
+    </div>
+  </div>
+
+  ${!j.contemHoje ? `
+  <div class="alert" id="prog-recorte" style="margin-bottom:14px;font-size:12.5px">
+    Você está olhando <b>${dataBR(j.ini)} a ${dataBR(j.fim)}</b>, que não contém hoje.
+    O número acima e a lista são <b>deste recorte</b>. O aviso de vencidos e o
+    contador na aba continuam olhando <b>tudo</b> — nada de pendência fica escondido
+    por você ter navegado.
+  </div>` : ''}
+
+  <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>${naJanela.length} na janela</span>${btnNovo}
+  </div>
+  ${naJanela.length ? `
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th class="num">Valor</th><th>Situação</th>${isAdmin?'<th></th>':''}</tr></thead>
+    <tbody id="prog-tabela">${naJanela.map(a => linhaAg(a, hoje, mapa)).join('')}</tbody>
+  </table></div></div>` : `
+  <div class="card"><div class="empty" id="prog-janela-vazia">
+    Nada programado entre ${dataBR(j.ini)} e ${dataBR(j.fim)}.<br/>
+    <span class="muted" style="font-size:12px">A base tem ${agendados.length} programado${agendados.length===1?'':'s'} em outras datas — use as setas ou aumente o alcance.</span>
+  </div></div>`}
+
+  ${pendFora.length ? `
+  <div class="section-title">Vencidos fora desta janela (${pendFora.length})</div>
+  <div class="alert" style="font-size:12.5px">
+    Estes não estão no recorte acima e <b>não entram no "precisa em caixa"</b> —
+    o dinheiro deles era de outra semana. Ficam aqui porque pendência não pode
+    desaparecer só porque a tela mudou de semana.
+  </div>
+  <div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th class="num">Valor</th><th>Situação</th>${isAdmin?'<th></th>':''}</tr></thead>
+    <tbody id="prog-fora">${pendFora.map(a => linhaAg(a, hoje, mapa)).join('')}</tbody>
+  </table></div></div>` : ''}`;
+}
+
+/* ── cadastro da despesa programada ──────────────────────────────── */
+function abrirAg(){
+  if (!isAdmin) return toast('Sem permissão para programar.');
+  editAg = null;
+  document.getElementById('ag-title').textContent = 'Nova despesa programada';
+  /* A data nasce dentro da janela que está na tela, não em "hoje": quem abriu
+     a semana que vem para montar as contas não quer redigitar a data em cada
+     linha. Se hoje está na janela, hoje; senão, o primeiro dia dela. */
+  const j = janelaProg();
+  document.getElementById('g-data').value   = j.contemHoje ? j.hoje : j.ini;
+  document.getElementById('g-valor').value  = '';
+  document.getElementById('g-desc').value   = '';
+  document.getElementById('g-conta').value  = '';
+  document.getElementById('g-obs').value    = '';
+  document.getElementById('g-banco').checked = false;
+  preencherCatsAg('');
+  document.getElementById('ag-modal').classList.add('show');
+}
+function editarAg(id){
+  const a = agendados.find(x => x.id === id); if (!a) return;
+  // Editar o compromisso depois de o dinheiro sair não move o dinheiro — só
+  // faria o programado discordar do lançamento. Quem manda aí é o lançamento.
+  if (confirmadoDe(mapaAgendado(), id))
+    return toast('Já confirmado — corrija o lançamento na aba Lançamentos.');
+  editAg = id;
+  document.getElementById('ag-title').textContent = 'Editar despesa programada';
+  document.getElementById('g-data').value   = a.data || '';
+  document.getElementById('g-valor').value  = Math.abs(+a.valor||0);
+  document.getElementById('g-desc').value   = a.descricao || '';
+  document.getElementById('g-conta').value  = a.conta || '';
+  document.getElementById('g-obs').value    = a.obs || '';
+  document.getElementById('g-banco').checked = !!a.noBanco;
+  preencherCatsAg(a.categoria || '');
+  document.getElementById('ag-modal').classList.add('show');
+}
+function preencherCatsAg(sel){
+  document.getElementById('g-cat').innerHTML =
+    `<option value="">— deduzir da descrição —</option>` + optionsCats(sel);
+  // Mesma datalist das recorrentes: conta bancária é a mesma lista nas duas
+  // telas, e duas listas separadas divergiriam na primeira conta nova.
+  document.getElementById('r-contas').innerHTML =
+    contasConhecidas().map(c => `<option value="${esc(c)}"></option>`).join('');
+}
+function fecharAg(){ document.getElementById('ag-modal').classList.remove('show'); }
+
+async function salvarAg(){
+  const data  = document.getElementById('g-data').value;
+  const desc  = document.getElementById('g-desc').value.trim();
+  const bruto = parseFloat(document.getElementById('g-valor').value);
+  const conta = document.getElementById('g-conta').value.trim();
+  const obs   = document.getElementById('g-obs').value.trim();
+  const noBanco = document.getElementById('g-banco').checked;
+  let   cat   = document.getElementById('g-cat').value;
+  if (!data || !desc || !bruto || isNaN(bruto)) return toast('Preencha data, descrição e valor.');
+  if (!cat) cat = classificar(desc) || '';
+  /* Sempre saída. A aba responde "quanto preciso ter em caixa" — receita
+     programada é outra pergunta e entraria no cartão com o sinal invertido,
+     abatendo despesa real. Entrada futura, se um dia precisar, pede campo
+     próprio e um segundo número na tela, não este. */
+  const valor = -Math.abs(bruto);
+  const rec = { data, descricao:desc, valor, categoria:cat, conta, obs, noBanco,
+                por: session?.nome||'—', ts: Date.now() };
+  const btn = document.getElementById('g-save'); btn.disabled = true;
+  try {
+    if (editAg) await aref.child(editAg).update(rec);
+    else        await aref.push(rec);
+    fecharAg();
+    toast(editAg ? 'Programado atualizado.'
+                 : `Programado: ${fmt(valor)} em ${dataBR(data)}${noBanco?' — débito já agendado no banco.':'.'}`);
+  } catch(e){ toast('Erro ao salvar: ' + e.message); }
+  btn.disabled = false;
+}
+
+/* ── o clique que vira lançamento ────────────────────────────────── */
+function lancDoAgendado(a){
+  return { data:a.data, descricao:a.descricao || '—', valor: +a.valor || 0,
+           categoria: a.categoria || '', conta: a.conta || '',
+           obs: a.obs || '', origem:'agendado', agId:a.id,
+           por: session?.nome || '—', ts: Date.now() };
+}
+/* Um clique, com a data e o valor DECLARADOS — sem formulário para redigitar
+   o que já está cadastrado, que é só oportunidade de errar. A data do
+   lançamento é a do programado de propósito: débito agendado sai no dia
+   marcado, e dado declarado vence dado deduzido. Se saiu em outro dia ou por
+   outro valor, o conserto é no lançamento, e o toast diz exatamente o que foi
+   gravado para a divergência aparecer na hora.
+
+   Exceção ao clique único: se o extrato já trouxe esse dinheiro, confirmar
+   aqui lança duas vezes. Nesse caso a linha nem oferece "confirmar" — oferece
+   "vincular". Este guarda é a última checagem, para o caso de o extrato ter
+   chegado entre o desenho da tela e o clique. */
+async function confirmarAg(id){
+  if (!isAdmin) return toast('Sem permissão para confirmar.');
+  const a = agendados.find(x => x.id === id); if (!a) return;
+  if (confirmadoDe(mapaAgendado(), id)) return toast('Esse programado já está no fluxo.');
+  const valor = +a.valor || 0;
+  if (!valor) return toast('Programado sem valor — edite antes de confirmar.');
+  const ja = noExtratoJa(a.data, valor);
+  if (ja && !confirm(
+        `O extrato já tem ${fmt(+ja.valor||0)} em ${dataBR(ja.data)}`
+      + ` — "${ja.descricao||'—'}".\n\n`
+      + `Se for esta mesma despesa, confirmar aqui lança o dinheiro duas vezes.`
+      + ` O botão "Vincular ao extrato" fecha o programado sem duplicar.\n\n`
+      + `Lançar assim mesmo?`)) return;
+  try {
+    await lref.push(lancDoAgendado(a));
+    toast(`${a.descricao}: ${fmt(valor)} lançado em ${dataBR(a.data)}${a.categoria?' · '+a.categoria:' — sem categoria, veja Revisar.'}`);
+  } catch(e){ toast('Erro ao confirmar: ' + e.message); }
+}
+/* Vincular: a linha já existe no extrato e é este programado. Carimba `agId`
+   no lançamento que existe em vez de gravar um segundo. Fecha o programado e
+   não move um centavo — que é a verdade, porque o dinheiro já tinha saído.
+   A conta do plano passa a ser a do programado: o classificador do extrato
+   chuta pelo texto do banco e erra em silêncio; quem programou sabia. */
+async function vincularAg(id){
+  if (!isAdmin) return toast('Sem permissão para confirmar.');
+  const a = agendados.find(x => x.id === id); if (!a) return;
+  if (confirmadoDe(mapaAgendado(), id)) return toast('Esse programado já está no fluxo.');
+  const alvo = noExtratoJa(a.data, +a.valor||0);
+  if (!alvo) return toast('Não há mais linha do extrato batendo com este programado.');
+  if (!confirm(`Vincular "${a.descricao}" à linha do extrato de ${dataBR(alvo.data)}`
+             + ` — ${fmt(+alvo.valor||0)}, "${alvo.descricao||'—'}"?\n\n`
+             + `Nada é lançado de novo: esse dinheiro já está no fluxo.`)) return;
+  try {
+    await lref.child(alvo.id).update({
+      agId: a.id,
+      categoria: a.categoria || alvo.categoria || '',
+      conta:     a.conta     || alvo.conta     || '',
+      obs:       alvo.obs    || `programado: ${a.descricao||'—'}`
+    });
+    toast(`Fechado pela linha de ${dataBR(alvo.data)} — nada foi lançado de novo.`);
+  } catch(e){ toast('Erro ao vincular: ' + e.message); }
+}
+async function excluirAg(id){
+  if (!isAdmin) return toast('Sem permissão para excluir.');
+  const a = agendados.find(x => x.id === id); if (!a) return;
+  const lanc = confirmadoDe(mapaAgendado(), id);
+  /* Apagar o compromisso NÃO apaga o lançamento — e isso tem que estar escrito
+     antes do clique. O dinheiro saiu de verdade; tirá-lo do fluxo junto
+     mudaria o caixa realizado por um gesto que o Igor fez para limpar a lista
+     de compromissos. Quem some é a linha desta aba, nada mais. */
+  const aviso = lanc
+    ? `\n\nATENÇÃO: este programado já está no fluxo. O LANÇAMENTO de `
+      + `${dataBR(lanc.data)} (${fmt(+lanc.valor||0)}) NÃO é apagado — continua no `
+      + `Fluxo de Caixa, como deve. Some só o compromisso desta aba.`
+    : '';
+  if (!confirm(`Excluir o programado "${a.descricao}" de ${dataBR(a.data)} (${fmt(+a.valor||0)})?${aviso}`)) return;
+  try {
+    await aref.child(id).remove();
+    toast('Programado excluído.');
+  } catch(e){ toast('Erro ao excluir: ' + e.message); }
+}
+
 /* ── importação ──────────────────────────────────────────────────── */
 function abrirImport(){
   if (!isAdmin) return toast('Sem permissão para importar.');
@@ -3652,13 +4203,18 @@ function conciliarImport(rows){
     const l = casarComOrigem(r.data, r.valor, usados);
     if (!l) return;
     usados.add(l.id);
-    marca[i] = { motivo: l.recId ? 'recorrente' : 'divida', lanc:l };
+    // O rótulo tem que dizer a origem CERTA. Um encadeado que só conhece duas
+    // origens chama de "parcela já baixada" tudo que não é recorrente — então
+    // um programado casado apareceria na prévia como dívida, que é mentira, e
+    // mentira no aviso de duplicidade é o que faz o operador ignorar o aviso.
+    marca[i] = { motivo: l.recId ? 'recorrente' : l.divId ? 'divida' : 'agendado', lanc:l };
   });
   return marca;
 }
 const MOTIVO_TXT = { repetida:'linha repetida',
                      recorrente:'recorrente já confirmada',
-                     divida:'parcela já baixada' };
+                     divida:'parcela já baixada',
+                     agendado:'programado já confirmado' };
 function previewImport(){
   const txt = document.getElementById('imp-txt').value.trim();
   if (!txt) return toast('Cole as linhas primeiro.');
@@ -3689,9 +4245,9 @@ function previewImport(){
       <b>${impRows.length}</b> linhas lidas · <b>${okCat}</b> classificadas automaticamente
       (${impRows.length?Math.round(100*okCat/impRows.length):0}%) ·
       <b>${impRows.length-okCat}</b> vão para Revisar.
-      ${dup?`<br/><b class="neg">${dup} já existem</b> e serão ignoradas — ${
-        ['repetida','recorrente','divida'].filter(m=>conta(m))
-          .map(m=>`<b>${conta(m)}</b> ${MOTIVO_TXT[m]}${conta(m)>1?'s':''}`).join(' · ')}.`:''}
+      ${dup?`<br/><span id="imp-resumo"><b class="neg">${dup} já existem</b> e serão ignoradas — ${
+        ['repetida','recorrente','divida','agendado'].filter(m=>conta(m))
+          .map(m=>`<b>${conta(m)}</b> ${MOTIVO_TXT[m]}${conta(m)>1?'s':''}`).join(' · ')}.</span>`:''}
       ${erros.length?`<br/><span class="neg">${erros.length} linhas com problema:</span> ${esc(erros.slice(0,3).join(' · '))}`:''}
     </div>
     ${casadas.length?`<div class="alert" style="margin:8px 0 0;font-size:12px">
