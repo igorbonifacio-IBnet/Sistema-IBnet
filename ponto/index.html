@@ -296,6 +296,80 @@ const JORNADA = {
 };
 const GPS_ON  = true;   // captura de localização na batida
 
+// ══════════════ FERIADOS — EDITE AQUI ══════════════════════════════════════
+// Dia de feriado tem jornada prevista ZERO: não entra na carga do mês e não
+// conta falta. Quem bater ponto no feriado tem tudo como hora extra — mesma
+// regra do domingo.
+//
+// Duas formas de chave:
+//   'MM-DD'      → repete todos os anos (feriado de data fixa)
+//   'AAAA-MM-DD' → vale só naquele ano (emenda, ponto facultativo, data única)
+const FERIADOS = {
+  // ── Nacionais de data fixa ──
+  '01-01': 'Confraternização Universal',
+  '04-21': 'Tiradentes',
+  '05-01': 'Dia do Trabalho',
+  '09-07': 'Independência',
+  '10-12': 'N. Sra. Aparecida',
+  '11-02': 'Finados',
+  '11-15': 'Proclamação da República',
+  '11-20': 'Consciência Negra',
+  '12-25': 'Natal',
+
+  // ── Municipais / estaduais — CONFIRME as datas de Aparecida de Goiânia e
+  //    descomente. Não deixei nenhuma chutada: feriado errado aqui vira falta
+  //    indevida ou hora extra indevida na folha que o funcionário assina.
+  // '10-14': 'Aniversário de Aparecida de Goiânia',
+  // '05-24': 'N. Sra. Auxiliadora (padroeira)',
+
+  // ── Emendas e dias pontuais deste ano ──
+  // '2026-12-24': 'Véspera de Natal (meio período ou folga)',
+  // '2026-12-31': 'Véspera de Ano Novo',
+};
+
+// Feriados móveis — a data muda todo ano porque depende da Páscoa, então é
+// CALCULADA, não digitada. Marque false o que na IBnet for dia normal de
+// trabalho (Carnaval e Corpus Christi são ponto facultativo por lei, não
+// feriado obrigatório — é decisão da empresa).
+const FERIADOS_MOVEIS = {
+  carnaval:      true,   // terça-feira de carnaval
+  sextaSanta:    true,   // Sexta-feira da Paixão
+  corpusChristi: true,
+};
+// Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher) — base dos móveis
+function pascoa(ano){
+  const a=ano%19, b=Math.floor(ano/100), c=ano%100;
+  const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3);
+  const h=(19*a+b-d-g+15)%30, i=Math.floor(c/4), k=c%4;
+  const l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451);
+  const mes=Math.floor((h+l-7*m+114)/31), dia=((h+l-7*m+114)%31)+1;
+  return new Date(ano, mes-1, dia);
+}
+function _maisDias(d, n){ const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+n); return ymd(x); }
+let _moveisCache = {};
+function feriadosMoveisDoAno(ano){
+  if(_moveisCache[ano]) return _moveisCache[ano];
+  const p = pascoa(ano), mapa = {};
+  if(FERIADOS_MOVEIS.carnaval)      mapa[_maisDias(p,-47)] = 'Carnaval';
+  if(FERIADOS_MOVEIS.sextaSanta)    mapa[_maisDias(p, -2)] = 'Sexta-feira Santa';
+  if(FERIADOS_MOVEIS.corpusChristi) mapa[_maisDias(p, 60)] = 'Corpus Christi';
+  return (_moveisCache[ano] = mapa);
+}
+// Nome do feriado nesta data, ou null. Ordem: data única > data fixa > móvel.
+function feriadoDe(data){
+  const ano = +data.slice(0,4);
+  return FERIADOS[data] || FERIADOS[data.slice(5)] || feriadosMoveisDoAno(ano)[data] || null;
+}
+// Feriados do mês, para listar no cabeçalho da folha
+function feriadosDoMes(ano, mes){      // mes: 0–11
+  const out=[], ult=new Date(ano,mes+1,0).getDate();
+  for(let d=1; d<=ult; d++){
+    const data = ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const f = feriadoDe(data); if(f) out.push(String(d).padStart(2,'0')+' '+f);
+  }
+  return out;
+}
+
 // ── CERCA VIRTUAL (geofence) ────────────────────────────────────────────────
 // Só permite bater o ponto dentro do raio do trabalho.
 // Centro = IBnet · Av. R-009, qd 50 lt13 - St. Res. Campos Elíseos, Aparecida de Goiânia-GO.
@@ -365,7 +439,14 @@ function jornadaDoDow(dow){
   return { folga:false, tipos:['entrada','saida_almoco','volta_almoco','saida'],
            esperado:(parseHM(s.almocoIni)-parseHM(s.entrada))+(parseHM(s.saida)-parseHM(s.almocoFim)), sched:s };
 }
-function jornadaDoData(data){ return jornadaDoDow(dowFromData(data)); }
+// Único ponto que traduz DATA → jornada. O feriado entra aqui e não em cada
+// tela: carga do mês, folha de assinatura, CSV, modal de edição e a tela do
+// funcionário passam todos por esta função. Feriado = esperado 0, igual domingo.
+function jornadaDoData(data){
+  const fer = feriadoDe(data);
+  if(fer) return { folga:true, feriado:fer, tipos:['entrada','saida'], esperado:0, sched:null };
+  return jornadaDoDow(dowFromData(data));
+}
 function esperadoDoData(data){ return jornadaDoData(data).esperado; }
 function tiposDoData(data){ return jornadaDoData(data).tipos; }
 
@@ -566,10 +647,15 @@ function renderEspelho(func, ano, mes){
       ${isAdmin?`<td><button class="ed-btn" onclick="abrirEdicao('${func}','${data}')" title="Editar este dia">✏️</button></td>`:''}
     </tr>`;
   });
+  // A linha de total declara a CARGA do mês ao lado do trabalhado. Ela não fecha
+  // com a coluna Saldo de propósito: o saldo soma só dias batidos, a carga conta
+  // o mês inteiro — a diferença são as faltas, nomeadas aqui mesmo para que o
+  // número não pareça erro de conta. A folha de assinatura fecha os três.
+  const fech = fechamentoDoMes(func, ano, mes);
   return `<div class="card"><div class="table-wrap"><table>
     <thead><tr><th>Dia</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Saldo</th><th>Situação</th>${isAdmin?'<th>Ações</th>':''}</tr></thead>
     <tbody>${rows}
-      <tr class="tot-row"><td colspan="5">TOTAL (${dias.length} dias)</td><td>${fmtDur(totTrab)}</td><td class="${totSaldo>=0?'saldo-pos':'saldo-neg'}">${(totSaldo>=0?'+':'')+fmtDur(totSaldo)}</td><td></td>${isAdmin?'<td></td>':''}</tr>
+      <tr class="tot-row"><td colspan="5">TOTAL · ${dias.length} dia(s) com batida · carga prevista do mês ${fmtDur(fech.carga)}${fech.faltas?` · ${fech.faltas} falta(s)`:''}</td><td>${fmtDur(totTrab)}</td><td class="${totSaldo>=0?'saldo-pos':'saldo-neg'}">${(totSaldo>=0?'+':'')+fmtDur(totSaldo)}</td><td></td>${isAdmin?'<td></td>':''}</tr>
     </tbody></table></div></div>`;
 }
 
@@ -622,7 +708,7 @@ function renderAdmin(){
 
   document.getElementById('app').innerHTML = `
     ${adminViewSwitch('relatorios')}
-    <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.</div>
+    <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.<br><b>Feriados de ${MESES[mes-1]}:</b> ${feriadosDoMes(ano,mes-1).join(' · ')||'nenhum'} — feriado tem previsto zero, não conta falta e o que for batido vira extra.</div>
     <div class="filters">
       <label>Funcionário
         <select id="f-func" onchange="window._fFunc=this.value;renderAdmin()">${opts}</select>
@@ -630,7 +716,8 @@ function renderAdmin(){
       <label>Mês
         <input type="month" id="f-month" value="${selMonth}" onchange="window._fMonth=this.value;renderAdmin()"/>
       </label>
-      <button class="btn-export" onclick="exportarCSV()">⬇️ Exportar CSV</button>
+      <button class="btn-export" onclick="imprimirFolha()">🖨️ Folha de ponto (assinar)</button>
+      <button class="btn-add" onclick="exportarCSV()">⬇️ Exportar CSV</button>
       <button class="btn-add" onclick="abrirEdicaoNovo()">➕ Lançar / editar dia</button>
     </div>
     ${bodyHtml}
@@ -922,22 +1009,187 @@ async function baterPonto(tipo){
   }
 }
 
-// ── Exportar CSV (espelho do mês filtrado) ──────────────────────────────────
+// ══════════════ FECHAMENTO DO MÊS (carga prevista × trabalhado) ══════════════
+// Base de TODO fechamento — a folha de assinatura e o CSV saem daqui, para que
+// papel e planilha nunca discordem.
+//
+// Por que varrer o mês dia a dia, e não reusar `diasComBatida()` como o espelho
+// da tela faz: numa folha de conferência o dia SEM batida é justamente a
+// informação — é ele que explica a diferença entre a carga prevista e o total
+// trabalhado. Listar só os dias batidos faz a falta desaparecer e o total fechar
+// contra si mesmo.
+function diasDoMes(ano, mes){            // mes: 0–11
+  const out=[], ultimo=new Date(ano, mes+1, 0).getDate(), hoje=ymd(new Date());
+  for(let d=1; d<=ultimo; d++){
+    const data = ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    if(data > hoje) break;               // mês em curso: dia futuro não entra na folha
+    out.push(data);
+  }
+  return out;
+}
+// Totais do período. O dia de hoje ainda aberto NÃO entra — nem na carga nem no
+// trabalhado — pela mesma regra do banco de horas (`diaEncerrado`), senão a
+// pessoa apareceria devendo as horas que ainda está cumprindo.
+function fechamentoDoMes(func, ano, mes){
+  const dias = diasDoMes(ano, mes);
+  let carga=0, trab=0, faltas=0;
+  dias.forEach(data=>{
+    const dia = baterDoDia(func, data);
+    if(!diaEncerrado(dia, data)) return;
+    const prev = esperadoDoData(data);
+    carga += prev;
+    trab  += trabalhadoMin(dia, null);
+    if(prev>0 && !dia.entrada) faltas++;
+  });
+  return { dias, carga, trab, saldo: trab-carga, faltas };
+}
+// Uma linha de dia, já resolvida — usada pela folha e pelo CSV
+function linhaDoDia(func, data){
+  const dia = baterDoDia(func, data);
+  const j   = jornadaDoData(data);
+  const aberto = !diaEncerrado(dia, data);
+  const trab = trabalhadoMin(dia, null);
+  const [y,m,d] = data.split('-');
+  return {
+    data, dia, dd:d+'/'+m, dow:DIAS[dowFromData(data)].slice(0,3), aberto,
+    folga:j.folga, feriado:j.feriado||null,
+    // Dia ainda aberto não declara previsto: ele não entra na carga total, e uma
+    // folha de conferência tem de fechar somando a coluna à mão. Número impresso
+    // que não entra no total é erro de conta aos olhos de quem assina.
+    previsto: aberto ? 0 : j.esperado,
+    trab,
+    saldo: aberto ? null : trab - j.esperado,
+    // O nome do feriado aparece mesmo que a pessoa tenha trabalhado — é ele que
+    // justifica, para quem assina, a hora extra do dia.
+    obs: aberto ? 'em curso'
+       : (dia.entrada && !dia.saida ? 'incompleto'
+       : (j.feriado ? j.feriado
+       : (j.folga && !dia.entrada ? 'folga'
+       : (j.esperado>0 && !dia.entrada ? 'FALTA' : '')))),
+  };
+}
+
+// ── Folha de ponto para assinatura (abre em janela própria, pronta p/ imprimir)
+// Janela separada, e não impressão desta tela: o módulo roda dentro de um iframe
+// do portal, então `print()` aqui imprimiria o portal inteiro.
+function imprimirFolha(){
+  const selFunc = window._fFunc||''; const selMonth = window._fMonth||ymd(new Date()).slice(0,7);
+  const [ano,mes]=selMonth.split('-').map(Number);
+  // rosterMerged (e não só quem tem batida): funcionário sem nenhuma batida no
+  // mês também recebe folha — toda em FALTA, que é exatamente o que se quer ver.
+  const funcs = rosterMerged().filter(([f])=> !selFunc || f===selFunc);
+  const folhas = funcs.map(([f,n])=>folhaHtml(f,n,ano,mes-1)).join('');
+  const w = window.open('', '_blank');
+  if(!w){ toast('O navegador bloqueou a janela. Libere pop-ups para este site.'); return; }
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Folha de ponto ${MESES[mes-1]} ${ano}</title>
+<style>
+  @page{size:A4 portrait;margin:9mm}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#111;font:12px/1.35 'Segoe UI',Arial,sans-serif}
+  .bar{position:sticky;top:0;z-index:9;background:#f3f4f6;border-bottom:1px solid #d4d4d8;padding:9px 12px;display:flex;gap:10px;align-items:center}
+  .bar button{background:#dd5c33;color:#fff;border:0;padding:8px 16px;border-radius:7px;font:600 12px 'Segoe UI',Arial;cursor:pointer}
+  .bar span{color:#6b7280;font-size:11px}
+  .wrap{padding:12px}
+  .folha{page-break-after:always}
+  .folha:last-child{page-break-after:auto}
+  .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:7px}
+  .cab h1{margin:0;font-size:15px;letter-spacing:.3px}
+  .cab .emp{font-size:10px;color:#52525b;margin-top:2px}
+  .cab .per{font-size:10px;color:#52525b;text-align:right;line-height:1.5}
+  .quem{font-size:13px;font-weight:700;margin:0 0 5px}
+  .jor{font-size:9px;color:#52525b;margin:0 0 6px}
+  table{width:100%;border-collapse:collapse;font-size:9px}
+  th,td{border:1px solid #9ca3af;padding:2px 3px;text-align:center;height:17px}
+  th{background:#e5e7eb;font-size:8px;text-transform:uppercase;letter-spacing:.3px}
+  th.sig,td.sig{width:23%}
+  tr.fg td{background:#fafafa;color:#8b8b8b}
+  tr.fe td{background:#eef4fb;color:#44586e}
+  tr.ft td{background:#fdeeea}
+  td.neg{color:#b1341a}
+  .tot{margin-top:7px;border:1px solid #111;display:flex}
+  .tot div{flex:1;padding:4px 6px;border-right:1px solid #d4d4d8}
+  .tot div:last-child{border-right:0}
+  .tot b{display:block;font-size:13px;margin-top:1px}
+  .tot .k{font-size:8px;text-transform:uppercase;letter-spacing:.4px;color:#52525b}
+  .dec{margin-top:9px;font-size:9px;color:#3f3f46;line-height:1.5}
+  .ass{margin-top:26px;display:flex;gap:34px}
+  .ass div{flex:1;border-top:1px solid #111;padding-top:3px;text-align:center;font-size:9px;color:#3f3f46}
+  @media print{.bar{display:none}.wrap{padding:0}}
+</style></head><body>
+<div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+<span>${funcs.length} folha(s) · uma por página · confira antes de imprimir</span></div>
+<div class="wrap">${folhas}</div>
+</body></html>`);
+  w.document.close(); w.focus();
+}
+
+function folhaHtml(func, nome, ano, mes){
+  const r = fechamentoDoMes(func, ano, mes);
+  const per = r.dias.length
+    ? r.dias[0].slice(8)+'/'+r.dias[0].slice(5,7)+' a '+r.dias[r.dias.length-1].slice(8)+'/'+r.dias[r.dias.length-1].slice(5,7)+'/'+ano
+    : '—';
+  let rows='';
+  r.dias.forEach(data=>{
+    const L = linhaDoDia(func, data);
+    const cls = L.obs==='FALTA' ? 'ft' : (L.feriado ? 'fe' : (L.folga ? 'fg' : ''));
+    rows += `<tr class="${cls}">
+      <td>${L.dd}</td><td>${L.dow}</td>
+      <td>${L.dia.entrada?L.dia.entrada.hora:'—'}</td>
+      <td>${L.dia.saida_almoco?L.dia.saida_almoco.hora:'—'}</td>
+      <td>${L.dia.volta_almoco?L.dia.volta_almoco.hora:'—'}</td>
+      <td>${L.dia.saida?L.dia.saida.hora:'—'}</td>
+      <td>${L.trab?fmtDur(L.trab):'—'}</td>
+      <td>${L.previsto?fmtDur(L.previsto):'—'}</td>
+      <td class="${L.saldo!=null&&L.saldo<0?'neg':''}">${L.saldo==null?'—':(L.saldo>=0?'+':'')+fmtDur(L.saldo)}</td>
+      <td>${L.obs}</td><td class="sig"></td>
+    </tr>`;
+  });
+  const banco = saldoAcumulado(func);
+  const fers  = feriadosDoMes(ano, mes);
+  return `<div class="folha">
+    <div class="cab">
+      <div><h1>FOLHA DE PONTO</h1><div class="emp">IBnet Telecom</div></div>
+      <div class="per"><b>${MESES[mes].toUpperCase()} / ${ano}</b><br>Período: ${per}</div>
+    </div>
+    <div class="quem">${escapeHtml(nome)}</div>
+    <div class="jor">Jornada contratual — Seg–Sex ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} e ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) · Sáb ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) · Dom folga.
+    <br>Feriados do mês (previsto zero): ${fers.length?escapeHtml(fers.join(' · ')):'nenhum'}.</div>
+    <table>
+      <thead><tr><th>Dia</th><th>Sem</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Previsto</th><th>Saldo</th><th>Obs.</th><th class="sig">Assinatura do funcionário</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="tot">
+      <div><span class="k">Carga total prevista</span><b>${fmtDur(r.carga)}</b></div>
+      <div><span class="k">Total trabalhado</span><b>${fmtDur(r.trab)}</b></div>
+      <div><span class="k">Saldo do mês</span><b>${(r.saldo>=0?'+':'')+fmtDur(r.saldo)}</b></div>
+      <div><span class="k">Faltas</span><b>${r.faltas}</b></div>
+      <div><span class="k">Banco acumulado</span><b>${(banco>=0?'+':'')+fmtDur(banco)}</b></div>
+    </div>
+    <div class="dec">Declaro que os horários registrados nesta folha correspondem à jornada efetivamente cumprida no período acima, e que as divergências, se houver, foram comunicadas à gestão.</div>
+    <div class="ass"><div>Assinatura do funcionário</div><div>Assinatura do gestor</div><div>Data</div></div>
+  </div>`;
+}
+
+// ── Exportar CSV (mesma base da folha: mês dia a dia, com carga e totais) ───
 function exportarCSV(){
   const selFunc = window._fFunc||''; const selMonth = window._fMonth||ymd(new Date()).slice(0,7);
   const [ano,mes]=selMonth.split('-').map(Number);
-  const funcs = funcionariosConhecidos().filter(([f])=> !selFunc || f===selFunc);
-  const linhas = [['Funcionário','Data','Entrada','Saída Almoço','Volta Almoço','Saída','Trabalhado','Saldo','Situação']];
+  const funcs = rosterMerged().filter(([f])=> !selFunc || f===selFunc);
+  const linhas = [['Funcionário','Data','Dia','Entrada','Saída Almoço','Volta Almoço','Saída','Trabalhado','Previsto','Saldo','Observação']];
   funcs.forEach(([f,n])=>{
-    diasComBatida(f,ano,mes-1).forEach(data=>{
-      const dia=baterDoDia(f,data); const trab=trabalhadoMin(dia,null);
-      const completo=dia.entrada&&dia.saida; const saldo=completo?(trab-esperadoDoData(data)):null;
-      linhas.push([n, data,
-        dia.entrada?dia.entrada.hora:'', dia.saida_almoco?dia.saida_almoco.hora:'',
-        dia.volta_almoco?dia.volta_almoco.hora:'', dia.saida?dia.saida.hora:'',
-        fmtDur(trab), saldo==null?'':(saldo>=0?'+':'')+fmtDur(saldo),
-        completo?'completo':(dia.entrada?'parcial':'—')]);
+    const r = fechamentoDoMes(f, ano, mes-1);
+    r.dias.forEach(data=>{
+      const L = linhaDoDia(f, data);
+      linhas.push([n, data, L.dow,
+        L.dia.entrada?L.dia.entrada.hora:'', L.dia.saida_almoco?L.dia.saida_almoco.hora:'',
+        L.dia.volta_almoco?L.dia.volta_almoco.hora:'', L.dia.saida?L.dia.saida.hora:'',
+        fmtDur(L.trab), L.previsto?fmtDur(L.previsto):'',
+        L.saldo==null?'':(L.saldo>=0?'+':'')+fmtDur(L.saldo), L.obs]);
     });
+    linhas.push(['TOTAL '+n,'','','','','','', fmtDur(r.trab), fmtDur(r.carga),
+                 (r.saldo>=0?'+':'')+fmtDur(r.saldo), r.faltas+' falta(s)']);
+    linhas.push(['','','','','','','','','','','']);
   });
   const csv = linhas.map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
