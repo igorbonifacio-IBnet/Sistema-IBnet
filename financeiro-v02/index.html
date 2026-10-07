@@ -324,7 +324,9 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
       </label>
     </div>
     <div class="mb-field"><label>Observação</label><input type="text" id="g-obs" placeholder="opcional"/></div>
-    <div class="alert" style="margin:6px 0 0;font-size:12px">
+    <!-- Texto trocado por `notaAg()`: programar uma parcela tem uma consequência
+         a mais (a baixa na dívida) e ela precisa estar escrita antes do clique. -->
+    <div class="alert" id="g-nota" style="margin:6px 0 0;font-size:12px">
       Programar <b>não</b> lança nada no Fluxo de Caixa. O lançamento nasce quando
       você clicar em <b>confirmar</b>, com esta data e este valor.
     </div>
@@ -734,6 +736,13 @@ let view = 'dfc';
 let editId = null, editDiv = null, editRec = null, editAg = null;
 let confRec = null;                       // {id, mes} da recorrente sendo confirmada
 let confDup = null;                       // lançamento do extrato que é o mesmo dinheiro
+/* Marca de origem que o modal de programado leva consigo quando ele foi aberto
+   de uma parcela — {divId, divParc}. Fica fora do formulário de propósito: é
+   chave estrutural, não campo editável. Se o operador pudesse digitar o número
+   da parcela, duas parcelas disputariam a mesma chave e o contador da dívida
+   andaria para o lado errado. Nasce `null` em `abrirAg` e `editarAg`, senão o
+   próximo avulso herdaria o vínculo do último programado de dívida. */
+let vincAg = null;
 let impRows = [], impMarcas = [];         // linhas coladas e o que cada uma repete
 let filtroMes = 'todos', filtroCat = 'todas';
 /* Por que o erro do nó de programados tem variável própria: as outras bases
@@ -1655,6 +1664,54 @@ const saldoDe  = dv => cronogramaDe(dv).filter(p => !p.paga).reduce((a,p) => a +
 const quitada  = dv => dv.status === 'quitada' ||
                        Math.round(+dv.pagas||0) >= Math.round(+dv.parcelas||0);
 
+/* O que a próxima parcela ACEITA agora. Uma pergunta, uma resposta, e a linha
+   da tela e a gravação leem a MESMA — é isso que impede o botão de oferecer o
+   que a gravação vai negar. Duplicada, a regra divergiria na primeira edição e
+   o sintoma seria o pior possível: clique que não faz nada e não explica.
+
+   `pagas` é um contador sequencial, não um conjunto, então "a próxima" é a
+   única parcela que pode mudar de estado — e é por isso que esta função
+   responde sobre uma parcela só.
+
+   - `programado`: tem dia marcado na aba Programado. A baixa sai de lá, porque
+     quem fecha o compromisso é o `agId` do lançamento.
+   - `programar`:  ainda não venceu. Dar baixa gravaria lançamento futuro no
+     caixa realizado, que é o que `mapaAgendado`/DFC tratam como dinheiro que
+     já saiu.
+   - `baixa`:      venceu ou vence hoje — as duas portas valem.
+
+   Usa `programadoDiv`, declarado mais abaixo: só roda em clique e em render,
+   nunca durante a avaliação do script. */
+function acaoDaParcela(dv, mapaProg, hojeISO){
+  /* `quitada` ANTES de `proximaDe`, e nesta ordem de propósito: na quitação
+     antecipada — contrato liquidado com desconto — o `status` diz quitada e o
+     contador fica abaixo do total. `proximaDe` ainda acha parcela em aberto
+     ali, e responder por ela seria oferecer baixa de uma dívida que não existe
+     mais. Dado declarado vence dado deduzido. */
+  const p = quitada(dv) ? null : proximaDe(dv);
+  if (!p) return { acao:'quitada', parc:null, prog:null };
+  const prog = programadoDiv(mapaProg, dv.id, p.n);
+  if (prog)             return { acao:'programado', parc:p, prog };
+  if (p.venc > hojeISO) return { acao:'programar',  parc:p, prog:null };
+  return { acao:'baixa', parc:p, prog:null };
+}
+
+/* A DECISÃO da baixa, separada da gravação. Dado o contador de hoje e a
+   parcela que está sendo confirmada, o contador anda — e para quanto?
+
+   Separar não é gosto: é o que permite provar num banco de testes a regra que
+   custa mais caro errar nesta tela. Contador que anda demais dá parcelas por
+   pagas sem o dinheiro ter saído, e o saldo devedor passa a mentir PARA MENOS,
+   que é o lado que faz parecer que há folga. */
+function baixaDaParcela(dv, divParc){
+  if (!dv) return { ok:false, motivo:'semDivida' };
+  const n     = Math.round(+dv.parcelas||0);
+  const pagas = Math.max(0, Math.round(+dv.pagas||0));
+  const p     = Math.round(+divParc);
+  if (p !== pagas + 1) return { ok:false, motivo:'foraDeOrdem', pagas, n, p };
+  return { ok:true, pagas, n, p, status: p >= n ? 'quitada' : 'ativa' };
+}
+
 function htmlDivida(){
   const hoje     = new Date().toISOString().slice(0,10);
   const mesAtual = hoje.slice(0,7);
@@ -1676,15 +1733,26 @@ function htmlDivida(){
   const ativas   = dividas.filter(d => !quitada(d));
   const quitadas = dividas.filter(d =>  quitada(d));
 
+  /* Uma varredura só para a tela inteira: `mapaProgramado` chama `mapaAgendado`,
+     que percorre todos os lançamentos. Por linha, isso é o mesmo custo vezes o
+     número de contratos. */
+  const mapaProg = mapaProgramado();
+
   /* agenda mês a mês — só parcelas em aberto */
   const agenda = {};
-  let atrasadas = 0, vlrAtraso = 0;
+  let atrasadas = 0, vlrAtraso = 0, progs = 0;
   ativas.forEach(d => cronogramaDe(d).forEach(p => {
     if (p.paga || !p.mes) return;
     const a = (agenda[p.mes] = agenda[p.mes] || { total:0, qtd:0, fim:[] });
     a.total += p.valor; a.qtd++;
     if (p.n === Math.round(+d.parcelas||0)) a.fim.push(d);
-    if (p.venc < hoje){ atrasadas++; vlrAtraso += p.valor; }
+    /* Parcela programada NÃO é parcela atrasada, mesmo tendo vencido. O aviso
+       lá embaixo manda usar "+1 paga" e a parcela programada não aceita esse
+       clique — mandar o operador para um botão que o sistema vai negar é a
+       mesma inversão que o estado "programada" consertou nas recorrentes:
+       decisão tomada vem antes de pendência esquecida. */
+    if (programadoDiv(mapaProg, d.id, p.n)) progs++;
+    else if (p.venc < hoje){ atrasadas++; vlrAtraso += p.valor; }
   }));
 
   const chaves     = Object.keys(agenda).sort();
@@ -1727,6 +1795,10 @@ function htmlDivida(){
     somando <b>${fmt(-vlrAtraso)}</b>. Se já pagou, use o botão <b>+1 paga</b> na tabela
     para o cronograma voltar a bater.</div>` : ''}
 
+  ${progs ? `<div class="alert" style="margin-top:14px">
+    <b>${progs} parcela(s) com dia marcado</b> na aba <b>Programado</b>. A baixa aqui
+    acontece quando você confirmar lá — é de lá que sai o lançamento.</div>` : ''}
+
   ${proxFim ? `<div class="alert" style="margin-top:14px">
     <b>Próximo alívio:</b> em ${mesLabel(proxFim.mes)} encerra
     ${proxFim.itens.map(d=>`<b>${esc(d.credor||d.descricao||'—')}</b>`).join(' e ')} —
@@ -1764,21 +1836,36 @@ function htmlDivida(){
       ${ativas.map(d=>{
         const n=Math.round(+d.parcelas||0), pg=Math.round(+d.pagas||0);
         const cr=cronogramaDe(d), ult=cr.length?cr[cr.length-1].mes:null;
+        const ac  = acaoDaParcela(d, mapaProg, hoje);
+        const px  = ac.parc, prg = ac.prog;
         return `<tr>
           <td><b>${esc(d.credor||'—')}</b>${d.descricao?`<div style="font-size:11px;color:var(--muted)">${esc(d.descricao)}</div>`:''}</td>
           <td style="font-size:12px">${esc(TIPOS_DIVIDA[d.tipo]||d.tipo||'—')}</td>
           <td class="num neg">${(()=>{
             if (!variavel(d)) return fmt(-(+d.valorParcela||0));
-            const px = cr.find(p=>!p.paga), vs = cr.map(p=>p.valor);
+            const vs = cr.map(p=>p.valor);
             return `${fmt(-(px?px.valor:0))}<div style="font-size:10px;color:var(--muted)">varia · ${
               fmt(Math.min(...vs))} a ${fmt(Math.max(...vs))}</div>`;
           })()}</td>
           <td><div style="font-size:11px;color:var(--muted)">${pg} de ${n} pagas</div>
-            <div class="bar-track"><div class="bar-fill" style="width:${n?Math.round(100*pg/n):0}%;background:var(--green)"></div></div></td>
+            <div class="bar-track"><div class="bar-fill" style="width:${n?Math.round(100*pg/n):0}%;background:var(--green)"></div></div>
+            ${prg ? `<div class="rec-obs"><span class="pill p-prog">programado</span>
+              parcela ${px.n} sai <b>${dataBR(prg.data)}</b></div>` : ''}</td>
           <td class="num neg">${fmt(-saldoDe(d))}</td>
           <td style="white-space:nowrap;font-size:12px">${ult?mesLabel(ult):'—'}</td>
           ${isAdmin?`<td style="white-space:nowrap">
-            <button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Baixa a próxima parcela e lança a saída no fluxo">+1 paga</button>
+            ${/* Três estados, um botão cada. Programada: a baixa é na outra aba,
+                  e oferecer "+1 paga" aqui seria oferecer o que a gravação nega.
+                  Futura: baixa lançaria dinheiro que não saiu, então só
+                  programar. Vencida ou de hoje: as duas portas valem — pagou no
+                  dia, +1 paga; vai pagar depois, programar. */''}
+            ${ac.acao === 'programado'
+              ? `<button class="icon-btn" onclick="setView('prog')"
+                   title="A parcela ${px.n} tem dia marcado — a baixa sai de lá">ver programado</button>`
+              : ac.acao === 'quitada' ? ''
+              : (ac.acao === 'baixa' ? `<button class="icon-btn" onclick="pagarParcela('${d.id}',1)" title="Baixa a próxima parcela e lança a saída no fluxo">+1 paga</button>` : '')
+                + `<button class="icon-btn" onclick="programarParcela('${d.id}')"
+                     title="Marca o dia em que a parcela ${px.n} vai sair — não lança nada ainda">programar</button>`}
             ${pg?`<button class="icon-btn" onclick="pagarParcela('${d.id}',-1)" title="Desfazer a última baixa e apagar o lançamento">−1</button>`:''}
             <button class="icon-btn" onclick="editarDivida('${d.id}')">editar</button>
             <button class="icon-btn" onclick="abrirValores('${d.id}')"
@@ -2056,6 +2143,31 @@ async function pagarParcela(id, delta){
   // última que estava paga, que é a de nº `atual`.
   const alvo = cronogramaDe(d)[(delta>0 ? novo : atual) - 1];
   if (!alvo) return toast('Parcela fora do cronograma — confira o cadastro.');
+  /* As guardas moram na GRAVAÇÃO, não só no botão: a tela já esconde o "+1
+     paga" nesses dois casos, mas a tela de ontem continua clicável se o
+     compromisso nasceu numa outra aba entre o desenho e o clique. Foi
+     exatamente assim que a dívida ficou três meses no meio do caminho.
+
+     `acaoDaParcela` é a MESMA função que desenhou o botão, de propósito. */
+  if (delta > 0){
+    const ac = acaoDaParcela(d, mapaProgramado(), new Date().toISOString().slice(0,10));
+    /* Programada: aqui gravaria um lançamento com `divId`+`divParc` e SEM
+       `agId`, e quem fecha o compromisso é o `agId` — a parcela ficaria paga
+       de um lado e o programado em aberto do outro, cobrando para sempre um
+       dinheiro que já saiu. */
+    if (ac.acao === 'programado')
+      return toast(`Parcela ${ac.parc.n} está programada para ${dataBR(ac.prog.data)}`
+                 + ` — confirme na aba Programado, senão o compromisso fica em aberto.`);
+    /* O furo que esta entrega fecha. `pagarParcela` é clique único e lança com
+       `data: alvo.venc` — numa parcela que ainda não venceu isso grava
+       lançamento FUTURO no caixa realizado, o que "cronograma derivado, nunca
+       lançamento futuro" proíbe. Não é só recusar: a saída é o botão
+       "programar", que leva a parcela para o Programado com data editável.
+       Tela de erro sem saída é beco. */
+    if (ac.acao === 'programar')
+      return toast(`Parcela ${ac.parc.n} só vence em ${dataBR(ac.parc.venc)} — dar baixa agora`
+                 + ` lançaria dinheiro que não saiu. Use "programar" e escolha o dia.`);
+  }
   const est = { pagas:novo, status: novo>=n ? 'quitada' : 'ativa' };
   try {
     if (delta > 0){
@@ -2078,10 +2190,69 @@ async function pagarParcela(id, delta){
       const ja = lancDaParcelaExistente(id, alvo.n);
       if (ja) await lref.child(ja.id).remove();
       await dref.child(id).update(est);
-      toast(`${d.credor}: baixa desfeita — ${novo} de ${n} pagas${ja?', lançamento removido':''}.`);
+      /* Se aquele lançamento tinha sido confirmado pela aba Programado, apagá-lo
+         desfaz também a confirmação de lá: quem fecha o compromisso é o `agId`
+         do lançamento, e ele acabou de deixar de existir. O compromisso volta a
+         pedir confirmação, o que é a verdade — mas tem que estar escrito, senão
+         ele vê uma linha reaparecer do outro lado sem explicação. */
+      toast(`${d.credor}: baixa desfeita — ${novo} de ${n} pagas${ja?', lançamento removido':''}.`
+          + (ja && ja.agId ? ' A parcela volta a pedir confirmação na aba Programado.' : ''));
     }
   } catch(e){ toast('Erro ao dar baixa: ' + e.message); }
 }
+
+/* Parcela com dia marcado vira COMPROMISSO, não lançamento. O irmão de
+   `programarDaRegra`, e a diferença entre os dois é o modelo do que está
+   sendo programado: a recorrente tem uma ocorrência por mês e o mês é a
+   chave, então programar é push direto; a dívida tem um cronograma
+   sequencial, e o que o Igor quase sempre quer mudar é justamente a data
+   ("vence dia 10, vou pagar dia 13"). Por isso aqui ele vê o formulário.
+
+   Só a PRÓXIMA parcela em aberto pode ser programada, e isso não é cautela:
+   `pagas` é um contador sequencial, não um conjunto. Programar a parcela 7
+   com 4 pagas e depois confirmar obrigaria a gravar `pagas:7`, dando as 5 e a
+   6 por pagas sem que um centavo delas tivesse saído. Enquanto o modelo for
+   contador, a fila é uma só. */
+function programarParcela(id){
+  if (!isAdmin) return toast('Sem permissão para programar.');
+  const d = dividas.find(x => x.id === id); if (!d) return;
+  const hoje = new Date().toISOString().slice(0,10);
+  const ac = acaoDaParcela(d, mapaProgramado(), hoje);
+  if (ac.acao === 'quitada')    return toast('Essa dívida não tem parcela em aberto.');
+  if (ac.acao === 'programado')
+    return toast(`Parcela ${ac.parc.n} já está programada para ${dataBR(ac.prog.data)}`
+               + ` — veja a aba Programado.`);
+  /* Vencida também pode ser programada, e é o caso mais comum: "venceu dia 10,
+     vou pagar dia 13". Por isso `baixa` não é recusado aqui — só `programado`
+     e `quitada` são. */
+  const p = ac.parc, n = Math.round(+d.parcelas||0);
+  /* Lançamento da parcela existente com o contador atrasado: o dinheiro já
+     está no fluxo e programar criaria um segundo compromisso do mesmo valor.
+     Quem conserta é o contador, não um programado novo. */
+  if (lancDaParcelaExistente(id, p.n))
+    return toast(`Parcela ${p.n} já tem lançamento no fluxo — use "+1 paga" para o contador bater.`);
+  vincAg = { divId:id, divParc:p.n };
+  editAg = null;
+  document.getElementById('ag-title').textContent = `Programar parcela ${p.n}/${n}`;
+  /* Tudo vem do cadastro — ele só mexe na data, que é o motivo de estar aqui.
+     A descrição é a MESMA que `lancDaParcela` escreve, para a linha do
+     Programado e a do Fluxo serem reconhecíveis como o mesmo dinheiro.
+
+     A data nasce no vencimento quando ele ainda está por vir; se a parcela já
+     venceu, nasce HOJE. Compromisso que nasce atrasado é contradição: ele
+     apareceria vermelho no Programado no mesmo segundo em que foi criado, e o
+     motivo de estar nesta tela é justamente escolher um dia novo. */
+  document.getElementById('g-data').value    = (p.venc && p.venc > hoje) ? p.venc : hoje;
+  document.getElementById('g-valor').value   = Math.abs(+p.valor||0);
+  document.getElementById('g-desc').value    = `${d.credor||'Dívida'} — parcela ${p.n}/${n}`;
+  document.getElementById('g-conta').value   = d.conta || '';
+  document.getElementById('g-obs').value     = d.descricao || '';
+  document.getElementById('g-banco').checked = false;
+  preencherCatsAg(d.categoria || 'Amortização de Empréstimo');
+  notaAg(p.n);
+  document.getElementById('ag-modal').classList.add('show');
+}
+
 async function excluirDivida(id){
   const d = dividas.find(x=>x.id===id); if(!d) return;
   if (!confirm(`Excluir a dívida "${d.credor}" (${d.parcelas}x de ${fmt(+d.valorParcela||0)})?`)) return;
@@ -4030,7 +4201,10 @@ function linhaAg(a, hoje, mapa){
             na fila das recorrentes. Sem isso as duas linhas ficam idênticas na
             tela e ele não tem como saber por que uma some de dois lugares. */
         a.recId && a.recMes
-          ? `<div class="rec-obs">da recorrente · <b>${mesLabel(a.recMes)}</b></div>` : ''}
+          ? `<div class="rec-obs">da recorrente · <b>${mesLabel(a.recMes)}</b></div>`
+        : a.divId && a.divParc != null
+          ? `<div class="rec-obs">da dívida · <b>parcela ${Math.round(+a.divParc)}</b>`
+            + `${e.estado==='confirmado'?'':' — confirmar aqui dá a baixa'}</div>` : ''}
       ${dup ? `<div class="rec-obs">o extrato já tem <b>${fmt(+dup.valor||0)}</b> em ${dataBR(dup.data)} — "${esc(dup.descricao||'—')}"</div>` : ''}
       ${a.obs ? `<div class="rec-obs">${esc(a.obs)}</div>` : ''}</td>
     <td style="font-size:12px">${esc(a.conta||'—')}</td>
@@ -4157,7 +4331,7 @@ function htmlProg(){
 /* ── cadastro da despesa programada ──────────────────────────────── */
 function abrirAg(){
   if (!isAdmin) return toast('Sem permissão para programar.');
-  editAg = null;
+  editAg = null; vincAg = null;
   document.getElementById('ag-title').textContent = 'Nova despesa programada';
   /* A data nasce dentro da janela que está na tela, não em "hoje": quem abriu
      a semana que vem para montar as contas não quer redigitar a data em cada
@@ -4169,7 +4343,7 @@ function abrirAg(){
   document.getElementById('g-conta').value  = '';
   document.getElementById('g-obs').value    = '';
   document.getElementById('g-banco').checked = false;
-  preencherCatsAg('');
+  preencherCatsAg(''); notaAg(null);
   document.getElementById('ag-modal').classList.add('show');
 }
 function editarAg(id){
@@ -4178,7 +4352,11 @@ function editarAg(id){
   // faria o programado discordar do lançamento. Quem manda aí é o lançamento.
   if (confirmadoDe(mapaAgendado(), id))
     return toast('Já confirmado — corrija o lançamento na aba Lançamentos.');
-  editAg = id;
+  /* Editar NÃO reescreve o vínculo: `update` é merge, e `divId`/`divParc` que
+     já estão gravados continuam lá. Zerar `vincAg` aqui é o que impede o
+     contrário — editar um avulso depois de programar uma parcela carimbaria
+     nele a chave da parcela, e duas linhas disputariam a mesma baixa. */
+  editAg = id; vincAg = null;
   document.getElementById('ag-title').textContent = 'Editar despesa programada';
   document.getElementById('g-data').value   = a.data || '';
   document.getElementById('g-valor').value  = Math.abs(+a.valor||0);
@@ -4187,7 +4365,17 @@ function editarAg(id){
   document.getElementById('g-obs').value    = a.obs || '';
   document.getElementById('g-banco').checked = !!a.noBanco;
   preencherCatsAg(a.categoria || '');
+  notaAg(a.divId && a.divParc != null ? Math.round(+a.divParc) : null);
   document.getElementById('ag-modal').classList.add('show');
+}
+/* Uma função, três aberturas — se cada uma escrevesse seu texto, a primeira
+   mudança de regra deixaria duas delas mentindo. */
+function notaAg(parc){
+  document.getElementById('g-nota').innerHTML =
+    `Programar <b>não</b> lança nada no Fluxo de Caixa. O lançamento nasce quando`
+  + ` você clicar em <b>confirmar</b>, com esta data e este valor.`
+  + (parc ? ` A <b>baixa da parcela ${parc}</b> sai no mesmo clique: enquanto não`
+          + ` confirmar, a dívida continua devendo ela.` : '');
 }
 function preencherCatsAg(sel){
   document.getElementById('g-cat').innerHTML =
@@ -4197,7 +4385,9 @@ function preencherCatsAg(sel){
   document.getElementById('r-contas').innerHTML =
     contasConhecidas().map(c => `<option value="${esc(c)}"></option>`).join('');
 }
-function fecharAg(){ document.getElementById('ag-modal').classList.remove('show'); }
+// Fechar sem salvar também solta o vínculo: abrir a parcela, desistir e depois
+// cadastrar um avulso não pode carimbar a chave da parcela no avulso.
+function fecharAg(){ vincAg = null; document.getElementById('ag-modal').classList.remove('show'); }
 
 async function salvarAg(){
   const data  = document.getElementById('g-data').value;
@@ -4216,13 +4406,20 @@ async function salvarAg(){
   const valor = -Math.abs(bruto);
   const rec = { data, descricao:desc, valor, categoria:cat, conta, obs, noBanco,
                 por: session?.nome||'—', ts: Date.now() };
+  /* A chave de origem entra só na CRIAÇÃO, e vem de `vincAg`, não da tela.
+     É ela que faz a confirmação deste compromisso andar o contador da dívida
+     — sem ela o dinheiro sairia e a parcela continuaria em aberto. */
+  if (!editAg && vincAg) Object.assign(rec, vincAg);
   const btn = document.getElementById('g-save'); btn.disabled = true;
   try {
     if (editAg) await aref.child(editAg).update(rec);
     else        await aref.push(rec);
-    fecharAg();
+    const daDiv = editAg ? null : vincAg;
+    fecharAg();                     // solta o `vincAg`
     toast(editAg ? 'Programado atualizado.'
-                 : `Programado: ${fmt(valor)} em ${dataBR(data)}${noBanco?' — débito já agendado no banco.':'.'}`);
+        : daDiv ? `Parcela ${daDiv.divParc} programada para ${dataBR(data)} — ${fmt(valor)}.`
+                + ` A baixa na dívida só acontece quando você confirmar aqui.`
+                : `Programado: ${fmt(valor)} em ${dataBR(data)}${noBanco?' — débito já agendado no banco.':'.'}`);
   } catch(e){ toast('Erro ao salvar: ' + e.message); }
   btn.disabled = false;
 }
@@ -4247,6 +4444,35 @@ function lancDoAgendado(a){
                 ? { divId:a.divId, divParc:+a.divParc } : {}),
            por: session?.nome || '—', ts: Date.now() };
 }
+/* O contador da dívida anda AQUI, no momento em que o dinheiro sai — nunca na
+   hora de programar. Programar é decisão; pagar é fato, e `pagas` conta fatos.
+   Programar e já dar a parcela por paga quitaria a dívida na tela com o
+   dinheiro ainda na conta, e o saldo devedor passaria a mentir para menos — o
+   erro que custa caro, porque faz parecer que há folga.
+
+   `divParc === pagas + 1` não é paranoia, é a consequência de `pagas` ser um
+   CONTADOR e não um conjunto: gravar `pagas:7` com 4 pagas dá a 5 e a 6 por
+   pagas de graça. Quando isso acontece — cadastro mexido entre programar e
+   confirmar — o lançamento vai para o fluxo de qualquer jeito (o dinheiro
+   saiu, e isso é verdade) e o contador fica parado, com o toast dizendo onde
+   está a divergência. Mexer no contador às cegas seria pior que não mexer.
+
+   Devolve o pedaço de frase que o toast de quem chamou vai concatenar: as duas
+   portas (confirmar e vincular) precisam contar a mesma coisa, e duas frases
+   separadas divergiriam na primeira edição. */
+async function baixaDoAgendado(a){
+  if (!a.divId || a.divParc == null) return '';
+  const d = dividas.find(x => x.id === a.divId);
+  const r = baixaDaParcela(d, a.divParc);
+  if (r.motivo === 'semDivida')
+    return ' A dívida de origem não existe mais — contador não alterado.';
+  if (r.motivo === 'foraDeOrdem')
+    return ` ATENÇÃO: ${d.credor} está em ${r.pagas} de ${r.n} pagas e esta é a parcela`
+         + ` ${r.p} — o contador NÃO andou. Ajuste em Dívidas.`;
+  await dref.child(d.id).update({ pagas:r.p, status:r.status });
+  return ` · ${d.credor}: ${r.p} de ${r.n} pagas${r.status==='quitada' ? ' — quitada!' : ''}.`;
+}
+
 /* Um clique, com a data e o valor DECLARADOS — sem formulário para redigitar
    o que já está cadastrado, que é só oportunidade de errar. A data do
    lançamento é a do programado de propósito: débito agendado sai no dia
@@ -4273,7 +4499,12 @@ async function confirmarAg(id){
       + `Lançar assim mesmo?`)) return;
   try {
     await lref.push(lancDoAgendado(a));
-    toast(`${a.descricao}: ${fmt(valor)} lançado em ${dataBR(a.data)}${a.categoria?' · '+a.categoria:' — sem categoria, veja Revisar.'}`);
+    // O lançamento primeiro, a baixa depois: se a baixa falhar, o dinheiro
+    // está no fluxo e o contador atrasado — divergência que a tela mostra e
+    // ele conserta. Na ordem inversa, parcela paga sem lançamento nenhum.
+    const baixa = await baixaDoAgendado(a);
+    toast(`${a.descricao}: ${fmt(valor)} lançado em ${dataBR(a.data)}${a.categoria?' · '+a.categoria:' — sem categoria, veja Revisar.'}`
+        + baixa);
   } catch(e){ toast('Erro ao confirmar: ' + e.message); }
 }
 /* Vincular: a linha já existe no extrato e é este programado. Carimba `agId`
@@ -4303,7 +4534,10 @@ async function vincularAg(id){
       conta:     a.conta     || alvo.conta     || '',
       obs:       alvo.obs    || `programado: ${a.descricao||'—'}`
     });
-    toast(`Fechado pela linha de ${dataBR(alvo.data)} — nada foi lançado de novo.`);
+    // Vincular também é "o dinheiro saiu" — mais ainda, porque ele já está no
+    // extrato. A baixa na dívida é a mesma dos dois lados.
+    const baixa = await baixaDoAgendado(a);
+    toast(`Fechado pela linha de ${dataBR(alvo.data)} — nada foi lançado de novo.` + baixa);
   } catch(e){ toast('Erro ao vincular: ' + e.message); }
 }
 async function excluirAg(id){
@@ -4326,7 +4560,16 @@ async function excluirAg(id){
     : (a.recId && a.recMes
         ? `\n\nEste programado veio da recorrente. Excluindo, ${mesLabel(a.recMes)}`
           + ` volta a pedir confirmação na aba Recorrentes.`
-        : '');
+      /* Dívida: a parcela continua DEVIDA e volta a oferecer baixa. Dizer isso
+         importa mais aqui que na recorrente — ao contrário de uma conta do mês,
+         parcela esquecida não reaparece sozinha no mês seguinte; ela trava a
+         fila inteira, porque `pagas` é sequencial e a próxima baixa é sempre a
+         dela. */
+      : (a.divId && a.divParc != null
+          ? `\n\nEste programado é a parcela ${Math.round(+a.divParc)} de uma dívida, e ela`
+            + ` continua em aberto: o contador não andou. Excluindo, a parcela volta a`
+            + ` oferecer "+1 paga" / "programar" na aba Dívidas.`
+          : ''));
   if (!confirm(`Excluir o programado "${a.descricao}" de ${dataBR(a.data)} (${fmt(+a.valor||0)})?${aviso}`)) return;
   try {
     await aref.child(id).remove();
