@@ -346,6 +346,34 @@ const FERIADOS_MOVEIS = {
   sextaSanta:    true,   // Sexta-feira da Paixão
   corpusChristi: true,
 };
+
+// ══════════════ ABONOS POR FUNCIONÁRIO — EDITE AQUI ════════════════════════
+// Dia abonado tem jornada prevista ZERO **para aquela pessoa**: não entra na
+// carga do mês, não conta falta e não vira hora a compensar. É a terceira (e
+// última) coisa que zera o previsto, e cada uma existe por um motivo diferente:
+//   feriado → vale para TODOS, e é data de calendário;
+//   domingo → vale para todos, e é dia da semana;
+//   abono   → vale para UMA pessoa em UM dia, por decisão da gestão.
+//
+// Chave só no formato 'AAAA-MM-DD', de propósito: abono é dia específico. Se o
+// formato 'MM-DD' fosse aceito aqui, um abono digitado uma vez se repetiria
+// todo ano em silêncio — e aí não seria abono, seria escala. Escala fixa (ex.:
+// sábado alternado) é outra coisa e vai ter lugar próprio; enquanto não tiver,
+// NÃO use esta tabela para repetir o mesmo dia mês a mês.
+//
+// O texto aparece impresso na folha, na coluna Obs. e no cabeçalho: quem assina
+// tem de ver POR QUE aquele dia tem previsto zero, senão a carga do mês fica
+// menor que a contratual sem explicação nenhuma.
+const ABONOS = {
+  davi: {
+    // Sábados que o Davi não trabalhou em setembro/2026. Abonados por decisão
+    // do Igor em 08/10/2026 — ele trabalha sábado alternado, e o sistema ainda
+    // não sabe disso, então o sábado de folga caía como falta.
+    '2026-09-05': 'Folga de escala',
+    '2026-09-26': 'Folga de escala',
+  },
+};
+
 // Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher) — base dos móveis
 function pascoa(ano){
   const a=ano%19, b=Math.floor(ano/100), c=ano%100;
@@ -376,6 +404,29 @@ function feriadosDoMes(ano, mes){      // mes: 0–11
   for(let d=1; d<=ult; d++){
     const data = ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const f = feriadoDe(data); if(f) out.push(String(d).padStart(2,'0')+' '+f);
+  }
+  return out;
+}
+// Abono desta pessoa nesta data, ou null. Sem `func` não existe abono: quem
+// chama sem dizer de quem é o dia recebe a jornada contratual crua, que é o
+// comportamento seguro — na dúvida o dia é cobrado, não perdoado.
+function abonoDe(data, func){
+  const a = func && ABONOS[func];
+  return (a && a[data]) || null;
+}
+// Abonos do mês desta pessoa, para o cabeçalho da folha.
+//
+// Pergunta a `jornadaDoData` e NÃO a `abonoDe`: o abono só vale em dia que tinha
+// jornada a cumprir, e essa guarda mora lá. Lendo a tabela crua, um abono
+// digitado num domingo apareceria no cabeçalho como dia abonado enquanto a
+// linha do dia continuaria dizendo "folga" — cabeçalho e tabela discordando
+// dentro da mesma folha assinada. Quem explica o dia é sempre o tradutor único.
+function abonosDoMes(func, ano, mes){  // mes: 0–11
+  const out=[], ult=new Date(ano,mes+1,0).getDate();
+  for(let d=1; d<=ult; d++){
+    const data = ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const a = jornadaDoData(data, func).abono;
+    if(a) out.push(String(d).padStart(2,'0')+' '+a);
   }
   return out;
 }
@@ -449,16 +500,28 @@ function jornadaDoDow(dow){
   return { folga:false, tipos:['entrada','saida_almoco','volta_almoco','saida'],
            esperado:(parseHM(s.almocoIni)-parseHM(s.entrada))+(parseHM(s.saida)-parseHM(s.almocoFim)), sched:s };
 }
-// Único ponto que traduz DATA → jornada. O feriado entra aqui e não em cada
-// tela: carga do mês, folha de assinatura, CSV, modal de edição e a tela do
-// funcionário passam todos por esta função. Feriado = esperado 0, igual domingo.
-function jornadaDoData(data){
+// Único ponto que traduz DATA (+ de quem) → jornada. Feriado e abono entram
+// aqui e não em cada tela: carga do mês, folha de assinatura, CSV, modal de
+// edição e a tela do funcionário passam todos por esta função. Feriado =
+// esperado 0, igual domingo.
+//
+// `func` é opcional porque feriado e dia da semana não dependem de quem é — mas
+// abono depende, e por isso quem tem o funcionário em mão passa. Abono tratado
+// aqui, e não na folha, justamente para a tela e o papel não divergirem: foi
+// esse o motivo de o feriado ter vindo para cá.
+function jornadaDoData(data, func){
   const fer = feriadoDe(data);
   if(fer) return { folga:true, feriado:fer, tipos:['entrada','saida'], esperado:0, sched:null };
-  return jornadaDoDow(dowFromData(data));
+  const j  = jornadaDoDow(dowFromData(data));
+  // Abono só tem efeito em dia que TINHA jornada a cumprir. Abonar domingo
+  // faria a folha explicar uma falta que nunca existiu — e pior, a palavra
+  // "abonado" num domingo sugere que alguém devia estar lá.
+  const ab = j.esperado>0 ? abonoDe(data, func) : null;
+  if(ab) return { folga:false, abono:ab, tipos:j.tipos, esperado:0, sched:j.sched };
+  return j;
 }
-function esperadoDoData(data){ return jornadaDoData(data).esperado; }
-function tiposDoData(data){ return jornadaDoData(data).tipos; }
+function esperadoDoData(data, func){ return jornadaDoData(data, func).esperado; }
+function tiposDoData(data, func){ return jornadaDoData(data, func).tipos; }
 
 // ── Estado + assinatura em tempo real ──────────────────────────────────────
 let allBatidas = [];   // [{_id, func, nome, tipo, ts, data, hora, lat, lng, accuracy}]
@@ -540,7 +603,7 @@ function render(){
 function renderFuncionario(func){
   func = func || meFunc;
   const hoje = ymd(new Date());
-  const jDia = jornadaDoData(hoje);
+  const jDia = jornadaDoData(hoje, func);
   const dia  = baterDoDia(func, hoje);
   const st   = statusDoDia(dia);
   const prox = proximaAcao(dia, jDia.tipos);
@@ -609,7 +672,7 @@ function saldoDoDia(func, data){
   const dia = baterDoDia(func, data);
   if(!dia.entrada) return null;
   if(!diaEncerrado(dia, data)) return null;
-  return trabalhadoMin(dia, null) - esperadoDoData(data);
+  return trabalhadoMin(dia, null) - esperadoDoData(data, func);
 }
 function saldoAcumulado(func){
   let tot=0;
@@ -821,7 +884,7 @@ function fecharSolic(){ document.getElementById('solic-modal').classList.remove(
 function popularSolTipos(){
   const data = document.getElementById('sol-data').value || ymd(new Date());
   const sel  = document.getElementById('sol-tipo');
-  sel.innerHTML = tiposDoData(data).map(t=>`<option value="${t}">${LABEL[t]}</option>`).join('');
+  sel.innerHTML = tiposDoData(data, meFunc).map(t=>`<option value="${t}">${LABEL[t]}</option>`).join('');
 }
 function onSolDataChange(){ popularSolTipos(); atualizarSolAtual(); }
 function onSolTipoChange(){ atualizarSolAtual(); }
@@ -918,10 +981,14 @@ function renderEdCampos(){
   const data = document.getElementById('ed-date').value;
   const box  = document.getElementById('ed-campos');
   if(!func || !data){ box.innerHTML=''; document.getElementById('ed-date-label').textContent='—'; return; }
-  const jd  = jornadaDoData(data);
+  const jd  = jornadaDoData(data, func);
   const dia = baterDoDia(func, data);
   document.getElementById('ed-date-label').textContent =
-    DIAS[dowFromData(data)] + (jd.folga?' · folga' : ` · esperado ${fmtDur(jd.esperado)}`);
+    // Abono não é folga: o dia tinha jornada e foi perdoado — mostrar
+    // "esperado 0h00" aqui faria o gestor achar que o sistema errou a carga.
+    DIAS[dowFromData(data)] + (jd.folga ? ' · folga'
+      : jd.abono ? ' · abonado — '+jd.abono
+      : ` · esperado ${fmtDur(jd.esperado)}`);
   box.innerHTML = jd.tipos.map(tp=>`
     <div class="mb-field">
       <label>${LABEL[tp]}</label>
@@ -933,7 +1000,7 @@ async function salvarEdicao(){
   const data = document.getElementById('ed-date').value;
   if(!func || !data){ toast('Selecione funcionário e dia.'); return; }
   const nome = (rosterMerged().find(([f])=>f===func)||[func,func])[1];
-  const jd   = jornadaDoData(data);
+  const jd   = jornadaDoData(data, func);
   const dia  = baterDoDia(func, data);
   const [y,m,d] = data.split('-').map(Number);
   const ops=[]; let mudou=0;
@@ -1046,7 +1113,7 @@ function fechamentoDoMes(func, ano, mes){
   dias.forEach(data=>{
     const dia = baterDoDia(func, data);
     if(!diaEncerrado(dia, data)) return;
-    const prev = esperadoDoData(data);
+    const prev = esperadoDoData(data, func);
     carga += prev;
     trab  += trabalhadoMin(dia, null);
     if(prev>0 && !dia.entrada) faltas++;
@@ -1056,26 +1123,28 @@ function fechamentoDoMes(func, ano, mes){
 // Uma linha de dia, já resolvida — usada pela folha e pelo CSV
 function linhaDoDia(func, data){
   const dia = baterDoDia(func, data);
-  const j   = jornadaDoData(data);
+  const j   = jornadaDoData(data, func);
   const aberto = !diaEncerrado(dia, data);
   const trab = trabalhadoMin(dia, null);
   const [y,m,d] = data.split('-');
   return {
     data, dia, dd:d+'/'+m, dow:DIAS[dowFromData(data)].slice(0,3), aberto,
-    folga:j.folga, feriado:j.feriado||null,
+    folga:j.folga, feriado:j.feriado||null, abono:j.abono||null,
     // Dia ainda aberto não declara previsto: ele não entra na carga total, e uma
     // folha de conferência tem de fechar somando a coluna à mão. Número impresso
     // que não entra no total é erro de conta aos olhos de quem assina.
     previsto: aberto ? 0 : j.esperado,
     trab,
     saldo: aberto ? null : trab - j.esperado,
-    // O nome do feriado aparece mesmo que a pessoa tenha trabalhado — é ele que
-    // justifica, para quem assina, a hora extra do dia.
+    // O nome do feriado — e o motivo do abono — aparecem mesmo que a pessoa
+    // tenha trabalhado: é isso que justifica, para quem assina, a hora extra do
+    // dia. Abono depois de feriado porque feriado já é previsto zero para todos.
     obs: aberto ? 'em curso'
        : (dia.entrada && !dia.saida ? 'incompleto'
        : (j.feriado ? j.feriado
-       : (j.folga && !dia.entrada ? 'folga'
-       : (j.esperado>0 && !dia.entrada ? 'FALTA' : '')))),
+       : (j.abono ? 'Abonado · '+j.abono
+       : (j.esperado>0 && !dia.entrada ? 'FALTA'
+       : (j.folga && !dia.entrada ? 'folga' : ''))))),
   };
 }
 
@@ -1094,15 +1163,24 @@ function imprimirFolha(){
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Folha de ponto ${MESES[mes-1]} ${ano}</title>
 <style>
-  @page{size:A4 portrait;margin:9mm}
+  /* A4 RETRATO em medida explícita, e não pelo apelido \`A4 portrait\`: a forma
+     com duas medidas (largura × altura) é a que mais mecanismo de impressão
+     entende, e aqui ela também documenta de onde vem a largura da folha abaixo.
+     Mesmo assim isto é um PEDIDO: o Safari ignora \`@page size\` e obedece só o
+     diálogo. Daí o aviso .gira mais abaixo. */
+  @page{size:210mm 297mm;margin:9mm}
   *{box-sizing:border-box}
   body{margin:0;background:#fff;color:#111;font:12px/1.35 'Segoe UI',Arial,sans-serif}
   .bar{position:sticky;top:0;z-index:9;background:#f3f4f6;border-bottom:1px solid #d4d4d8;padding:9px 12px;display:flex;gap:10px;align-items:center}
   .bar button{background:#dd5c33;color:#fff;border:0;padding:8px 16px;border-radius:7px;font:600 12px 'Segoe UI',Arial;cursor:pointer}
   .bar span{color:#6b7280;font-size:11px}
   .wrap{padding:12px}
-  .folha{page-break-after:always}
+  /* 192mm = 210mm de A4 menos as duas margens de 9mm do @page. Com a largura
+     fixa, o que aparece na tela antes de imprimir já tem a forma do papel: se
+     a folha estiver deitada na prévia, é o diálogo que está em paisagem. */
+  .folha{width:192mm;margin:0 auto;page-break-after:always}
   .folha:last-child{page-break-after:auto}
+  .gira{display:none}
   .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:7px}
   .cab h1{margin:0;font-size:15px;letter-spacing:.3px}
   .cab .emp{font-size:10px;color:#52525b;margin-top:2px}
@@ -1115,6 +1193,7 @@ function imprimirFolha(){
   th.sig,td.sig{width:23%}
   tr.fg td{background:#fafafa;color:#8b8b8b}
   tr.fe td{background:#eef4fb;color:#44586e}
+  tr.ab td{background:#f2f7ec;color:#4a5c3b}
   tr.ft td{background:#fdeeea}
   td.neg{color:#b1341a}
   .tot{margin-top:7px;border:1px solid #111;display:flex}
@@ -1126,10 +1205,18 @@ function imprimirFolha(){
   .ass{margin-top:26px;display:flex;gap:34px}
   .ass div{flex:1;border-top:1px solid #111;padding-top:3px;text-align:center;font-size:9px;color:#3f3f46}
   @media print{.bar{display:none}.wrap{padding:0}}
+  /* Aviso que só existe quando o defeito existe: aparece na prévia apenas se o
+     diálogo estiver em paisagem. Aviso fixo dizendo "confira a orientação"
+     seria lido uma vez e ignorado para sempre. */
+  @media print and (orientation:landscape){
+    .gira{display:block;border:2px solid #b1341a;background:#fdeeea;color:#7a2412;
+          padding:8px 10px;margin-bottom:8px;font:700 11px 'Segoe UI',Arial}
+  }
 </style></head><body>
 <div class="bar"><button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-<span>${funcs.length} folha(s) · uma por página · confira antes de imprimir</span></div>
-<div class="wrap">${folhas}</div>
+<span>${funcs.length} folha(s) · A4 retrato · uma por página · confira antes de imprimir</span></div>
+<div class="wrap"><div class="gira">⚠️ Esta folha é A4 RETRATO e o diálogo está em PAISAGEM.
+Troque a orientação para retrato antes de imprimir.</div>${folhas}</div>
 </body></html>`);
   w.document.close(); w.focus();
 }
@@ -1142,7 +1229,7 @@ function folhaHtml(func, nome, ano, mes){
   let rows='';
   r.dias.forEach(data=>{
     const L = linhaDoDia(func, data);
-    const cls = L.obs==='FALTA' ? 'ft' : (L.feriado ? 'fe' : (L.folga ? 'fg' : ''));
+    const cls = L.obs==='FALTA' ? 'ft' : (L.feriado ? 'fe' : (L.abono ? 'ab' : (L.folga ? 'fg' : '')));
     rows += `<tr class="${cls}">
       <td>${L.dd}</td><td>${L.dow}</td>
       <td>${L.dia.entrada?L.dia.entrada.hora:'—'}</td>
@@ -1157,6 +1244,10 @@ function folhaHtml(func, nome, ano, mes){
   });
   const banco = saldoAcumulado(func);
   const fers  = feriadosDoMes(ano, mes);
+  // Abono derruba a carga prevista do mês. Sem esta linha, quem assina vê a
+  // carga menor que a contratual e não tem como saber por quê — e a conta de
+  // novo "não fecha" do lado de fora do papel.
+  const abons = abonosDoMes(func, ano, mes);
   return `<div class="folha">
     <div class="cab">
       <div><h1>FOLHA DE PONTO</h1><div class="emp">IBnet Telecom</div></div>
@@ -1164,7 +1255,8 @@ function folhaHtml(func, nome, ano, mes){
     </div>
     <div class="quem">${escapeHtml(nome)}</div>
     <div class="jor">Jornada contratual — Seg–Sex ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} e ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) · Sáb ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) · Dom folga.
-    <br>Feriados do mês (previsto zero): ${fers.length?escapeHtml(fers.join(' · ')):'nenhum'}.</div>
+    <br>Feriados do mês (previsto zero): ${fers.length?escapeHtml(fers.join(' · ')):'nenhum'}.${
+    abons.length?`<br><b>Dias abonados pela gestão (previsto zero, não contam falta):</b> ${escapeHtml(abons.join(' · '))}.`:''}</div>
     <table>
       <thead><tr><th>Dia</th><th>Sem</th><th>Entrada</th><th>S. Almoço</th><th>V. Almoço</th><th>Saída</th><th>Trabalhado</th><th>Previsto</th><th>Saldo</th><th>Obs.</th><th class="sig">Assinatura do funcionário</th></tr></thead>
       <tbody>${rows}</tbody>
