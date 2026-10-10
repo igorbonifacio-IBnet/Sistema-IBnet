@@ -374,6 +374,40 @@ const ABONOS = {
   },
 };
 
+// ══════════════ ESCALA PRÓPRIA POR FUNCIONÁRIO — EDITE AQUI ════════════════
+// Escala TROCA a jornada contratual daquela pessoa naquele dia da semana. Não
+// confundir com abono: abono perdoa UM dia já passado; escala é a regra que vale
+// de agora em diante, e por isso tem `desde` obrigatório.
+//
+// **Por que `desde` é obrigatório** — medido em 08/10/2026 e é o motivo de esta
+// tabela existir assim: o Davi bateu TODOS os sábados de agosto (15, 22, 29) e
+// os dois do meio de setembro (12, 19), sempre ~4h. Ou seja, o sábado alternado
+// de 8h é regime NOVO, não descrição do que já acontecia. Regra sem vigência
+// vale para trás e reescreve mês fechado: setembro viraria previsto 8h nos dias
+// 12 e 19, onde ele bateu 4h31 e 5h07 — o saldo dele cairia de +4h20 para
+// −3h40, cobrando dias que ele cumpriu exatamente como mandado no regime
+// antigo. E pior: o alternado para trás diria que 26/09 era dia de trabalho,
+// que é justamente um dos dias abonados acima. Decisão do Igor em 08/10/2026:
+// **"os retroativos, pode manter somente 4 horas mesmo"**.
+//
+// `trabalha` é a ÂNCORA: um sábado em que ele trabalha, de verdade. A série sai
+// daí de 14 em 14 dias, para frente e para trás (limitada pelo `desde`). Âncora
+// em vez de "sábado par" ou "semana ímpar do mês" porque mês com 5 sábados
+// quebra as duas — e quebra em silêncio, meses depois.
+const ESCALAS = {
+  davi: {
+    desde: '2026-10-01',
+    // Igor, 08/10/2026: "Dia 10, 17 não trabalha, dia 24 trabalha e assim por
+    // diante" → out/2026: trabalha 10 e 24; folga 03, 17 e 31.
+    sabadoAlternado: {
+      trabalha: '2026-10-10',
+      // 8h num sábado TEM de ter intervalo: a CLT exige no mínimo 1h para
+      // jornada acima de 6h. Então o sábado de escala é 4 batidas, igual
+      // seg–sex, e não um turno corrido de 08:00 às 16:00.
+      sched: 'semana',
+    },
+  },
+};
 // Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher) — base dos móveis
 function pascoa(ano){
   const a=ano%19, b=Math.floor(ano/100), c=ano%100;
@@ -429,6 +463,62 @@ function abonosDoMes(func, ano, mes){  // mes: 0–11
     if(a) out.push(String(d).padStart(2,'0')+' '+a);
   }
   return out;
+}
+// Dias corridos entre duas datas 'AAAA-MM-DD'. Via `Date.UTC` de propósito:
+// `new Date(y,m,d)` é hora local e um dia de horário de verão vale 23h, o que
+// faz a divisão por 7 cair em fração e a paridade da escala virar do avesso uma
+// vez por ano. O Brasil não tem mais horário de verão hoje; a volta dele não
+// pode reescrever a folha de ponto de ninguém.
+function diasEntre(a, b){
+  const [y1,m1,d1]=a.split('-').map(Number), [y2,m2,d2]=b.split('-').map(Number);
+  return Math.round((Date.UTC(y1,m1-1,d1) - Date.UTC(y2,m2-1,d2)) / 86400000);
+}
+// Jornada de escala desta pessoa nesta data, ou null — null significa "segue a
+// jornada contratual", que é o comportamento de todo mundo.
+//
+// Sem `func` não existe escala, igual ao abono: quem pergunta sem dizer de quem
+// é o dia recebe a regra geral.
+function escalaDe(data, func){
+  const e = func && ESCALAS[func];
+  // Comparação de string resolve ordem de data no formato 'AAAA-MM-DD' — é o
+  // que torna esse formato obrigatório aqui também.
+  if(!e || !e.desde || data < e.desde) return null;
+  const sa = e.sabadoAlternado;
+  // O `dowFromData !== 6` é atalho de leitura, NÃO a guarda: como a âncora é um
+  // sábado, só data a múltiplo de 7 dias dela é sábado, e a conta de paridade
+  // abaixo já recusa tudo o que não for. Medido — sabotar esta linha dá raio
+  // ZERO, e é guarda dupla de verdade, não buraco de teste. Fica porque sai
+  // mais barato que a aritmética e porque diz a intenção em voz alta.
+  if(!sa || dowFromData(data) !== 6) return null;
+  const dias = diasEntre(data, sa.trabalha);
+  // Âncora que não é sábado é erro de digitação, e erro de digitação aqui
+  // calaria: a divisão daria fração, a paridade daria sempre ímpar e a pessoa
+  // ganharia TODO sábado de folga. Melhor ignorar a escala e cobrar o sábado
+  // contratual — na dúvida o dia é cobrado, não perdoado.
+  if(dias % 7 !== 0) return null;
+  const par = Math.abs((dias / 7) % 2);
+  if(par !== 0) return { folga:true, escala:'Folga de escala · sábado alternado',
+                         tipos:['entrada','saida'], esperado:0, sched:null };
+  const s = JORNADA[sa.sched] || JORNADA.semana;
+  return { folga:false, escala:'Sábado de escala · 8h',
+           tipos:['entrada','saida_almoco','volta_almoco','saida'],
+           esperado:(parseHM(s.almocoIni)-parseHM(s.entrada))+(parseHM(s.saida)-parseHM(s.almocoFim)),
+           sched:s };
+}
+// Sábados de escala do mês, separados em trabalha/folga, para o cabeçalho da
+// folha. Pergunta ao `jornadaDoData` e não ao `escalaDe`, pelo mesmo motivo do
+// `abonosDoMes`: sábado de escala que caiu em feriado, ou que foi abonado, já é
+// explicado por outra linha do cabeçalho — listar aqui de novo faria a folha
+// dar duas explicações diferentes para o mesmo dia.
+function escalaDoMes(func, ano, mes){   // mes: 0–11
+  const trab=[], folga=[], ult=new Date(ano,mes+1,0).getDate();
+  for(let d=1; d<=ult; d++){
+    const data = ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const j = jornadaDoData(data, func);
+    if(!j.escala) continue;
+    (j.esperado>0 ? trab : folga).push(String(d).padStart(2,'0'));
+  }
+  return { trab, folga };
 }
 
 // ── CERCA VIRTUAL (geofence) ────────────────────────────────────────────────
@@ -512,7 +602,12 @@ function jornadaDoDow(dow){
 function jornadaDoData(data, func){
   const fer = feriadoDe(data);
   if(fer) return { folga:true, feriado:fer, tipos:['entrada','saida'], esperado:0, sched:null };
-  const j  = jornadaDoDow(dowFromData(data));
+  // Escala própria SUBSTITUI a jornada contratual do dia da semana; quem não
+  // tem escala cai no `jornadaDoDow`, que é o caso de todo mundo. Vem ANTES do
+  // abono porque é a escala que decide se havia jornada a cumprir — abonar um
+  // sábado que a escala já marcou como folga tem de ser inerte, e a guarda do
+  // abono (`esperado>0`) só acerta isso se ela já souber o esperado da escala.
+  const j  = escalaDe(data, func) || jornadaDoDow(dowFromData(data));
   // Abono só tem efeito em dia que TINHA jornada a cumprir. Abonar domingo
   // faria a folha explicar uma falta que nunca existiu — e pior, a palavra
   // "abonado" num domingo sugere que alguém devia estar lá.
@@ -779,9 +874,20 @@ function renderAdmin(){
     });
   }
 
+  // Esta nota vale para o grupo, então o sábado dela é o CONTRATUAL. Quem tem
+  // escala própria ganha uma linha com nome e dias — sem isso o gestor lê
+  // "Sáb 4h" no alto da tela e encontra 8h na coluna de previsto de um deles,
+  // e a tela passa a parecer quebrada em vez de parecer certa.
+  const escNota = alvo.map(([f,n])=>{
+    const e = escalaDoMes(f, ano, mes-1);
+    if(!e.trab.length && !e.folga.length) return '';
+    return `${escapeHtml(n.split(' ')[0])} trabalha ${e.trab.join('·')||'nenhum'} e folga ${e.folga.join('·')||'nenhum'}`;
+  }).filter(Boolean).join(' &nbsp;|&nbsp; ');
+
   document.getElementById('app').innerHTML = `
     ${adminViewSwitch('relatorios')}
-    <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.<br><b>Feriados de ${MESES[mes-1]}:</b> ${feriadosDoMes(ano,mes-1).join(' · ')||'nenhum'} — feriado tem previsto zero, não conta falta e o que for batido vira extra.</div>
+    <div class="jornada-note"><b>Seg–Sex:</b> ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} · almoço · ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) &nbsp;·&nbsp; <b>Sáb:</b> ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) &nbsp;·&nbsp; <b>Dom:</b> folga. &nbsp; Saldo positivo = hora extra; negativo = a compensar.<br><b>Feriados de ${MESES[mes-1]}:</b> ${feriadosDoMes(ano,mes-1).join(' · ')||'nenhum'} — feriado tem previsto zero, não conta falta e o que for batido vira extra.${
+    escNota?`<br><b>Sábado alternado de 8h:</b> ${escNota} — nesses dias o previsto é 8h, não 4h.`:''}</div>
     <div class="filters">
       <label>Funcionário
         <select id="f-func" onchange="window._fFunc=this.value;renderAdmin()">${opts}</select>
@@ -984,11 +1090,14 @@ function renderEdCampos(){
   const jd  = jornadaDoData(data, func);
   const dia = baterDoDia(func, data);
   document.getElementById('ed-date-label').textContent =
-    // Abono não é folga: o dia tinha jornada e foi perdoado — mostrar
-    // "esperado 0h00" aqui faria o gestor achar que o sistema errou a carga.
-    DIAS[dowFromData(data)] + (jd.folga ? ' · folga'
+    // Folga de escala diz o motivo: "sábado · folga" num dia em que a pessoa do
+    // lado trabalhou parece erro do sistema. Abono não é folga: o dia tinha
+    // jornada e foi perdoado — mostrar "esperado 0h00" aqui faria o gestor
+    // achar que o sistema errou a carga. Sábado de escala mostra o esperado de
+    // 8h junto com o rótulo, senão o gestor acha que digitou o dia errado.
+    DIAS[dowFromData(data)] + (jd.folga ? (jd.escala ? ' · '+jd.escala : ' · folga')
       : jd.abono ? ' · abonado — '+jd.abono
-      : ` · esperado ${fmtDur(jd.esperado)}`);
+      : (jd.escala ? ' · '+jd.escala : '') + ` · esperado ${fmtDur(jd.esperado)}`);
   box.innerHTML = jd.tipos.map(tp=>`
     <div class="mb-field">
       <label>${LABEL[tp]}</label>
@@ -1129,7 +1238,7 @@ function linhaDoDia(func, data){
   const [y,m,d] = data.split('-');
   return {
     data, dia, dd:d+'/'+m, dow:DIAS[dowFromData(data)].slice(0,3), aberto,
-    folga:j.folga, feriado:j.feriado||null, abono:j.abono||null,
+    folga:j.folga, feriado:j.feriado||null, abono:j.abono||null, escala:j.escala||null,
     // Dia ainda aberto não declara previsto: ele não entra na carga total, e uma
     // folha de conferência tem de fechar somando a coluna à mão. Número impresso
     // que não entra no total é erro de conta aos olhos de quem assina.
@@ -1139,12 +1248,19 @@ function linhaDoDia(func, data){
     // O nome do feriado — e o motivo do abono — aparecem mesmo que a pessoa
     // tenha trabalhado: é isso que justifica, para quem assina, a hora extra do
     // dia. Abono depois de feriado porque feriado já é previsto zero para todos.
+    //
+    // FALTA vem antes de `folga` só por clareza de leitura: folga implica
+    // esperado zero, então as duas perguntas nunca são verdadeiras juntas. E o
+    // rótulo da escala é o último porque é o mais fraco de todos — ele explica
+    // POR QUE o previsto daquele sábado não é o contratual, e qualquer outra
+    // observação (falta, abono, feriado) importa mais para quem assina.
     obs: aberto ? 'em curso'
        : (dia.entrada && !dia.saida ? 'incompleto'
        : (j.feriado ? j.feriado
        : (j.abono ? 'Abonado · '+j.abono
        : (j.esperado>0 && !dia.entrada ? 'FALTA'
-       : (j.folga && !dia.entrada ? 'folga' : ''))))),
+       : (j.folga && !dia.entrada ? (j.escala || 'folga')
+       : (j.escala || '')))))),
   };
 }
 
@@ -1194,6 +1310,7 @@ function imprimirFolha(){
   tr.fg td{background:#fafafa;color:#8b8b8b}
   tr.fe td{background:#eef4fb;color:#44586e}
   tr.ab td{background:#f2f7ec;color:#4a5c3b}
+  tr.es td{background:#fdf6e8;color:#6b5427}
   tr.ft td{background:#fdeeea}
   td.neg{color:#b1341a}
   .tot{margin-top:7px;border:1px solid #111;display:flex}
@@ -1229,7 +1346,11 @@ function folhaHtml(func, nome, ano, mes){
   let rows='';
   r.dias.forEach(data=>{
     const L = linhaDoDia(func, data);
-    const cls = L.obs==='FALTA' ? 'ft' : (L.feriado ? 'fe' : (L.abono ? 'ab' : (L.folga ? 'fg' : '')));
+    // Sábado de escala ganha tom próprio, antes de `folga`: a folga de escala
+    // pintada do mesmo cinza do domingo some no meio da folha, e o sábado de 8h
+    // sem marca nenhuma parece um sábado contratual com o previsto errado. Nos
+    // dois casos quem assina precisa achar o dia rápido para conferir.
+    const cls = L.obs==='FALTA' ? 'ft' : (L.feriado ? 'fe' : (L.abono ? 'ab' : (L.escala ? 'es' : (L.folga ? 'fg' : ''))));
     rows += `<tr class="${cls}">
       <td>${L.dd}</td><td>${L.dow}</td>
       <td>${L.dia.entrada?L.dia.entrada.hora:'—'}</td>
@@ -1248,13 +1369,22 @@ function folhaHtml(func, nome, ano, mes){
   // carga menor que a contratual e não tem como saber por quê — e a conta de
   // novo "não fecha" do lado de fora do papel.
   const abons = abonosDoMes(func, ano, mes);
+  // Mesmo motivo do abono, e aqui é mais forte: a escala muda o previsto do
+  // sábado nos DOIS sentidos — tira 4h do sábado de folga e põe 8h no de
+  // trabalho. Sem esta linha a folha mostra um sábado com previsto 8h enquanto
+  // a linha da jornada contratual logo acima diz 4h, e quem assina vê o papel
+  // se contradizendo. Por isso a própria linha da jornada também muda abaixo.
+  const esc = escalaDoMes(func, ano, mes);
+  const temEsc = esc.trab.length>0 || esc.folga.length>0;
   return `<div class="folha">
     <div class="cab">
       <div><h1>FOLHA DE PONTO</h1><div class="emp">IBnet Telecom</div></div>
       <div class="per"><b>${MESES[mes].toUpperCase()} / ${ano}</b><br>Período: ${per}</div>
     </div>
     <div class="quem">${escapeHtml(nome)}</div>
-    <div class="jor">Jornada contratual — Seg–Sex ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} e ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia) · Sáb ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)}) · Dom folga.
+    <div class="jor">Jornada contratual — Seg–Sex ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} e ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}/dia)${
+    temEsc ? '' : ` · Sáb ${JORNADA.sabado.entrada}–${JORNADA.sabado.saida} (${fmtDur(jornadaDoDow(6).esperado)})`} · Dom folga.${
+    temEsc?`<br><b>Sábado alternado (escala própria):</b> trabalha ${esc.trab.length?escapeHtml(esc.trab.join(' · ')):'nenhum'} — ${JORNADA.semana.entrada}–${JORNADA.semana.almocoIni} e ${JORNADA.semana.almocoFim}–${JORNADA.semana.saida} (${fmtDur(jornadaDoDow(1).esperado)}); folga ${esc.folga.length?escapeHtml(esc.folga.join(' · ')):'nenhum'} (previsto zero, não conta falta).`:''}
     <br>Feriados do mês (previsto zero): ${fers.length?escapeHtml(fers.join(' · ')):'nenhum'}.${
     abons.length?`<br><b>Dias abonados pela gestão (previsto zero, não contam falta):</b> ${escapeHtml(abons.join(' · '))}.`:''}</div>
     <table>
