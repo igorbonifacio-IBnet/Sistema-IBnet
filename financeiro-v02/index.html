@@ -1696,6 +1696,96 @@ function acaoDaParcela(dv, mapaProg, hojeISO){
   return { acao:'baixa', parc:p, prog:null };
 }
 
+/* O estado da parcela DESTE MÊS — a pergunta operacional que a tabela não
+   respondia. `Andamento` conta a vida inteira do contrato ("13 de 36") e
+   `Saldo` conta o que falta até 2028; nenhuma das duas diz se a parcela deste
+   mês saiu. O Igor descreveu o sintoma exato em 13/11: "vejo essas dívidas
+   aqui e não consigo visualizar o que já foi pago esse mês" — ou seja, a tela
+   que existe para substituir o extrato mandava ele de volta ao extrato.
+
+   Barra de progresso acumulada é a armadilha: ela PARECE responder "como
+   estamos", e por isso ninguém sente falta da coluna de período. O buraco não
+   aparece como espaço vazio na tela, aparece como uma pergunta que o usuário
+   para de fazer a ela.
+
+   Não há dado novo aqui — é o mesmo `cronogramaDe`, recortado no mês corrente.
+
+   `quitada` vem ANTES de tudo, pela mesma razão de `acaoDaParcela`: na quitação
+   antecipada o cronograma ainda tem parcela em aberto neste mês, e anunciá-la
+   como "vence dia 22" seria cobrar dívida que não existe mais.
+
+   Pendência de mês anterior vence o estado do mês corrente de propósito: é o
+   que precisa de ação hoje, e uma coluna que só olhasse o mês atual a
+   esconderia justamente no caso em que ela mais importa.
+
+   O que devolve, além do rótulo:
+   - `noMes`:  'paga' | 'aberta' | null — existe parcela neste mês, e em que pé.
+   - `saiu` / `falta`: o valor da parcela DO MÊS, num lado ou no outro.
+   - `antes`:  o que sobrou em aberto de meses anteriores.
+   - `antesAtraso`: a fatia de `antes` que NÃO tem dia marcado. */
+function estadoDoMes(dv, mapaProg, hojeISO){
+  const hoje = hojeISO || new Date().toISOString().slice(0,10);
+  const mes  = hoje.slice(0,7);
+  const Z    = { noMes:null, saiu:0, falta:0, antes:0, antesAtraso:0 };
+  if (quitada(dv)) return { pill:'p-pago', txt:'quitada', sub:null, ...Z };
+
+  /* Parcela sem data fica de fora, como na agenda mês a mês logo abaixo. Sem
+     esta guarda, `'' < '2026-11'` é verdadeiro e o contrato inteiro viraria
+     "atrasada desde undefined/". */
+  const cr = cronogramaDe(dv).filter(p => p.mes);
+  if (!cr.length) return { pill:'p-aberto', txt:'sem data', sub:null, ...Z };
+
+  const atras = cr.filter(p => !p.paga && p.mes < mes);
+  const doMes = cr.find(p => p.mes === mes) || null;
+
+  /* Baldes DISJUNTOS, e a divisão não é estética. O topo da tela tem o KPI
+     "Ainda sai este mês", que conta as parcelas não pagas DO MÊS. Se o rodapé
+     somasse também a sobra de meses anteriores e chamasse isso de "ainda sai",
+     a mesma tela mostraria dois totais com o mesmo nome e valores diferentes —
+     e quem lê não teria como saber qual está errado, porque nenhum está.
+     `falta` existe para bater com aquele KPI no centavo; a sobra tem balde
+     próprio. */
+  const saiu  = doMes && doMes.paga  ? doMes.valor : 0;
+  const falta = doMes && !doMes.paga ? doMes.valor : 0;
+  const antes = atras.reduce((a,p) => a + p.valor, 0);
+  const noMes = doMes ? (doMes.paga ? 'paga' : 'aberta') : null;
+
+  if (atras.length){
+    /* `pagas` é contador sequencial: a única parcela que pode ter dia marcado
+       é a mais antiga em aberto. Se ela tem, a linha é AZUL, não vermelha —
+       parcela programada não é parcela atrasada, mesmo tendo vencido. É a
+       mesma precedência de `acaoDaParcela`: gritar "atrasada" numa linha cujo
+       único botão é "ver programado" seria cobrar uma decisão já tomada. */
+    const p       = atras[0];
+    const prog    = programadoDiv(mapaProg, dv.id, p.n);
+    const abertas = atras.length + (falta ? 1 : 0);
+    const mais    = abertas > 1 ? `${abertas} parcelas em aberto` : null;
+    if (prog) return { pill:'p-prog', txt:'programada',
+                       sub:`${dataBR(prog.data)} · a de ${mesLabel(p.mes)}${mais ? ' · ' + mais : ''}`,
+                       noMes, saiu, falta, antes, antesAtraso: antes - p.valor };
+    // A contagem descreve a linha inteira (as de antes + a do mês), porque é
+    // sobre ESTE contrato que ela fala — não sobre um dos baldes.
+    return { pill:'p-vencido', txt:`atrasada desde ${mesLabel(p.mes)}`, sub:mais,
+             noMes, saiu, falta, antes, antesAtraso: antes };
+  }
+  // Sem parcela no mês: contrato que só começa depois.
+  if (!doMes)     return { pill:'p-aberto', txt:'sem parcela', sub:null, ...Z };
+  /* "venc.", e não a data solta: `pagas` é contador, não sabe o DIA em que o
+     dinheiro saiu. "paga 30/11" lido no dia 17 parece pagamento no futuro. */
+  if (doMes.paga) return { pill:'p-pago', txt:'paga', sub:'venc. ' + dataBR(doMes.venc), ...Z, noMes, saiu };
+
+  const prog = programadoDiv(mapaProg, dv.id, doMes.n);
+  if (prog) return { pill:'p-prog', txt:'programada', sub:dataBR(prog.data), ...Z, noMes, falta };
+
+  if (doMes.venc < hoje){
+    const d = Math.round((Date.parse(hoje) - Date.parse(doMes.venc)) / 86400000);
+    return { pill:'p-vencido', txt:`venceu há ${d} dia${d===1?'':'s'}`,
+             sub:dataBR(doMes.venc), ...Z, noMes, falta };
+  }
+  return { pill:'p-aberto', txt:doMes.venc === hoje ? 'vence hoje' : `vence ${dataBR(doMes.venc)}`,
+           sub:null, ...Z, noMes, falta };
+}
+
 /* A DECISÃO da baixa, separada da gravação. Dado o contador de hoje e a
    parcela que está sendo confirmada, o contador anda — e para quanto?
 
@@ -1738,6 +1828,28 @@ function htmlDivida(){
      número de contratos. */
   const mapaProg = mapaProgramado();
 
+  /* Uma passada só: a linha e o rodapé leem o MESMO objeto por contrato. Se o
+     rodapé recalculasse, as duas somas poderiam divergir na primeira mudança
+     de regra — e o sintoma seria o pior possível: total que não bate com as
+     linhas que ele soma, sem erro visível na tela. */
+  const estMes   = new Map(ativas.map(d => [d.id, estadoDoMes(d, mapaProg, hoje)]));
+  const ests     = [...estMes.values()];
+  const somaEst  = k => ests.reduce((a,e) => a + e[k], 0);
+  const saiuMes  = somaEst('saiu'), faltaMes = somaEst('falta');
+  const antesMes = somaEst('antes'), antesAtr = somaEst('antesAtraso');
+  const qPagas   = ests.filter(e => e.noMes === 'paga').length;
+  const qMes     = ests.filter(e => e.noMes).length;
+
+  /* Contrato que QUITA neste mês sai de `ativas` no instante da última baixa —
+     mas a parcela dele saiu do caixa neste mês. Somando só as ativas, "Pago
+     este mês" DIMINUIRIA justamente quando ele paga a última parcela: pagou e
+     o pago caiu. Quitação antecipada (status quitada com o contador abaixo do
+     total) só entra se a parcela do mês estiver de fato baixada. */
+  const quitNoMes = quitadas.map(d => cronogramaDe(d).find(p => p.mes === mesAtual && p.paga))
+                            .filter(Boolean);
+  const pagoMes   = saiuMes + quitNoMes.reduce((a,p) => a + p.valor, 0);
+  const qPagasMes = qPagas + quitNoMes.length, qTotMes = qMes + quitNoMes.length;
+
   /* agenda mês a mês — só parcelas em aberto */
   const agenda = {};
   let atrasadas = 0, vlrAtraso = 0, progs = 0;
@@ -1766,8 +1878,15 @@ function htmlDivida(){
   for (let m = ini; mesFim && m <= mesFim && linha.length < 24; m = proxMes(m)) linha.push(m);
 
   const atual  = doMes(mesAtual);
+  /* O compromisso do mês é o mês INTEIRO — o que já saiu mais o que falta.
+     Comparar só o que falta com um mês futuro inteiro fazia o "alívio"
+     encolher a cada parcela paga e sumir na segunda quinzena: quanto mais em
+     dia, menor o alívio anunciado. Ficou visível no dia em que "Pago este mês"
+     passou a morar ao lado e a soma dos dois cartões deixou de bater com a
+     frase. */
+  const compMes = pagoMes + atual;
   const m6     = somaMeses(mesAtual+'-01', 6).slice(0,7);
-  const alivio = atual - doMes(m6);
+  const alivio = compMes - doMes(m6);
   const prox12 = linha.filter(m => m >= mesAtual).slice(0,12).reduce((a,m)=>a+doMes(m),0);
   const pico   = Math.max(1, ...linha.map(doMes));
 
@@ -1779,7 +1898,15 @@ function htmlDivida(){
     <div class="dfc-box fin"><div class="lbl">Saldo devedor</div>
       <div class="val neg">${fmt(-saldoTotal)}</div>
       <div class="sub">${ativas.length} contrato${ativas.length===1?'':'s'} em aberto</div></div>
-    <div class="dfc-box fin"><div class="lbl">Sai este mês</div>
+    ${/* O par "pago / ainda sai" lado a lado. Enquanto só existia o segundo,
+          "Sai este mês" lia como total do mês e escondia que é só o que falta —
+          por isso o rótulo ganhou o "Ainda" no dia em que o primeiro nasceu. */''}
+    <div class="dfc-box op"><div class="lbl">Pago este mês</div>
+      <div class="val">${fmt(-pagoMes)}</div>
+      <div class="sub">${qPagasMes} de ${qTotMes} parcela(s) de ${mesLabel(mesAtual)}${
+        quitNoMes.length ? ` · ${quitNoMes.length} contrato${quitNoMes.length===1?'':'s'} quitado${quitNoMes.length===1?'':'s'}` : ''}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${qTotMes?Math.round(100*qPagasMes/qTotMes):0}%;background:var(--green)"></div></div></div>
+    <div class="dfc-box fin"><div class="lbl">Ainda sai este mês</div>
       <div class="val neg">${fmt(-atual)}</div>
       <div class="sub">${agenda[mesAtual]?agenda[mesAtual].qtd:0} parcela(s) em ${mesLabel(mesAtual)}</div></div>
     <div class="dfc-box fin"><div class="lbl">Próximos 12 meses</div>
@@ -1805,7 +1932,7 @@ function htmlDivida(){
     ${fmt(proxFim.itens.reduce((a,d)=>{
         const c=cronogramaDe(d); return a + (c.length ? c[c.length-1].valor : 0); },0))}/mês que deixam de sair do caixa.
     ${alivio>0?`Daqui a 6 meses (${mesLabel(m6)}) o compromisso mensal cai
-      de ${fmt(atual)} para ${fmt(doMes(m6))} — <b>${fmt(alivio)}/mês liberados</b>.`:''}
+      de ${fmt(compMes)} para ${fmt(doMes(m6))} — <b>${fmt(alivio)}/mês liberados</b>.`:''}
     </div>` : ''}
 
   <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -1831,9 +1958,11 @@ function htmlDivida(){
   <div class="section-title">Contratos</div>
   <div class="card"><div class="tbl-wrap"><table>
     <thead><tr><th>Credor / descrição</th><th>Tipo</th><th class="num">Parcela</th>
-      <th style="width:150px">Andamento</th><th class="num">Saldo</th><th>Última</th>${isAdmin?'<th></th>':''}</tr></thead>
+      <th style="width:150px">Este mês</th>
+      <th style="width:150px">Andamento</th><th class="num">Saldo</th>${isAdmin?'<th></th>':''}</tr></thead>
     <tbody>
       ${ativas.map(d=>{
+        const em = estMes.get(d.id);
         const n=Math.round(+d.parcelas||0), pg=Math.round(+d.pagas||0);
         const cr=cronogramaDe(d), ult=cr.length?cr[cr.length-1].mes:null;
         const ac  = acaoDaParcela(d, mapaProg, hoje);
@@ -1847,12 +1976,14 @@ function htmlDivida(){
             return `${fmt(-(px?px.valor:0))}<div style="font-size:10px;color:var(--muted)">varia · ${
               fmt(Math.min(...vs))} a ${fmt(Math.max(...vs))}</div>`;
           })()}</td>
-          <td><div style="font-size:11px;color:var(--muted)">${pg} de ${n} pagas</div>
+          <td><span class="pill ${em.pill}">${esc(em.txt)}</span>
+            ${em.sub?`<div class="rec-obs">${esc(em.sub)}</div>`:''}</td>
+          <td><div style="font-size:11px;color:var(--muted)">${pg} de ${n} pagas${
+              ult?` · até <b style="color:var(--muted)">${mesLabel(ult)}</b>`:''}</div>
             <div class="bar-track"><div class="bar-fill" style="width:${n?Math.round(100*pg/n):0}%;background:var(--green)"></div></div>
             ${prg ? `<div class="rec-obs"><span class="pill p-prog">programado</span>
               parcela ${px.n} sai <b>${dataBR(prg.data)}</b></div>` : ''}</td>
           <td class="num neg">${fmt(-saldoDe(d))}</td>
-          <td style="white-space:nowrap;font-size:12px">${ult?mesLabel(ult):'—'}</td>
           ${isAdmin?`<td style="white-space:nowrap">
             ${/* Três estados, um botão cada. Programada: a baixa é na outra aba,
                   e oferecer "+1 paga" aqui seria oferecer o que a gravação nega.
@@ -1872,7 +2003,20 @@ function htmlDivida(){
               title="Corrigir o valor de cada mês — fatura de cartão muda toda vez">valores</button>
             <button class="icon-btn" onclick="excluirDivida('${d.id}')">excluir</button></td>`:''}
         </tr>`;}).join('')}
-      ${ativas.length?'':'<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">Nenhum contrato em aberto.</td></tr>'}
+      ${ativas.length?`
+      <tr class="tot-row">
+        <td colspan="3"><b>${mesLabel(mesAtual)}</b>
+          <div style="font-size:11px;color:var(--muted);font-weight:400">parcelas de contrato, sem recorrentes</div></td>
+        <td colspan="${isAdmin?4:3}" style="font-weight:400">
+          <span class="pill p-pago">já saiu ${fmt(-pagoMes)}</span>
+          <span class="pill ${faltaMes?'p-aberto':'p-pago'}" style="margin-left:6px">ainda sai ${fmt(-faltaMes)}</span>
+          ${antesMes?`<span class="pill ${antesAtr?'p-vencido':'p-prog'}" style="margin-left:6px">de meses anteriores ${fmt(-antesMes)}</span>`:''}
+          ${/* "já saiu" soma linhas que esta tabela não mostra: o contrato que
+                quitou neste mês mora em Quitados. Sem a nota, o rodapé não
+                bate com a soma das linhas acima dele e parece erro de conta. */''}
+          ${quitNoMes.length ? `<div class="rec-obs">já saiu inclui ${fmt(-quitNoMes.reduce((a,p)=>a+p.valor,0))} de contrato quitado este mês — está em Quitados</div>` : ''}
+        </td>
+      </tr>`:'<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">Nenhum contrato em aberto.</td></tr>'}
     </tbody></table></div></div>
 
   ${quitadas.length?`
